@@ -1,0 +1,1986 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa de FÃ©rias 2026</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f5f7;
+    --surface: #ffffff;
+    --border: #e0e0e0;
+    --text: #1a1a1a;
+    --text-muted: #888;
+    --accent: #2563eb;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  header .subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .btn {
+    padding: 7px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    transition: all 0.15s;
+  }
+
+  .btn:hover { background: #f0f0f0; }
+
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  .btn-primary:hover { background: #1d4ed8; }
+
+  .btn-danger {
+    background: #fee2e2;
+    color: #dc2626;
+    border-color: #fecaca;
+  }
+
+  .btn-danger:hover { background: #fecaca; }
+
+  .layout {
+    display: flex;
+    gap: 0;
+    min-height: calc(100vh - 57px);
+  }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .sidebar-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+
+  .person-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+  }
+
+  .person-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.1s;
+    border: 2px solid transparent;
+  }
+
+  .person-item:hover { background: #f5f5f7; }
+  .person-item.selected { border-color: currentColor; background: #f5f5f7; }
+
+  .person-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .person-name {
+    font-size: 13px;
+    font-weight: 500;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .person-delete {
+    opacity: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #aaa;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 2px;
+    transition: opacity 0.1s, color 0.1s;
+  }
+
+  .person-item:hover .person-delete {
+    opacity: 1;
+  }
+
+  .person-delete:hover { color: #dc2626; }
+
+  .add-person-form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  .add-person-form input[type="text"] {
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .add-person-form input[type="text"]:focus {
+    border-color: var(--accent);
+  }
+
+  .color-row {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+
+  .color-swatch {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.1s;
+  }
+
+  .color-swatch:hover { transform: scale(1.2); }
+  .color-swatch.active { border-color: #333; }
+
+  /* LEGEND */
+  .legend-section {
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+
+  .legend-box {
+    width: 24px;
+    height: 14px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* MAIN CALENDAR */
+  .main {
+    flex: 1;
+    padding: 24px;
+    overflow-x: auto;
+  }
+
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    max-width: 1100px;
+  }
+
+  @media (max-width: 900px) {
+    .calendar-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  .month-card {
+    background: var(--surface);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .month-header {
+    padding: 12px 16px 8px;
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: capitalize;
+    color: var(--text);
+    background: #fafafa;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    padding: 6px 8px 2px;
+  }
+
+  .weekday {
+    text-align: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    padding: 2px 0;
+  }
+
+  .days-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    padding: 0 8px 8px;
+    gap: 1px;
+  }
+
+  .day-cell {
+    position: relative;
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 2px;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: background 0.1s;
+    user-select: none;
+    min-height: 42px;
+  }
+
+  .day-cell:hover { background: #f0f0f0; }
+
+  .day-cell.weekend .day-num { color: #aaa; }
+
+  .day-cell.today .day-num {
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+  }
+
+  .day-num {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text);
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .day-dots {
+    display: flex;
+    gap: 1px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 1px;
+    max-width: 100%;
+    padding: 0 1px;
+  }
+
+  .day-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Full bar mode for vacation ranges */
+  .day-bar {
+    position: absolute;
+    bottom: 2px;
+    left: 0;
+    right: 0;
+    height: 4px;
+    border-radius: 2px;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 24px;
+    width: 360px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  }
+
+  .modal h2 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+
+  .modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .form-group label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .form-group input, .form-group select {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-size: 14px;
+    outline: none;
+  }
+
+  .form-group input:focus, .form-group select:focus {
+    border-color: var(--accent);
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+
+  /* Vacation entries panel */
+  .vacations-list {
+    margin-top: 16px;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+
+  .vacation-entry {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 12px;
+  }
+
+  .vacation-entry:last-child { border-bottom: none; }
+
+  .vac-color {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .vac-info { flex: 1; }
+  .vac-name { font-weight: 600; }
+  .vac-dates { color: var(--text-muted); }
+
+  .vac-delete {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #ccc;
+    font-size: 14px;
+    padding: 0 4px;
+    line-height: 1;
+  }
+
+  .vac-delete:hover { color: #dc2626; }
+
+  .empty-state {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  /* Stats bar */
+  .stats-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* Print */
+  @media print {
+    body > *:not(#printArea) { display: none !important; }
+    #printArea { display: block !important; }
+  }
+
+  #printArea {
+    display: none;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #111;
+    padding: 20px;
+  }
+
+  .print-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .print-subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 20px;
+  }
+
+  .print-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 10px 14px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fafafa;
+  }
+
+  .print-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+  }
+
+  .print-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Year print: 3-col month grid */
+  .print-year-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  /* Month print */
+  .print-month-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    text-transform: capitalize;
+  }
+
+  .print-cal { width: 100%; border-collapse: collapse; }
+
+  .print-cal th {
+    font-size: 10px;
+    font-weight: 600;
+    text-align: center;
+    padding: 4px 2px;
+    color: #555;
+    border-bottom: 1px solid #ddd;
+    text-transform: uppercase;
+  }
+
+  .print-cal td {
+    font-size: 10px;
+    text-align: center;
+    padding: 3px 2px;
+    vertical-align: top;
+    border: 1px solid #eee;
+    min-width: 28px;
+    height: 36px;
+  }
+
+  .print-cal td.empty { background: #fafafa; }
+  .print-cal td.weekend { background: #f5f5f5; color: #aaa; }
+
+  .print-day-num {
+    font-weight: 600;
+    font-size: 10px;
+    margin-bottom: 2px;
+    display: block;
+  }
+
+  .print-day-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .print-day-bar {
+    height: 3px;
+    border-radius: 1px;
+    width: 100%;
+  }
+
+  /* Week print */
+  .print-week-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+  }
+
+  .print-week-table th {
+    background: #f0f0f0;
+    padding: 8px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-align: left;
+    border: 1px solid #ddd;
+  }
+
+  .print-week-table td {
+    padding: 8px 10px;
+    font-size: 11px;
+    border: 1px solid #ddd;
+    vertical-align: top;
+  }
+
+  .print-week-table tr:nth-child(even) td { background: #fafafa; }
+
+  .week-person-chip {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 10px;
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    margin: 1px 2px;
+    white-space: nowrap;
+  }
+
+  /* Print modal */
+  .print-modal {
+    width: 400px;
+  }
+
+  .print-options {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .print-opt-btn {
+    flex: 1;
+    padding: 14px 8px;
+    border-radius: 10px;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+    transition: all 0.15s;
+  }
+
+  .print-opt-btn:hover { border-color: var(--accent); background: #f0f4ff; }
+  .print-opt-btn.active { border-color: var(--accent); background: #eff6ff; color: var(--accent); }
+
+  .print-opt-icon { font-size: 22px; display: block; margin-bottom: 4px; }
+
+  .print-selectors { display: flex; flex-direction: column; gap: 10px; }
+
+  .print-selectors select {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-size: 13px;
+    outline: none;
+    width: 100%;
+  }
+
+  .print-selectors select:focus { border-color: var(--accent); }
+
+  .instructions {
+    font-size: 12px;
+    color: var(--text-muted);
+    background: #f8f9ff;
+    border: 1px solid #dde3ff;
+    border-radius: 8px;
+    padding: 10px 12px;
+    line-height: 1.5;
+    margin-bottom: 4px;
+  }
+
+  .selected-person-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #f0f4ff;
+    border: 1px solid #c7d2ff;
+    margin-top: 4px;
+  }
+
+  .vacation-bar-container {
+    position: absolute;
+    bottom: 2px;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 0 2px;
+  }
+
+  .vacation-bar {
+    height: 11px;
+    border-radius: 3px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 7px;
+    font-weight: 700;
+    color: white;
+    letter-spacing: 0.02em;
+    overflow: hidden;
+    white-space: nowrap;
+    text-shadow: 0 0 2px rgba(0,0,0,0.25);
+  }
+
+  /* Manage collaborators modal */
+  .mgmt-modal {
+    width: 480px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mgmt-modal h2 {
+    margin-bottom: 0;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .mgmt-list {
+    flex: 1;
+    overflow-y: auto;
+    margin: 12px 0;
+  }
+
+  .mgmt-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .mgmt-row:last-child { border-bottom: none; }
+
+  .mgmt-color-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform 0.1s;
+    outline: none;
+  }
+
+  .mgmt-color-btn:hover { transform: scale(1.15); border-color: #333; }
+
+  .mgmt-name-input {
+    flex: 1;
+    padding: 6px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 500;
+    outline: none;
+  }
+
+  .mgmt-name-input:focus { border-color: var(--accent); }
+
+  .mgmt-save-btn {
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid #d1fae5;
+    background: #ecfdf5;
+    color: #065f46;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .mgmt-save-btn:hover { background: #d1fae5; }
+
+  .mgmt-del-btn {
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid #fee2e2;
+    background: #fff5f5;
+    color: #dc2626;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .mgmt-del-btn:hover { background: #fee2e2; }
+
+  .mgmt-add-section {
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+  }
+
+  .mgmt-add-section .sidebar-title {
+    margin-bottom: 8px;
+  }
+
+  .mgmt-add-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mgmt-add-row input[type="text"] {
+    flex: 1;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-size: 13px;
+    outline: none;
+  }
+
+  .mgmt-add-row input[type="text"]:focus { border-color: var(--accent); }
+
+  .color-picker-popover {
+    display: none;
+    position: absolute;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    z-index: 300;
+    width: 148px;
+  }
+
+  .color-picker-popover.open { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .pop-swatch {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.1s;
+  }
+
+  .pop-swatch:hover { transform: scale(1.2); }
+  .pop-swatch.active { border-color: #222; }
+
+  .day-cell.holiday .day-num { color: #f97316; }
+
+  /* Per-person stats */
+  .person-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    margin-top: 4px;
+  }
+
+  .person-stat-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  .person-stat-bar-bg {
+    flex: 1;
+    height: 6px;
+    background: #eee;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .person-stat-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.4s;
+  }
+
+  .person-stat-days {
+    font-weight: 700;
+    font-size: 12px;
+    min-width: 28px;
+    text-align: right;
+    color: #333;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:22px">ðï¸</span>
+      <div>
+        <h1>Mapa de FÃ©rias</h1>
+        <div class="subtitle">CoordenaÃ§Ã£o â 2026</div>
+      </div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-primary" onclick="openManagePersons()">ð¥ Gerir Colaboradores</button>
+    <button class="btn" onclick="openVacationsList()">ð Ver todas as fÃ©rias</button>
+    <button class="btn" onclick="openPrintModal()">ð¨ï¸ Imprimir</button>
+    <button class="btn" onclick="exportData()">ð¾ Exportar</button>
+    <button class="btn" onclick="importData()">ð Importar</button>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div>
+      <div class="sidebar-title">Colaboradores</div>
+      <div class="instructions">
+        1. Seleciona um colaborador<br>
+        2. Clica num dia para adicionar fÃ©rias
+      </div>
+    </div>
+
+    <div class="person-list" id="personList"></div>
+
+    <div class="add-person-form">
+      <div class="sidebar-title">Adicionar pessoa</div>
+      <input type="text" id="newPersonName" placeholder="Nome..." onkeydown="if(event.key==='Enter') addPerson()">
+      <div class="color-row" id="colorRow"></div>
+      <button class="btn btn-primary" onclick="addPerson()">+ Adicionar</button>
+    </div>
+
+    <div class="legend-section">
+      <div class="sidebar-title">Legenda</div>
+      <div class="legend-item">
+        <div class="legend-box" style="background:var(--accent)"></div>
+        Hoje
+      </div>
+      <div class="legend-item">
+        <div class="legend-box" style="background:#f0f0f0"></div>
+        Fim de semana
+      </div>
+      <div class="legend-item">
+        <div style="width:8px;height:8px;border-radius:50%;background:#f97316;flex-shrink:0"></div>
+        Feriado nacional
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="stats-bar" id="statsBar"></div>
+    <div class="calendar-grid" id="calendarGrid"></div>
+  </div>
+</div>
+
+<!-- MANAGE PERSONS MODAL -->
+<div class="modal-overlay" id="mgmtModal">
+  <div class="modal mgmt-modal">
+    <h2>ð¥ Gerir Colaboradores</h2>
+
+    <div class="mgmt-list" id="mgmtList"></div>
+
+    <div class="mgmt-add-section">
+      <div class="sidebar-title">Adicionar novo colaborador</div>
+      <div class="mgmt-add-row" style="position:relative;flex-wrap:wrap;gap:8px">
+        <button id="mgmtNewColorBtn" class="mgmt-color-btn" style="background:#3b82f6" onclick="toggleNewColorPicker(event)" title="Escolher cor"></button>
+        <div class="color-picker-popover" id="mgmtNewColorPicker"></div>
+        <input type="text" id="mgmtNewName" placeholder="Nome do colaborador..." onkeydown="if(event.key==='Enter') mgmtAddPerson()" style="flex:1;min-width:140px">
+        <select id="mgmtNewRole" style="padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:13px;outline:none;min-width:160px">
+          <option value="">â FunÃ§Ã£o â</option>
+          <option value="coordenador">Coordenador</option>
+          <option value="capitao">CapitÃ£o</option>
+          <option value="chefe_equipa">Chefe de Equipa</option>
+          <option value="vendedor">Vendedor</option>
+          <option value="gestor_parceiros">Gestor de Parceiros</option>
+        </select>
+        <button class="btn btn-primary" onclick="mgmtAddPerson()">+ Adicionar</button>
+      </div>
+    </div>
+
+    <div class="modal-actions" style="margin-top:14px">
+      <button class="btn" onclick="closeModal('mgmtModal')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRINT MODAL -->
+<div class="modal-overlay" id="printModal">
+  <div class="modal print-modal">
+    <h2>ð¨ï¸ Imprimir Mapa de FÃ©rias</h2>
+    <div class="print-options">
+      <button class="print-opt-btn active" id="pOpt-year" onclick="setPrintMode('year')">
+        <span class="print-opt-icon">ð</span>Ano
+      </button>
+      <button class="print-opt-btn" id="pOpt-month" onclick="setPrintMode('month')">
+        <span class="print-opt-icon">ðï¸</span>MÃªs
+      </button>
+      <button class="print-opt-btn" id="pOpt-week" onclick="setPrintMode('week')">
+        <span class="print-opt-icon">ð</span>Semana
+      </button>
+    </div>
+    <div class="print-selectors" id="printSelectors"></div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn" onclick="closeModal('printModal')">Cancelar</button>
+      <button class="btn btn-primary" onclick="doPrint()">ð¨ï¸ Imprimir</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRINT AREA (hidden, shown only when printing) -->
+<div id="printArea"></div>
+
+<!-- ADD VACATION MODAL -->
+<div class="modal-overlay" id="vacModal">
+  <div class="modal">
+    <h2 id="vacModalTitle">â Adicionar FÃ©rias</h2>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Colaborador</label>
+        <select id="vacPerson"></select>
+      </div>
+      <div class="form-group">
+        <label>Data inÃ­cio</label>
+        <input type="date" id="vacStart">
+      </div>
+      <div class="form-group">
+        <label>Data fim</label>
+        <input type="date" id="vacEnd">
+      </div>
+      <div class="form-group">
+        <label>Nota (opcional)</label>
+        <input type="text" id="vacNote" placeholder="ex: fÃ©rias de verÃ£o">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('vacModal')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveVacation()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- VACATIONS LIST MODAL -->
+<div class="modal-overlay" id="listModal">
+  <div class="modal" style="width:500px;max-height:80vh;overflow-y:auto">
+    <h2>ð Todas as FÃ©rias</h2>
+    <div id="vacationsList"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('listModal')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== STATE =====
+const COLORS = [
+  '#ef4444','#f97316','#eab308','#22c55e',
+  '#14b8a6','#3b82f6','#8b5cf6','#ec4899',
+  '#06b6d4','#84cc16','#f59e0b','#6366f1'
+];
+
+const ROLES = [
+  { value: '', label: 'â FunÃ§Ã£o â' },
+  { value: 'coordenador', label: 'Coordenador' },
+  { value: 'capitao', label: 'CapitÃ£o' },
+  { value: 'chefe_equipa', label: 'Chefe de Equipa' },
+  { value: 'vendedor', label: 'Vendedor' },
+  { value: 'gestor_parceiros', label: 'Gestor de Parceiros' },
+];
+
+const ROLE_LABELS = {
+  coordenador: 'Coordenador',
+  capitao: 'CapitÃ£o',
+  chefe_equipa: 'Chefe de Equipa',
+  vendedor: 'Vendedor',
+  gestor_parceiros: 'Gestor de Parceiros',
+};
+
+let state = {
+  persons: [],
+  vacations: [],
+  selectedPerson: null,
+  selectedColor: COLORS[0]
+};
+
+const YEAR = 2026;
+const MONTH_NAMES = ['Janeiro','Fevereiro','MarÃ§o','Abril','Maio','Junho',
+  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const DAY_NAMES = ['Dom','Seg','Ter','Qua','Qui','Sex','SÃ¡b'];
+
+// Feriados nacionais portugueses 2026
+// PÃ¡scoa: 5 abr 2026 â Sexta-feira Santa: 3 abr | Corpo de Deus: 4 jun
+const HOLIDAYS_2026 = new Set([
+  '2026-01-01', // Ano Novo
+  '2026-04-03', // Sexta-feira Santa
+  '2026-04-25', // Dia da Liberdade
+  '2026-05-01', // Dia do Trabalhador
+  '2026-06-04', // Corpo de Deus
+  '2026-06-10', // Dia de Portugal
+  '2026-08-15', // AssunÃ§Ã£o de Nossa Senhora
+  '2026-10-05', // ImplantaÃ§Ã£o da RepÃºblica
+  '2026-11-01', // Todos os Santos
+  '2026-12-01', // RestauraÃ§Ã£o da IndependÃªncia
+  '2026-12-08', // Imaculada ConceiÃ§Ã£o
+  '2026-12-25', // Natal
+]);
+
+const HOLIDAY_NAMES = {
+  '2026-01-01': 'Ano Novo',
+  '2026-04-03': 'Sexta-feira Santa',
+  '2026-04-25': 'Dia da Liberdade',
+  '2026-05-01': 'Dia do Trabalhador',
+  '2026-06-04': 'Corpo de Deus',
+  '2026-06-10': 'Dia de Portugal',
+  '2026-08-15': 'AssunÃ§Ã£o de Nossa Senhora',
+  '2026-10-05': 'ImplantaÃ§Ã£o da RepÃºblica',
+  '2026-11-01': 'Todos os Santos',
+  '2026-12-01': 'RestauraÃ§Ã£o da IndependÃªncia',
+  '2026-12-08': 'Imaculada ConceiÃ§Ã£o',
+  '2026-12-25': 'Natal',
+};
+
+function initials(name) {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function isWorkingDay(dateStr) {
+  const d = new Date(dateStr);
+  const dow = d.getDay();
+  if (dow === 0 || dow === 6) return false;   // fim de semana
+  if (HOLIDAYS_2026.has(dateStr)) return false; // feriado
+  return true;
+}
+
+function countWorkingDays(start, end) {
+  let count = 0;
+  let d = new Date(start);
+  const e = new Date(end);
+  while (d <= e) {
+    const ds = d.toISOString().slice(0, 10);
+    if (isWorkingDay(ds)) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return count;
+}
+
+// ===== STORAGE =====
+function save() {
+  try { localStorage.setItem('mapa-ferias-2026', JSON.stringify(state)); } catch(e) {}
+}
+
+function load() {
+  try {
+    const d = localStorage.getItem('mapa-ferias-2026');
+    if (d) {
+      const parsed = JSON.parse(d);
+      state.persons = parsed.persons || [];
+      state.vacations = parsed.vacations || [];
+    }
+  } catch(e) {}
+}
+
+// ===== PERSONS =====
+function addPerson() {
+  const name = document.getElementById('newPersonName').value.trim();
+  if (!name) return;
+
+  const id = Date.now().toString();
+  const color = state.selectedColor || COLORS[state.persons.length % COLORS.length];
+
+  state.persons.push({ id, name, color });
+  state.selectedPerson = id;
+  document.getElementById('newPersonName').value = '';
+
+  save();
+  renderAll();
+}
+
+function deletePerson(id) {
+  if (!confirm('Remover esta pessoa e todas as suas fÃ©rias?')) return;
+  state.persons = state.persons.filter(p => p.id !== id);
+  state.vacations = state.vacations.filter(v => v.personId !== id);
+  if (state.selectedPerson === id) state.selectedPerson = null;
+  save();
+  renderAll();
+}
+
+function selectPerson(id) {
+  state.selectedPerson = state.selectedPerson === id ? null : id;
+  renderSidebar();
+  renderCalendar();
+}
+
+// ===== VACATIONS =====
+function openAddVacation(dateStr) {
+  const sel = document.getElementById('vacPerson');
+  sel.innerHTML = state.persons.map(p => {
+    const roleStr = p.role && ROLE_LABELS[p.role] ? ` (${ROLE_LABELS[p.role]})` : '';
+    return `<option value="${p.id}" ${state.selectedPerson === p.id ? 'selected' : ''}>${p.name}${roleStr}</option>`;
+  }).join('');
+
+  if (state.persons.length === 0) {
+    alert('Adiciona pelo menos um colaborador primeiro!');
+    return;
+  }
+
+  document.getElementById('vacStart').value = dateStr;
+  document.getElementById('vacEnd').value = dateStr;
+  document.getElementById('vacNote').value = '';
+
+  document.getElementById('vacModal').classList.add('open');
+}
+
+let editingVacId = null;
+
+function editVacation(id) {
+  const v = state.vacations.find(vv => vv.id === id);
+  if (!v) return;
+  editingVacId = id;
+
+  const sel = document.getElementById('vacPerson');
+  sel.innerHTML = state.persons.map(p => {
+    const roleStr = p.role && ROLE_LABELS[p.role] ? ` (${ROLE_LABELS[p.role]})` : '';
+    return `<option value="${p.id}" ${p.id === v.personId ? 'selected' : ''}>${p.name}${roleStr}</option>`;
+  }).join('');
+
+  document.getElementById('vacStart').value = v.start;
+  document.getElementById('vacEnd').value = v.end;
+  document.getElementById('vacNote').value = v.note || '';
+  document.getElementById('vacModalTitle').textContent = 'âï¸ Editar FÃ©rias';
+  document.getElementById('vacModal').classList.add('open');
+}
+
+function saveVacation() {
+  const personId = document.getElementById('vacPerson').value;
+  const start = document.getElementById('vacStart').value;
+  const end = document.getElementById('vacEnd').value;
+  const note = document.getElementById('vacNote').value.trim();
+
+  if (!start || !end || !personId) return;
+  if (start > end) { alert('A data de inÃ­cio deve ser antes do fim.'); return; }
+
+  if (editingVacId) {
+    const v = state.vacations.find(vv => vv.id === editingVacId);
+    if (v) { v.personId = personId; v.start = start; v.end = end; v.note = note; }
+    editingVacId = null;
+  } else {
+    state.vacations.push({ id: Date.now().toString(), personId, start, end, note });
+  }
+
+  state.selectedPerson = personId;
+  document.getElementById('vacModalTitle').textContent = 'â Adicionar FÃ©rias';
+  save();
+  closeModal('vacModal');
+  renderAll();
+}
+
+function deleteVacation(id) {
+  state.vacations = state.vacations.filter(v => v.id !== id);
+  save();
+  renderAll();
+}
+
+function getVacationsForDay(dateStr) {
+  return state.vacations.filter(v => v.start <= dateStr && v.end >= dateStr);
+}
+
+// ===== CALENDAR =====
+function renderCalendar() {
+  const grid = document.getElementById('calendarGrid');
+  grid.innerHTML = '';
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+  for (let m = 0; m < 12; m++) {
+    const card = document.createElement('div');
+    card.className = 'month-card';
+
+    // Header
+    const mh = document.createElement('div');
+    mh.className = 'month-header';
+    mh.textContent = MONTH_NAMES[m];
+    card.appendChild(mh);
+
+    // Weekday labels
+    const wd = document.createElement('div');
+    wd.className = 'weekdays';
+    DAY_NAMES.forEach(d => {
+      const span = document.createElement('div');
+      span.className = 'weekday';
+      span.textContent = d;
+      wd.appendChild(span);
+    });
+    card.appendChild(wd);
+
+    // Days
+    const dg = document.createElement('div');
+    dg.className = 'days-grid';
+
+    const firstDay = new Date(YEAR, m, 1).getDay();
+    const daysInMonth = new Date(YEAR, m+1, 0).getDate();
+
+    // Empty cells
+    for (let i = 0; i < firstDay; i++) {
+      dg.appendChild(document.createElement('div'));
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${YEAR}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const dow = new Date(YEAR, m, d).getDay();
+      const isWeekend = dow === 0 || dow === 6;
+      const isToday = dateStr === todayStr;
+
+      const isHoliday = HOLIDAYS_2026.has(dateStr);
+      const working = isWorkingDay(dateStr);
+
+      const cell = document.createElement('div');
+      cell.className = 'day-cell' + (isWeekend ? ' weekend' : '') + (isToday ? ' today' : '') + (isHoliday ? ' holiday' : '');
+
+      const num = document.createElement('div');
+      num.className = 'day-num';
+      num.textContent = d;
+      cell.appendChild(num);
+
+      if (isHoliday) {
+        cell.title = HOLIDAY_NAMES[dateStr] || 'Feriado';
+        const dot = document.createElement('div');
+        dot.style.cssText = 'width:4px;height:4px;border-radius:50%;background:#f97316;margin:1px auto 0';
+        cell.appendChild(dot);
+      }
+
+      // Vacation bars â only on working days
+      if (working) {
+        const vacHere = getVacationsForDay(dateStr);
+        if (vacHere.length > 0) {
+          const barContainer = document.createElement('div');
+          barContainer.className = 'vacation-bar-container';
+
+          vacHere.slice(0, 3).forEach(v => {
+            const person = state.persons.find(p => p.id === v.personId);
+            if (!person) return;
+            const bar = document.createElement('div');
+            bar.className = 'vacation-bar';
+            bar.style.background = person.color;
+            bar.textContent = initials(person.name);
+            barContainer.appendChild(bar);
+          });
+
+          if (vacHere.length > 3) {
+            const bar = document.createElement('div');
+            bar.className = 'vacation-bar';
+            bar.style.background = '#aaa';
+            bar.textContent = `+${vacHere.length - 3}`;
+            barContainer.appendChild(bar);
+          }
+
+          cell.appendChild(barContainer);
+
+          const names = vacHere.map(v => {
+            const p = state.persons.find(pp => pp.id === v.personId);
+            return p ? p.name : '';
+          }).filter(Boolean);
+          cell.title = names.join(', ');
+        }
+      }
+
+      cell.onclick = () => {
+        if (state.selectedPerson) {
+          // Quick add for selected person
+          const sel = document.getElementById('vacPerson');
+          const existing = document.getElementById('vacModal');
+          const selEl = document.getElementById('vacPerson');
+          selEl.innerHTML = state.persons.map(p => {
+            const roleStr = p.role && ROLE_LABELS[p.role] ? ` (${ROLE_LABELS[p.role]})` : '';
+            return `<option value="${p.id}" ${state.selectedPerson === p.id ? 'selected' : ''}>${p.name}${roleStr}</option>`;
+          }).join('');
+          document.getElementById('vacStart').value = dateStr;
+          document.getElementById('vacEnd').value = dateStr;
+          document.getElementById('vacNote').value = '';
+          document.getElementById('vacModal').classList.add('open');
+        } else {
+          openAddVacation(dateStr);
+        }
+      };
+
+      dg.appendChild(cell);
+    }
+
+    card.appendChild(dg);
+    grid.appendChild(card);
+  }
+}
+
+function renderSidebar() {
+  const list = document.getElementById('personList');
+  list.innerHTML = '';
+
+  if (state.persons.length === 0) {
+    list.innerHTML = '<div class="empty-state">Nenhum colaborador ainda.<br>Adiciona abaixo! ð</div>';
+    return;
+  }
+
+  state.persons.forEach(p => {
+    const item = document.createElement('div');
+    item.className = 'person-item' + (state.selectedPerson === p.id ? ' selected' : '');
+    item.style.color = p.color;
+
+    const dot = document.createElement('div');
+    dot.className = 'person-dot';
+    dot.style.background = p.color;
+
+    const nameWrap = document.createElement('div');
+    nameWrap.style.flex = '1';
+    nameWrap.style.overflow = 'hidden';
+
+    const name = document.createElement('div');
+    name.className = 'person-name';
+    name.style.color = '#1a1a1a';
+    name.textContent = p.name;
+    nameWrap.appendChild(name);
+
+    if (p.role && ROLE_LABELS[p.role]) {
+      const roleTag = document.createElement('div');
+      roleTag.style.cssText = 'font-size:10px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px';
+      roleTag.textContent = ROLE_LABELS[p.role];
+      nameWrap.appendChild(roleTag);
+    }
+
+    const del = document.createElement('button');
+    del.className = 'person-delete';
+    del.innerHTML = 'Ã';
+    del.title = 'Remover';
+    del.onclick = (e) => { e.stopPropagation(); deletePerson(p.id); };
+
+    item.appendChild(dot);
+    item.appendChild(nameWrap);
+    item.appendChild(del);
+    item.onclick = () => selectPerson(p.id);
+
+    list.appendChild(item);
+  });
+
+  // Show selected person badge
+  if (state.selectedPerson) {
+    const p = state.persons.find(pp => pp.id === state.selectedPerson);
+    if (p) {
+      const badge = document.createElement('div');
+      badge.className = 'selected-person-badge';
+      badge.innerHTML = `<div style="width:8px;height:8px;border-radius:50%;background:${p.color}"></div> A marcar: <strong>${p.name}</strong>`;
+      list.appendChild(badge);
+    }
+  }
+}
+
+function renderColorPicker() {
+  const row = document.getElementById('colorRow');
+  row.innerHTML = '';
+  COLORS.forEach(c => {
+    const sw = document.createElement('div');
+    sw.className = 'color-swatch' + (state.selectedColor === c ? ' active' : '');
+    sw.style.background = c;
+    sw.onclick = () => { state.selectedColor = c; renderColorPicker(); };
+    row.appendChild(sw);
+  });
+}
+
+function renderStats() {
+  const bar = document.getElementById('statsBar');
+
+  const totalDays = state.vacations.reduce((sum, v) => sum + countWorkingDays(v.start, v.end), 0);
+
+  // Summary cards
+  const cards = `
+    <div class="stat-card">
+      <div class="stat-value">${state.persons.length}</div>
+      <div class="stat-label">Colaboradores</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">${state.vacations.length}</div>
+      <div class="stat-label">PerÃ­odos marcados</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">${totalDays}</div>
+      <div class="stat-label">Dias Ãºteis totais</div>
+    </div>`;
+
+  if (state.persons.length === 0) { bar.innerHTML = cards; return; }
+
+  // Per-person breakdown
+  const personDays = state.persons.map(p => {
+    const days = state.vacations
+      .filter(v => v.personId === p.id)
+      .reduce((sum, v) => sum + countWorkingDays(v.start, v.end), 0);
+    return { p, days };
+  }).filter(x => x.days > 0);
+
+  const maxDays = Math.max(...personDays.map(x => x.days), 1);
+
+  const breakdown = personDays.length === 0 ? '' : `
+    <div class="stat-card" style="flex:1;min-width:260px">
+      <div class="stat-label" style="margin-bottom:8px;font-weight:600">Dias Ãºteis por colaborador</div>
+      <div class="person-stats">
+        ${personDays.map(({p, days}) => `
+          <div class="person-stat-row">
+            <div style="width:8px;height:8px;border-radius:50%;background:${p.color};flex-shrink:0"></div>
+            <span style="min-width:90px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</span>
+            <div class="person-stat-bar-bg">
+              <div class="person-stat-bar-fill" style="width:${Math.round(days/maxDays*100)}%;background:${p.color}"></div>
+            </div>
+            <span class="person-stat-days">${days}d</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+
+  bar.innerHTML = `<div style="display:flex;gap:12px;flex-wrap:wrap;width:100%">${cards}${breakdown}</div>`;
+}
+
+function renderAll() {
+  renderSidebar();
+  renderColorPicker();
+  renderCalendar();
+  renderStats();
+}
+
+// ===== MODALS =====
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  if (id === 'vacModal') {
+    editingVacId = null;
+    document.getElementById('vacModalTitle').textContent = 'â Adicionar FÃ©rias';
+  }
+}
+
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', (e) => {
+    if (e.target === el) el.classList.remove('open');
+  });
+});
+
+// ===== VACATIONS LIST =====
+function openVacationsList() {
+  const container = document.getElementById('vacationsList');
+
+  if (state.vacations.length === 0) {
+    container.innerHTML = '<div class="empty-state">Nenhuma fÃ©rias marcada ainda.</div>';
+  } else {
+    // Sort by start date
+    const sorted = [...state.vacations].sort((a, b) => a.start.localeCompare(b.start));
+
+    function fmt(dateStr) {
+      const [y, m, d] = dateStr.split('-');
+      return `${d}/${m}/${y}`;
+    }
+
+    container.innerHTML = '<div class="vacations-list">' +
+      sorted.map(v => {
+        const p = state.persons.find(pp => pp.id === v.personId);
+        if (!p) return '';
+        const days = countWorkingDays(v.start, v.end);
+        return `<div class="vacation-entry">
+          <div class="vac-color" style="background:${p.color}"></div>
+          <div class="vac-info">
+            <span class="vac-name">${p.name}</span>
+            <span class="vac-dates"> Â· ${fmt(v.start)} â ${fmt(v.end)} (${days} dias Ãºteis)${v.note ? ' Â· '+v.note : ''}</span>
+          </div>
+          <button class="vac-delete" style="color:#888" onclick="editVacation('${v.id}'); closeModal('listModal');" title="Editar">âï¸</button>
+          <button class="vac-delete" onclick="deleteVacation('${v.id}'); openVacationsList();" title="Apagar">Ã</button>
+        </div>`;
+      }).join('') +
+    '</div>';
+  }
+
+  document.getElementById('listModal').classList.add('open');
+}
+
+// ===== EXPORT / IMPORT =====
+function exportData() {
+  const json = JSON.stringify(state, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'mapa-ferias-2026.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importData() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const d = JSON.parse(ev.target.result);
+        if (d.persons && d.vacations) {
+          state.persons = d.persons;
+          state.vacations = d.vacations;
+          save();
+          renderAll();
+          alert('Dados importados com sucesso!');
+        } else {
+          alert('Ficheiro invÃ¡lido.');
+        }
+      } catch(e) {
+        alert('Erro ao importar: ' + e.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+// Pre-select color for new persons automatically
+function autoSelectNextColor() {
+  const usedColors = state.persons.map(p => p.color);
+  const next = COLORS.find(c => !usedColors.includes(c)) || COLORS[state.persons.length % COLORS.length];
+  state.selectedColor = next;
+}
+
+const origAddPerson = addPerson;
+window.addPerson = function() {
+  origAddPerson();
+  autoSelectNextColor();
+  renderColorPicker();
+};
+
+// ===== MANAGE PERSONS MODAL =====
+let mgmtNewColor = '#3b82f6';
+
+function openManagePersons() {
+  mgmtNewColor = COLORS.find(c => !state.persons.map(p => p.color).includes(c)) || COLORS[state.persons.length % COLORS.length];
+  renderMgmtModal();
+  document.getElementById('mgmtModal').classList.add('open');
+}
+
+function renderMgmtModal() {
+  const list = document.getElementById('mgmtList');
+
+  if (state.persons.length === 0) {
+    list.innerHTML = '<div class="empty-state" style="padding:20px 0">Nenhum colaborador ainda. Adiciona abaixo!</div>';
+  } else {
+    const roleOptions = ROLES.map(r =>
+      `<option value="${r.value}">${r.label}</option>`
+    ).join('');
+
+    list.innerHTML = state.persons.map(p => `
+      <div class="mgmt-row" id="mgmt-row-${p.id}">
+        <div style="position:relative">
+          <button class="mgmt-color-btn" style="background:${p.color}" onclick="toggleEditColorPicker(event,'${p.id}')" title="Alterar cor"></button>
+          <div class="color-picker-popover" id="color-pop-${p.id}"></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0">
+          <input class="mgmt-name-input" id="mgmt-name-${p.id}" value="${escHtml(p.name)}" onkeydown="if(event.key==='Enter') savePerson('${p.id}')" placeholder="Nome...">
+          <select class="mgmt-name-input" id="mgmt-role-${p.id}" style="font-size:12px;color:#555;padding:4px 8px">
+            ${ROLES.map(r => `<option value="${r.value}" ${(p.role||'')=== r.value ? 'selected' : ''}>${r.label}</option>`).join('')}
+          </select>
+        </div>
+        <button class="mgmt-save-btn" onclick="savePerson('${p.id}')">â Guardar</button>
+        <button class="mgmt-del-btn" onclick="mgmtDeletePerson('${p.id}')">â Remover</button>
+      </div>
+    `).join('');
+  }
+
+  // Update new-color button
+  const btn = document.getElementById('mgmtNewColorBtn');
+  if (btn) btn.style.background = mgmtNewColor;
+
+  // Render new-color picker
+  renderColorPopover('mgmtNewColorPicker', mgmtNewColor, (c) => {
+    mgmtNewColor = c;
+    document.getElementById('mgmtNewColorBtn').style.background = c;
+    renderColorPopover('mgmtNewColorPicker', mgmtNewColor, arguments.callee);
+  });
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderColorPopover(popId, activeColor, onPick) {
+  const pop = document.getElementById(popId);
+  if (!pop) return;
+  pop.innerHTML = COLORS.map(c =>
+    `<div class="pop-swatch${c === activeColor ? ' active' : ''}" style="background:${c}" data-color="${c}"></div>`
+  ).join('');
+  pop.querySelectorAll('.pop-swatch').forEach(sw => {
+    sw.onclick = (e) => {
+      e.stopPropagation();
+      onPick(sw.dataset.color);
+      pop.classList.remove('open');
+    };
+  });
+}
+
+function toggleNewColorPicker(e) {
+  e.stopPropagation();
+  const pop = document.getElementById('mgmtNewColorPicker');
+  const isOpen = pop.classList.contains('open');
+  closeAllPopovers();
+  if (!isOpen) {
+    renderColorPopover('mgmtNewColorPicker', mgmtNewColor, (c) => {
+      mgmtNewColor = c;
+      document.getElementById('mgmtNewColorBtn').style.background = c;
+    });
+    pop.classList.add('open');
+  }
+}
+
+function toggleEditColorPicker(e, personId) {
+  e.stopPropagation();
+  const popId = `color-pop-${personId}`;
+  const pop = document.getElementById(popId);
+  const isOpen = pop.classList.contains('open');
+  closeAllPopovers();
+  if (!isOpen) {
+    const person = state.persons.find(p => p.id === personId);
+    renderColorPopover(popId, person ? person.color : '', (c) => {
+      // Update person color immediately
+      const p = state.persons.find(pp => pp.id === personId);
+      if (p) {
+        p.color = c;
+        save();
+        renderMgmtModal();
+        renderAll();
+      }
+    });
+    pop.classList.add('open');
+  }
+}
+
+function closeAllPopovers() {
+  document.querySelectorAll('.color-picker-popover.open').forEach(p => p.classList.remove('open'));
+}
+
+document.addEventListener('click', closeAllPopovers);
+
+function savePerson(id) {
+  const p = state.persons.find(pp => pp.id === id);
+  if (!p) return;
+  const newName = document.getElementById(`mgmt-name-${id}`).value.trim();
+  if (!newName) { alert('O nome nÃ£o pode estar vazio.'); return; }
+  p.name = newName;
+  p.role = document.getElementById(`mgmt-role-${id}`).value;
+  save();
+  renderAll();
+  // Flash feedback
+  const btn = document.querySelector(`#mgmt-row-${id} .mgmt-save-btn`);
+  if (btn) { btn.textContent = 'â Guardado!'; setTimeout(() => btn.textContent = 'â Guardar', 1200); }
+}
+
+function mgmtDeletePerson(id) {
+  const p = state.persons.find(pp => pp.id === id);
+  const vacCount = state.vacations.filter(v => v.personId === id).length;
+  const msg = vacCount > 0
+    ? `Remover "${p.name}"? Isto irÃ¡ apagar tambÃ©m ${vacCount} perÃ­odo(s) de fÃ©rias.`
+    : `Remover "${p.name}"?`;
+  if (!confirm(msg)) return;
+  state.persons = state.persons.filter(pp => pp.id !== id);
+  state.vacations = state.vacations.filter(v => v.personId !== id);
+  if (state.selectedPerson === id) state.selectedPerson = null;
+  save();
+  renderMgmtModal();
+  renderAll();
+}
+
+function mgmtAddPerson() {
+  const name = document.getElementById('mgmtNewName').value.trim();
+  if (!name) { document.getElementById('mgmtNewName').focus(); return; }
+  const role = document.getElementById('mgmtNewRole').value;
+  const id = Date.now().toString();
+  state.persons.push({ id, name, color: mgmtNewColor, role });
+  state.selectedPerson = id;
+  document.getElementById('mgmtNewName').value = '';
+  document.getElementById('mgmtNewRole').value = '';
+  // Pick next unused color
+  mgmtNewColor = COLORS.find(c => !state.persons.map(p => p.color).includes(c)) || COLORS[state.persons.length % COLORS.length];
+  save();
+  renderMgmtModal();
+  renderAll();
+}
+
+// ===== PRINT =====
+let printMode = 'year';
+
+function openPrintModal() {
+  printMode = 'year';
+  document.querySelectorAll('.print-opt-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('pOpt-year').classList.add('active');
+  renderPrintSelectors();
+  document.getElementById('printModal').classList.add('open');
+}
+
+function setPrintMode(mode) {
+  printMode = mode;
+  document.querySelectorAll('.print-opt-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`pOpt-${mode}`).classList.add('active');
+  renderPrintSelectors();
+}
+
+function renderPrintSelectors() {
+  const box = document.getElementById('printSelectors');
+  if (printMode === 'year') {
+    box.innerHTML = '<div style="font-size:13px;color:#888;text-align:center;padding:4px 0">Imprime o calendÃ¡rio anual completo.</div>';
+    return;
+  }
+  if (printMode === 'month') {
+    box.innerHTML = `<select id="pMonth">
+      ${MONTH_NAMES.map((m,i) => `<option value="${i}" ${i === new Date().getMonth() ? 'selected' : ''}>${m}</option>`).join('')}
+    </select>`;
+    return;
+  }
+  if (printMode === 'week') {
+    // Build week options: ISO weeks of 2026
+    const opts = [];
+    let d = new Date(2026, 0, 1);
+    // Go to Monday of first week
+    while (d.getDay() !== 1) d.setDate(d.getDate() + 1);
+    const today = new Date();
+    let closestIdx = 0, closestDiff = Infinity;
+    while (d.getFullYear() <= 2026) {
+      const monday = new Date(d);
+      const sunday = new Date(d); sunday.setDate(sunday.getDate() + 6);
+      const fmt = dt => `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`;
+      const diff = Math.abs(today - monday);
+      if (diff < closestDiff) { closestDiff = diff; closestIdx = opts.length; }
+      opts.push({ label: `${fmt(monday)} â ${fmt(sunday)}`, start: monday.toISOString().slice(0,10) });
+      d.setDate(d.getDate() + 7);
+    }
+    box.innerHTML = `<select id="pWeek">
+      ${opts.map((o,i) => `<option value="${o.start}" ${i === closestIdx ? 'selected' : ''}>${o.label}</option>`).join('')}
+    </select>`;
+  }
+}
+
+function buildLegend() {
+  return `<div class="print-legend">
+    ${state.persons.map(p => {
+      const roleStr = p.role && ROLE_LABELS[p.role] ? ` â ${ROLE_LABELS[p.role]}` : '';
+      return `<div class="print-legend-item">
+        <div class="print-legend-dot" style="background:${p.color}"></div>
+        <span>${p.name}${roleStr}</span>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function buildMonthTable(monthIndex) {
+  const firstDay = new Date(YEAR, monthIndex, 1).getDay();
+  const daysInMonth = new Date(YEAR, monthIndex + 1, 0).getDate();
+
+  let html = `<div class="print-month-title">${MONTH_NAMES[monthIndex]}</div>
+  <table class="print-cal">
+    <thead><tr>${DAY_NAMES.map(d => `<th>${d}</th>`).join('')}</tr></thead>
+    <tbody><tr>`;
+
+  for (let i = 0; i < firstDay; i++) html += '<td class="empty"></td>';
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${YEAR}-${String(monthIndex+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dow = new Date(YEAR, monthIndex, d).getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const isHol = HOLIDAYS_2026.has(dateStr);
+    const working = isWorkingDay(dateStr);
+    const vacsHere = working ? getVacationsForDay(dateStr) : [];
+
+    html += `<td class="${isWeekend ? 'weekend' : ''}${isHol ? ' holiday' : ''}" style="${isHol ? 'color:#f97316' : ''}">
+      <span class="print-day-num">${d}${isHol ? 'ð¸' : ''}</span>
+      <div class="print-day-bars">
+        ${vacsHere.slice(0,4).map(v => {
+          const p = state.persons.find(pp => pp.id === v.personId);
+          return p ? `<div class="print-day-bar" style="background:${p.color}" title="${p.name}"></div>` : '';
+        }).join('')}
+      </div>
+    </td>`;
+
+    if ((firstDay + d) % 7 === 0 && d < daysInMonth) html += '</tr><tr>';
+  }
+
+  // Pad last row
+  const lastDow = new Date(YEAR, monthIndex, daysInMonth).getDay();
+  if (lastDow !== 6) for (let i = lastDow + 1; i <= 6; i++) html += '<td class="empty"></td>';
+
+  html += '</tr></tbody></table>';
+  return html;
+}
+
+function doPrint() {
+  const area = document.getElementById('printArea');
+  const now = new Date().toLocaleDateString('pt-PT');
+  let content = '';
+
+  if (printMode === 'year') {
+    content = `<div class="print-title">ðï¸ Mapa de FÃ©rias 2026 â CoordenaÃ§Ã£o</div>
+      <div class="print-subtitle">Impresso em ${now}</div>
+      ${buildLegend()}
+      <div class="print-year-grid">
+        ${Array.from({length:12},(_,i) => `<div>${buildMonthTable(i)}</div>`).join('')}
+      </div>`;
+  }
+
+  else if (printMode === 'month') {
+    const mi = parseInt(document.getElementById('pMonth').value);
+    content = `<div class="print-title">ðâï¸ Mapa de FÃ©rias â %{MONTH_NAMES[mi]} ${YEAR}</div>
+      <div class="print-subtitle">CoordenaÃ§Ã£o Â· Impresso em ${now}</div>
+      ${buildLegend()}
+      <div style="max-width:700px">${buildMonthTable(mi)}</div>`;
+  }
+
+  else if (printMode === 'week') {
+    const weekStart = document.getElementById('pWeek').value;
+    const d0 = new Date(weekStart);
+    const days = Array.from({length:7},(_,i) => {
+      const d = new Date(d0); d.setDate(d.getDate() + i);
+      return d;
+    });
+    const fmtFull = dt => dt.toLocaleDateString('pt-PT', {weekday:'long',day:'numeric',month:'long'});
+    const fmtShort = dt => `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`;
+
+    const weekLabel = `${fmtShort(days[0])} â ${fmtShort(days[6])}`;
+
+    let rows = '';
+    days.forEach(dt => {
+      const dateStr = dt.toISOString().slice(0,10);
+      const dow = dt.getDay();
+      const isWeekend = dow === 0 || dow === 6;
+      const isHol = HOLIDAYS_2026.has(dateStr);
+      const vacsHere = isWorkingDay(dateStr) ? getVacationsForDay(dateStr) : [];
+      const chips = vacsHere.map(v => {
+        const p = state.persons.find(pp => pp.id === v.personId);
+        if (!p) return '';
+        const roleStr = p.role && ROLE_LABELS[p.role] ? ` Â· ${ROLE_LABELS[p.role]}` : '';
+        return `<span class="week-person-chip" style="background:${p.color}">${p.name}${roleStr}</span>`;
+      }).join('') || '<span style="color:#bbb;font-style:italic">â</span>';
+
+      const holName = isHol ? `  ð¸ ${HOLIDAY_NAMES[dateStr] || 'Feriado'}` : '';
+      rows += `<tr>
+        <td style="font-weight:600;${isWeekend || isHol ? 'color:#aaa' : ''}">${fmtFull(dt)}${holName}</td>
+        <td>${isWeekend || isHol ? `<span style="color:#bbb;font-style:italic">${isHol ? 'Feriado' : 'Fim de semana'}</span>` : chips}</td>
+      </tr>`;
+    });
+
+    content = `<div class="print-title">ðï¸ Mapa de FÃ©rias â Semana ${weekLabel}</div>
+      <div class="print-subtitle">CoordenaÃ§Ã£o Â· Impresso em ${now}</div>
+      ${buildLegend()}
+      <table class="print-week-table">
+        <thead><tr><th style="width:200px">Dia</th><th>Colaboradores de fÃ©rias</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  area.innerHTML = content;
+  closeModal('printModal');
+  setTimeout(() => { window.print(); }, 100);
+}
+
+// ===== INIT =====
+load();
+autoSelectNextColor();
+renderAll();
+</script>
+</body>
+</html>
