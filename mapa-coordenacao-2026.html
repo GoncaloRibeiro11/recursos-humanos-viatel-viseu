@@ -208,6 +208,10 @@
   .dash-month-label { font-size: 10px; color: var(--text-muted); }
   .dash-movement-months { display: grid; grid-template-columns: repeat(12, minmax(20px, 1fr)); gap: 7px; align-items: end; min-height: 150px; padding-top: 8px; }
   .dash-movement-month { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+  .dash-movement-values { display: flex; gap: 4px; height: 14px; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; line-height: 1; }
+  .dash-movement-value { min-width: 10px; text-align: center; }
+  .dash-movement-value.entry { color: var(--c-presente); }
+  .dash-movement-value.exit { color: var(--c-finjust); }
   .dash-movement-bars { height: 104px; display: flex; align-items: end; gap: 3px; width: 100%; justify-content: center; }
   .dash-movement-bar { width: 10px; min-height: 2px; border-radius: 6px 6px 0 0; background: #eef0f3; }
   .dash-movement-entry { background: var(--c-presente); }
@@ -2337,7 +2341,7 @@ function dashMovementMonths(entriesByMonth, exitsByMonth){
   return `<div class="dash-movement-months">${MONTH_NAMES.map((name, i) => {
     const entryPct = Math.round((entriesByMonth[i] / max) * 100);
     const exitPct = Math.round((exitsByMonth[i] / max) * 100);
-    return `<div class="dash-movement-month" title="${name}: ${entriesByMonth[i]} entradas · ${exitsByMonth[i]} saídas"><div class="dash-movement-bars"><div class="dash-movement-bar dash-movement-entry" style="height:${entryPct}%"></div><div class="dash-movement-bar dash-movement-exit" style="height:${exitPct}%"></div></div><div class="dash-month-label">${name.slice(0,3)}</div></div>`;
+    return `<div class="dash-movement-month" title="${name}: ${entriesByMonth[i]} entradas · ${exitsByMonth[i]} saídas"><div class="dash-movement-values"><span class="dash-movement-value entry">${entriesByMonth[i]}</span><span class="dash-movement-value exit">${exitsByMonth[i]}</span></div><div class="dash-movement-bars"><div class="dash-movement-bar dash-movement-entry" style="height:${entryPct}%"></div><div class="dash-movement-bar dash-movement-exit" style="height:${exitPct}%"></div></div><div class="dash-month-label">${name.slice(0,3)}</div></div>`;
   }).join('')}</div><div class="dash-legend-mini"><span><span class="dash-legend-dot" style="background:var(--c-presente)"></span>Entradas: <strong>${entriesByMonth.reduce((s,n)=>s+n,0)}</strong></span><span><span class="dash-legend-dot" style="background:var(--c-finjust)"></span>Saídas: <strong>${exitsByMonth.reduce((s,n)=>s+n,0)}</strong></span></div>`;
 }
 function dashStack(parts){
