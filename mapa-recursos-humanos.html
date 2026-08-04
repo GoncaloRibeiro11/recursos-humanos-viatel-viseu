@@ -1467,7 +1467,7 @@ async function composeBlueAvatarFromImage(img, hasTransparentSubject = false, op
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#2c9bd8';
   ctx.fillRect(0, 0, size, size);
-  const alignRight = opts.align === 'right';
+  const mirror = !!opts.mirror;
 
   if (hasTransparentSubject){
     const source = document.createElement('canvas');
@@ -1485,11 +1485,19 @@ async function composeBlueAvatarFromImage(img, hasTransparentSubject = false, op
       const scale = Math.min((size * 0.86) / sw, (size * 0.94) / sh);
       const dw = sw * scale;
       const dh = sh * scale;
-      const dx = alignRight ? Math.max(8, size - dw - 18) : (size - dw) / 2;
+      const dx = (size - dw) / 2;
       const dy = Math.max(8, Math.min(size - dh - 10, size - dh - 8));
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(source, sx, sy, sw, sh, dx, dy, dw, dh);
+      if (mirror){
+        ctx.save();
+        ctx.translate(dx + dw, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(source, sx, sy, sw, sh, 0, dy, dw, dh);
+        ctx.restore();
+      } else {
+        ctx.drawImage(source, sx, sy, sw, sh, dx, dy, dw, dh);
+      }
       return canvas.toDataURL('image/png');
     }
   }
@@ -1498,7 +1506,7 @@ async function composeBlueAvatarFromImage(img, hasTransparentSubject = false, op
   let sx = 0, sy = 0, sw = img.width, sh = img.height;
   if (sourceRatio > 1){
     sw = img.height;
-    sx = (img.width - sw) * (alignRight ? 0.64 : 0.5);
+    sx = (img.width - sw) / 2;
   } else {
     sh = img.width;
     sy = (img.height - sh) / 2;
@@ -1506,7 +1514,15 @@ async function composeBlueAvatarFromImage(img, hasTransparentSubject = false, op
   sx = Math.max(0, Math.min(sx, img.width - sw));
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, size, size);
+  if (mirror){
+    ctx.save();
+    ctx.translate(size, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, size, size);
+    ctx.restore();
+  } else {
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, size, size);
+  }
   return canvas.toDataURL('image/png');
 }
 async function removeImageBackground(file){
@@ -1630,7 +1646,7 @@ function setPhotoFromFile(file, id){
   if (!file) return;
   document.body.style.cursor = 'progress';
   const person = state.persons.find(pp => pp.id === id);
-  const photoOpts = { align: person && person.role === 'vendedor' ? 'right' : 'center' };
+  const photoOpts = { mirror: !!(person && person.role === 'vendedor') };
   buildPhotoDataUrl(file, photoOpts).then(dataUrl => {
     const p = state.persons.find(pp => pp.id === id);
     if (p){
