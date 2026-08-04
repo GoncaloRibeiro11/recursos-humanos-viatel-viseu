@@ -2325,6 +2325,39 @@ function dashStack(parts){
   if (!total) return '<div class="dash-empty">Ainda não há ausências registadas.</div>';
   return `<div class="dash-stack">${parts.map(p => `<div class="dash-stack-part" title="${p.label}: ${p.value}" style="width:${(p.value / total) * 100}%;background:${p.color}"></div>`).join('')}</div><div class="dash-legend-mini">${parts.map(p => `<span><span class="dash-legend-dot" style="background:${p.color}"></span>${p.label}: <strong>${p.value}</strong></span>`).join('')}</div>`;
 }
+function countBy(items, labelFn){
+  const map = {};
+  items.forEach(item => {
+    const label = labelFn(item) || 'Sem definido';
+    map[label] = (map[label] || 0) + 1;
+  });
+  return Object.entries(map).sort((a,b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([label,value]) => ({ label, value }));
+}
+function monthDiffFromToday(dateStr){
+  const iso = normalizeDateValue(dateStr);
+  if (!iso) return null;
+  const start = new Date(iso + 'T00:00:00');
+  const end = new Date();
+  if (isNaN(start) || start > end) return null;
+  let months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+  if (end.getDate() < start.getDate()) months--;
+  return Math.max(0, months);
+}
+function tenureBucketLabel(months){
+  if (months === null) return 'Sem data entrada';
+  if (months < 6) return '< 6 meses';
+  if (months < 12) return '6-12 meses';
+  if (months < 24) return '1-2 anos';
+  if (months < 60) return '2-5 anos';
+  return '5+ anos';
+}
+function averageTenureText(people){
+  const months = people.map(p => monthDiffFromToday(p.entrada)).filter(v => v !== null);
+  if (!months.length) return '—';
+  const avg = months.reduce((s,n) => s+n, 0) / months.length;
+  if (avg < 12) return `${Math.round(avg)}m`;
+  return `${(avg / 12).toFixed(1).replace('.', ',')}a`;
+}
 function renderDashboard(){
   const box = document.getElementById('dashboard');
   if (!box) return;
@@ -2358,6 +2391,38 @@ function renderDashboard(){
   const teamItems = Object.entries(teamCounts)
     .sort((a,b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([label, value]) => ({ label, value }));
+  const inactive = state.persons.filter(p => p.ativo === false);
+  const companyCount = new Set(active.map(p => (p.empresa || '').trim()).filter(Boolean)).size;
+  const roleItems = countBy(active, p => ROLE_LABELS[p.role] || 'Sem função');
+  const companyItems = countBy(active, p => (p.empresa || '').trim() || 'Sem empresa');
+  const cargaItems = countBy(active, p => CARGA_LABELS[p.carga] || 'Sem carga');
+  const tenureItems = countBy(active, p => tenureBucketLabel(monthDiffFromToday(p.entrada)));
+  const missingRows = active
+    .map(p => {
+      const missing = [];
+      if (!p.role) missing.push('Função');
+      if (!p.chefeId) missing.push('Chefe');
+      if (!p.empresa) missing.push('Empresa');
+      if (!p.telefone) missing.push('Telefone');
+      if (!p.agv) missing.push('AGV');
+      if (!normalizeDateValue(p.entrada)) missing.push('Entrada');
+      return { p, missing };
+    })
+    .filter(x => x.missing.length)
+    .slice(0,8)
+    .map(x => [escHtml(x.p.name), escHtml(x.missing.join(', '))]);
+  const recentPeopleRows = state.persons
+    .filter(p => normalizeDateValue(p.entrada) || normalizeDateValue(p.saida))
+    .map(p => {
+      const entrada = normalizeDateValue(p.entrada);
+      const saida = normalizeDateValue(p.saida);
+      const last = [entrada, saida].filter(Boolean).sort().pop();
+      const type = saida && saida === last ? 'Saída' : 'Entrada';
+      return { p, type, date:last };
+    })
+    .sort((a,b) => b.date.localeCompare(a.date))
+    .slice(0,8)
+    .map(x => [x.type, escHtml(x.p.name), formatDatePt(x.date)]);
 
   const noVacationRows = noVacation.slice(0,8).map(p => [escHtml(p.name), escHtml(ROLE_LABELS[p.role] || '—')]);
   const topPeopleItems = abs.topPeople.map(x => ({
@@ -2399,14 +2464,23 @@ function renderDashboard(){
     <div class="dashboard-title">Dashboard</div>
     <div class="dash-hero">
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${active.length}</div><div class="dash-metric-icon">👥</div></div><div><div class="dash-metric-label">Colaboradores ativos</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:100%;background:var(--c-presente)"></div></div></div></div>
+      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${inactive.length}</div><div class="dash-metric-icon">⏸</div></div><div><div class="dash-metric-label">Colaboradores inativos</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${Math.min(100, inactive.length * 15)}%;background:#9ca3af"></div></div></div></div>
+      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${companyCount}</div><div class="dash-metric-icon">🏢</div></div><div><div class="dash-metric-label">Empresas ativas</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${Math.min(100, companyCount * 18)}%;background:#14b8a6"></div></div></div></div>
+      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${averageTenureText(active)}</div><div class="dash-metric-icon">⏱</div></div><div><div class="dash-metric-label">Antiguidade média</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:72%;background:#8b5cf6"></div></div></div></div>
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${vacationCoverage}%</div><div class="dash-metric-icon">🏖️</div></div><div><div class="dash-metric-label">Com férias marcadas</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${vacationCoverage}%;background:var(--c-ferias)"></div></div></div></div>
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${absenceTotal}</div><div class="dash-metric-icon">📊</div></div><div><div class="dash-metric-label">Dias de ausência registados</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${Math.min(100, absenceTotal ? 100 : 0)}%;background:var(--accent)"></div></div></div></div>
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value" style="color:var(--c-finjust)">${fiTotal}</div><div class="dash-metric-icon">⚠️</div></div><div><div class="dash-metric-label">Faltas injustificadas</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${Math.min(100, fiTotal * 12)}%;background:var(--c-finjust)"></div></div></div></div>
     </div>
     <div class="dash-grid">
+      <div class="dash-panel"><h3>Colaboradores por função</h3>${dashBars(roleItems, 'Sem colaboradores ativos.')}</div>
+      <div class="dash-panel"><h3>Colaboradores por empresa</h3>${dashBars(companyItems, 'Sem empresas definidas.', '#14b8a6')}</div>
+      <div class="dash-panel"><h3>Carga horária</h3>${dashBars(cargaItems, 'Sem cargas horárias definidas.', '#8b5cf6')}</div>
+      <div class="dash-panel"><h3>Antiguidade RH</h3>${dashBars(tenureItems, 'Sem datas de entrada definidas.', '#f59e0b')}</div>
       <div class="dash-panel dash-panel-wide"><h3>Dias de férias por mês</h3>${dashMonthBars(months)}</div>
       <div class="dash-panel"><h3>Ausências por tipo</h3>${dashStack(statusParts)}</div>
       <div class="dash-panel"><h3>Colaboradores por chefe de equipa</h3>${dashBars(teamItems, 'Sem colaboradores ativos.', 'var(--c-presente)')}</div>
+      <div class="dash-panel"><h3>Dados RH em falta</h3>${dashTable(['Colaborador', 'Campos'], missingRows, 'Todos os colaboradores ativos têm os dados principais preenchidos.')}</div>
+      <div class="dash-panel"><h3>Movimentos RH recentes</h3>${dashTable(['Tipo', 'Colaborador', 'Data'], recentPeopleRows, 'Sem entradas ou saídas registadas.')}</div>
       <div class="dash-panel"><h3>Dias com mais pessoas ausentes</h3>${dashBars(topDayItems, 'Ainda não há ausências registadas.', 'var(--c-baixa)')}</div>
       <div class="dash-panel"><h3>Top 5 colaboradores com mais ausências</h3>${dashBars(topPeopleItems, 'Ainda não há ausências registadas.')}</div>
       <div class="dash-panel"><h3>Colaboradores sem férias marcadas</h3>${dashTable(['Colaborador', 'Função'], noVacationRows, 'Todos os colaboradores ativos têm férias marcadas.')}</div>
