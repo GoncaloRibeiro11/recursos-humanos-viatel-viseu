@@ -1100,28 +1100,9 @@ async function detectPhotoFace(sourceCanvas){
 async function applyAutoPhotoCutout(){
   if (!photoEditor.ctx || !photoEditor.sourceCanvas) return;
   const size = photoEditor.canvas.width;
-  const sourceCtx = photoEditor.sourceCanvas.getContext('2d');
-  const input = sourceCtx.getImageData(0, 0, size, size);
-  const output = photoEditor.ctx.createImageData(size, size);
-  output.data.set(input.data);
-  const face = await detectPhotoFace(photoEditor.sourceCanvas);
-  const faceCx = face ? face.x + face.width / 2 : size * 0.5;
-  const faceCy = face ? face.y + face.height / 2 : size * 0.34;
-  const faceW = face ? Math.max(face.width, size * 0.16) : size * 0.22;
-  const faceH = face ? Math.max(face.height, size * 0.18) : size * 0.26;
-  const shapes = [
-    { cx: faceCx, cy: faceCy + faceH * 0.08, rx: faceW * 1.18, ry: faceH * 1.58 },
-    { cx: faceCx, cy: Math.min(size * 0.78, faceCy + faceH * 1.28), rx: size * 0.36, ry: size * 0.44 },
-    { cx: faceCx, cy: Math.min(size * 0.88, faceCy + faceH * 1.95), rx: size * 0.42, ry: size * 0.34 },
-  ];
-  for (let y = 0; y < size; y++){
-    for (let x = 0; x < size; x++){
-      const idx = (y * size + x) * 4;
-      const alpha = Math.max(...shapes.map(s => ellipseAlpha(x, y, s.cx, s.cy, s.rx, s.ry)));
-      output.data[idx + 3] = Math.min(output.data[idx + 3], alpha);
-    }
-  }
-  photoEditor.ctx.putImageData(output, 0, 0);
+  photoEditor.ctx.clearRect(0, 0, size, size);
+  photoEditor.ctx.drawImage(photoEditor.sourceCanvas, 0, 0);
+  removePhotoBackground(photoEditor.ctx, size);
 }
 async function openPhotoEditor(img, id){
   const size = 320;
@@ -1464,7 +1445,23 @@ function downloadIdCardBack(){
   a.download = idCardFileName((person.name || 'colaborador') + '-verso');
   a.click();
 }
-async function composeBlueAvatarFromImage(img){
+function getAlphaBounds(ctx, width, height){
+  const data = ctx.getImageData(0, 0, width, height).data;
+  let minX = width, minY = height, maxX = -1, maxY = -1;
+  for (let y = 0; y < height; y++){
+    for (let x = 0; x < width; x++){
+      const a = data[(y * width + x) * 4 + 3];
+      if (a < 18) continue;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (maxX < minX || maxY < minY) return null;
+  return { x:minX, y:minY, w:maxX - minX + 1, h:maxY - minY + 1 };
+}
+async function composeBlueAvatarFromImage(img, hasTransparentSubject = false){
   const size = 320;
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -1472,6 +1469,32 @@ async function composeBlueAvatarFromImage(img){
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#2c9bd8';
   ctx.fillRect(0, 0, size, size);
+
+  if (hasTransparentSubject){
+    const source = document.createElement('canvas');
+    source.width = img.width;
+    source.height = img.height;
+    const sourceCtx = source.getContext('2d');
+    sourceCtx.drawImage(img, 0, 0);
+    const bounds = getAlphaBounds(sourceCtx, source.width, source.height);
+    if (bounds){
+      const pad = Math.max(8, Math.round(Math.max(bounds.w, bounds.h) * 0.025));
+      const sx = Math.max(0, bounds.x - pad);
+      const sy = Math.max(0, bounds.y - pad);
+      const sw = Math.min(source.width - sx, bounds.w + pad * 2);
+      const sh = Math.min(source.height - sy, bounds.h + pad * 2);
+      const scale = Math.min((size * 0.86) / sw, (size * 0.94) / sh);
+      const dw = sw * scale;
+      const dh = sh * scale;
+      const dx = (size - dw) / 2;
+      const dy = Math.max(8, Math.min(size - dh - 10, size - dh - 8));
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(source, sx, sy, sw, sh, dx, dy, dw, dh);
+      return canvas.toDataURL('image/png');
+    }
+  }
+
   const sourceRatio = img.width / img.height;
   let sx = 0, sy = 0, sw = img.width, sh = img.height;
   if (sourceRatio > 1){
@@ -1481,22 +1504,27 @@ async function composeBlueAvatarFromImage(img){
     sh = img.width;
     sy = (img.height - sh) / 2;
   }
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, sx, sy, sw, sh, 0, 0, size, size);
   return canvas.toDataURL('image/png');
 }
+async function removeImageBackground(file){
+  const mod = await import('https://esm.sh/@imgly/background-removal@1.7.0?bundle&deps=onnxruntime-web@1.21.0');
+  const removeBackground = mod.default || mod.removeBackground;
+  if (!removeBackground) throw new Error('Background removal unavailable');
+  return removeBackground(file, {
+    model: 'isnet_fp16',
+    output: { format: 'image/png', type: 'foreground' },
+  });
+}
 async function buildPhotoDataUrl(file){
   try {
-    const mod = await import('https://esm.sh/@imgly/background-removal@1.7.0?bundle&deps=onnxruntime-web@1.21.0');
-    const removeBackground = mod.default || mod.removeBackground;
-    if (!removeBackground) throw new Error('Background removal unavailable');
-    const blob = await removeBackground(file, {
-      model: 'isnet_quint8',
-      output: { format: 'image/png', type: 'foreground' },
-    });
+    const blob = await removeImageBackground(file);
     const url = URL.createObjectURL(blob);
     try {
       const img = await loadImageFromUrl(url);
-      return await composeBlueAvatarFromImage(img);
+      return await composeBlueAvatarFromImage(img, true);
     } finally {
       URL.revokeObjectURL(url);
     }
