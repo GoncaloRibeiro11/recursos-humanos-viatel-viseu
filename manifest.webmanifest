@@ -1,0 +1,19 @@
+{
+  "name": "Mapa de Recursos Humanos",
+  "short_name": "Mapa RH",
+  "description": "Mapa de férias, assiduidade e gestão de recursos humanos.",
+  "start_url": "./mapa-recursos-humanos.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "viatel.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

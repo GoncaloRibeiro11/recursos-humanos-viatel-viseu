@@ -1,0 +1,14 @@
+# Ficheiros temporarios e backups locais
+*.ldb
+*.log
+*.tmp
+*.backup-*.json
+*-backup-*.json
+*-antigo-*.json
+recuperado-*.json
+recover-*.js
+docx-extraido/
+
+# Sistema
+Thumbs.db
+.DS_Store
