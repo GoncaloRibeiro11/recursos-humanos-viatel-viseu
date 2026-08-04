@@ -1518,6 +1518,86 @@ async function removeImageBackground(file){
     output: { format: 'image/png', type: 'foreground' },
   });
 }
+function loadExternalScript(src, globalName){
+  if (globalName && window[globalName]) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing){
+      existing.addEventListener('load', () => resolve(), { once:true });
+      existing.addEventListener('error', reject, { once:true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+async function loadImageFromFile(file){
+  const url = URL.createObjectURL(file);
+  try {
+    return await loadImageFromUrl(url);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+function canvasToLoadedImage(canvas){
+  return loadImageFromUrl(canvas.toDataURL('image/png'));
+}
+async function removePersonBackgroundWithSelfie(file){
+  await loadExternalScript('https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js', 'SelfieSegmentation');
+  if (!window.SelfieSegmentation) throw new Error('Selfie segmentation unavailable');
+  const img = await loadImageFromFile(file);
+  const maxSide = 900;
+  const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const source = document.createElement('canvas');
+  source.width = w;
+  source.height = h;
+  const sourceCtx = source.getContext('2d');
+  sourceCtx.imageSmoothingEnabled = true;
+  sourceCtx.imageSmoothingQuality = 'high';
+  sourceCtx.drawImage(img, 0, 0, w, h);
+
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const segmenter = new window.SelfieSegmentation({
+      locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}`,
+    });
+    const finish = (value, error) => {
+      if (done) return;
+      done = true;
+      try { if (segmenter.close) segmenter.close(); } catch(e){}
+      if (error) reject(error);
+      else resolve(value);
+    };
+    segmenter.setOptions({ modelSelection: 1, selfieMode: false });
+    segmenter.onResults(results => {
+      try {
+        const out = document.createElement('canvas');
+        out.width = w;
+        out.height = h;
+        const outCtx = out.getContext('2d');
+        outCtx.imageSmoothingEnabled = true;
+        outCtx.imageSmoothingQuality = 'high';
+        outCtx.drawImage(source, 0, 0);
+        outCtx.globalCompositeOperation = 'destination-in';
+        outCtx.filter = 'blur(1.2px)';
+        outCtx.drawImage(results.segmentationMask, -1, -1, w + 2, h + 2);
+        outCtx.filter = 'none';
+        outCtx.globalCompositeOperation = 'source-over';
+        finish(out);
+      } catch(e){
+        finish(null, e);
+      }
+    });
+    segmenter.send({ image: source }).catch(err => finish(null, err));
+    setTimeout(() => finish(null, new Error('Selfie segmentation timeout')), 12000);
+  });
+}
 async function buildPhotoDataUrl(file){
   try {
     const blob = await removeImageBackground(file);
@@ -1529,7 +1609,14 @@ async function buildPhotoDataUrl(file){
       URL.revokeObjectURL(url);
     }
   } catch(e){
-    console.warn('Remoção automática de fundo indisponível, a usar recorte simples.', e);
+    console.warn('Remoção automática principal indisponível, a tentar segmentação de pessoa.', e);
+    try {
+      const cutoutCanvas = await removePersonBackgroundWithSelfie(file);
+      const cutoutImg = await canvasToLoadedImage(cutoutCanvas);
+      return await composeBlueAvatarFromImage(cutoutImg, true);
+    } catch(e2){
+      console.warn('Segmentação de pessoa indisponível, a usar recorte simples.', e2);
+    }
     const url = URL.createObjectURL(file);
     try {
       const img = await loadImageFromUrl(url);
