@@ -1459,7 +1459,7 @@ function getAlphaBounds(ctx, width, height){
   if (maxX < minX || maxY < minY) return null;
   return { x:minX, y:minY, w:maxX - minX + 1, h:maxY - minY + 1 };
 }
-async function composeBlueAvatarFromImage(img, hasTransparentSubject = false){
+async function composeBlueAvatarFromImage(img, hasTransparentSubject = false, opts = {}){
   const size = 320;
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -1467,6 +1467,7 @@ async function composeBlueAvatarFromImage(img, hasTransparentSubject = false){
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#2c9bd8';
   ctx.fillRect(0, 0, size, size);
+  const alignRight = opts.align === 'right';
 
   if (hasTransparentSubject){
     const source = document.createElement('canvas');
@@ -1484,7 +1485,7 @@ async function composeBlueAvatarFromImage(img, hasTransparentSubject = false){
       const scale = Math.min((size * 0.86) / sw, (size * 0.94) / sh);
       const dw = sw * scale;
       const dh = sh * scale;
-      const dx = (size - dw) / 2;
+      const dx = alignRight ? Math.max(8, size - dw - 18) : (size - dw) / 2;
       const dy = Math.max(8, Math.min(size - dh - 10, size - dh - 8));
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
@@ -1497,11 +1498,12 @@ async function composeBlueAvatarFromImage(img, hasTransparentSubject = false){
   let sx = 0, sy = 0, sw = img.width, sh = img.height;
   if (sourceRatio > 1){
     sw = img.height;
-    sx = (img.width - sw) / 2;
+    sx = (img.width - sw) * (alignRight ? 0.64 : 0.5);
   } else {
     sh = img.width;
     sy = (img.height - sh) / 2;
   }
+  sx = Math.max(0, Math.min(sx, img.width - sw));
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, sx, sy, sw, sh, 0, 0, size, size);
@@ -1596,13 +1598,13 @@ async function removePersonBackgroundWithSelfie(file){
     setTimeout(() => finish(null, new Error('Selfie segmentation timeout')), 12000);
   });
 }
-async function buildPhotoDataUrl(file){
+async function buildPhotoDataUrl(file, opts = {}){
   try {
     const blob = await removeImageBackground(file);
     const url = URL.createObjectURL(blob);
     try {
       const img = await loadImageFromUrl(url);
-      return await composeBlueAvatarFromImage(img, true);
+      return await composeBlueAvatarFromImage(img, true, opts);
     } finally {
       URL.revokeObjectURL(url);
     }
@@ -1611,14 +1613,14 @@ async function buildPhotoDataUrl(file){
     try {
       const cutoutCanvas = await removePersonBackgroundWithSelfie(file);
       const cutoutImg = await canvasToLoadedImage(cutoutCanvas);
-      return await composeBlueAvatarFromImage(cutoutImg, true);
+      return await composeBlueAvatarFromImage(cutoutImg, true, opts);
     } catch(e2){
       console.warn('Segmentação de pessoa indisponível, a usar recorte simples.', e2);
     }
     const url = URL.createObjectURL(file);
     try {
       const img = await loadImageFromUrl(url);
-      return await composeBlueAvatarFromImage(img);
+      return await composeBlueAvatarFromImage(img, false, opts);
     } finally {
       URL.revokeObjectURL(url);
     }
@@ -1627,7 +1629,9 @@ async function buildPhotoDataUrl(file){
 function setPhotoFromFile(file, id){
   if (!file) return;
   document.body.style.cursor = 'progress';
-  buildPhotoDataUrl(file).then(dataUrl => {
+  const person = state.persons.find(pp => pp.id === id);
+  const photoOpts = { align: person && person.role === 'vendedor' ? 'right' : 'center' };
+  buildPhotoDataUrl(file, photoOpts).then(dataUrl => {
     const p = state.persons.find(pp => pp.id === id);
     if (p){
       p.photo = dataUrl;
