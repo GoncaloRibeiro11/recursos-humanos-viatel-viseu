@@ -923,8 +923,9 @@ const STATUSES = [
   { code:'FI', label:'Falta injustificada', short:'FI', color:'var(--c-finjust)',  raw:'#ef4444' },
   { code:'B',  label:'Baixa médica',        short:'B',  color:'var(--c-baixa)',    raw:'#8b5cf6' },
 ];
-const STATUS_MAP = Object.fromEntries(STATUSES.map(s => [s.code, s]));
 const FERIAS_STATUS = { code:'FE', label:'Férias', short:'Fé', color:'var(--c-ferias)', raw:'#0ea5e9' };
+const PAINT_STATUSES = [FERIAS_STATUS, ...STATUSES];
+const STATUS_MAP = Object.fromEntries(PAINT_STATUSES.map(s => [s.code, s]));
 
 const CARGAS = [
   { value:'', label:'—' },
@@ -2148,7 +2149,7 @@ function changeMonth(delta){ currentMonth = Math.max(0, Math.min(11, currentMont
 function renderPaintModes(){
   const box = document.getElementById('paintModes');
   box.querySelectorAll('.paint-btn').forEach(b => b.remove());
-  STATUSES.forEach(s => {
+  PAINT_STATUSES.forEach(s => {
     const btn = document.createElement('button');
     btn.className = 'paint-btn' + (paintCode===s.code?' active':'');
     btn.style.color = s.raw;
@@ -2191,7 +2192,7 @@ function renderSheet(){
         if (hol){ body += `<td class="day-cell holiday" title="Feriado: ${escHtml(HOLIDAY_NAMES[ds]||'Feriado')}">F</td>`; continue; }
         const code = getRec(p.id, ds);
         if (code){
-          if (code==='P') cP++; else if (code==='FJ') cFJ++; else if (code==='FI') cFI++; else if (code==='B') cB++;
+          if (code==='P') cP++; else if (code==='FE') cFE++; else if (code==='FJ') cFJ++; else if (code==='FI') cFI++; else if (code==='B') cB++;
           const st = STATUS_MAP[code];
           body += `<td class="day-cell" style="background:${st.color}" onclick="cellClick('${p.id}','${ds}')" title="${MONTH_NAMES[currentMonth]} ${d} · ${st.label}">${st.short}</td>`;
         } else if (isOnVacation(p.id, ds)){
@@ -2222,7 +2223,7 @@ function renderAssidStats(){
   const workDays = countWorkingDaysInMonth();
   let tP=0,tFJ=0,tFI=0,tB=0,tFE=0;
   const apsStat = activePersons();
-  apsStat.forEach(p => { for (let d=1; d<=dim; d++){ const ds=dateStrOf(currentMonth,d); const c=getRec(p.id, ds); if (c==='P') tP++; else if (c==='FJ') tFJ++; else if (c==='FI') tFI++; else if (c==='B') tB++; else if (!c && isWorkingDay(ds) && isOnVacation(p.id, ds)) tFE++; } });
+  apsStat.forEach(p => { for (let d=1; d<=dim; d++){ const ds=dateStrOf(currentMonth,d); const c=getRec(p.id, ds); if (c==='P') tP++; else if (c==='FE') tFE++; else if (c==='FJ') tFJ++; else if (c==='FI') tFI++; else if (c==='B') tB++; else if (!c && isWorkingDay(ds) && isOnVacation(p.id, ds)) tFE++; } });
   bar.innerHTML = `
     <div class="stat-card"><div class="stat-value">${apsStat.length}</div><div class="stat-label">Colaboradores</div></div>
     <div class="stat-card"><div class="stat-value">${workDays}</div><div class="stat-label">Dias úteis no mês</div></div>
@@ -2292,7 +2293,7 @@ function absenceSummary(activePeople){
     dates.forEach(ds => {
       const code = getRec(p.id, ds);
       let type = '';
-      if (code === 'FJ' || code === 'FI' || code === 'B') type = code;
+      if (code === 'FE' || code === 'FJ' || code === 'FI' || code === 'B') type = code;
       else if (!code && isOnVacation(p.id, ds)) type = 'FE';
       if (!type) return;
       byId[p.id].total++;
@@ -2994,7 +2995,7 @@ function doPrintAssid(){
       if (hol){ tds += '<td class="we" style="color:#f97316;font-weight:700">F</td>'; continue; }
       const code = getRec(p.id, ds);
       if (code){
-        if (code==='P') cP++; else if (code==='FJ') cFJ++; else if (code==='FI') cFI++; else if (code==='B') cB++;
+        if (code==='P') cP++; else if (code==='FE') cFE++; else if (code==='FJ') cFJ++; else if (code==='FI') cFI++; else if (code==='B') cB++;
         const st = STATUS_MAP[code];
         tds += `<td style="background:${st.raw};color:#fff;font-weight:700">${st.short}</td>`;
       } else if (isOnVacation(p.id, ds)){
