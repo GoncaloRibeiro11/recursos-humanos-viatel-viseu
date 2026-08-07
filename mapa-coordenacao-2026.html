@@ -2506,6 +2506,30 @@ function averageTenureText(people){
   if (avg < 12) return `${Math.round(avg)}m`;
   return `${(avg / 12).toFixed(1).replace('.', ',')}a`;
 }
+function ageYearsFromBirth(dateStr){
+  const iso = normalizeDateValue(dateStr);
+  if (!iso) return null;
+  const birth = new Date(iso + 'T00:00:00');
+  const today = new Date();
+  if (isNaN(birth) || birth > today) return null;
+  let age = today.getFullYear() - birth.getFullYear();
+  const hadBirthday = today.getMonth() > birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() >= birth.getDate());
+  if (!hadBirthday) age--;
+  return age >= 0 ? age : null;
+}
+function ageStats(people){
+  const ages = people
+    .map(p => ({ p, age: ageYearsFromBirth(p.nascimento) }))
+    .filter(x => x.age !== null)
+    .sort((a,b) => b.age - a.age || a.p.name.localeCompare(b.p.name));
+  if (!ages.length) return { avg:'—', oldest:null, youngest:null };
+  const avg = ages.reduce((sum, x) => sum + x.age, 0) / ages.length;
+  return {
+    avg: `${Math.round(avg)}a`,
+    oldest: ages[0],
+    youngest: ages[ages.length - 1],
+  };
+}
 function renderDashboard(){
   const box = document.getElementById('dashboard');
   if (!box) return;
@@ -2541,6 +2565,7 @@ function renderDashboard(){
     .map(([label, value]) => ({ label, value }));
   const inactive = state.persons.filter(p => p.ativo === false);
   const companyCount = new Set(active.map(p => (p.empresa || '').trim()).filter(Boolean)).size;
+  const ages = ageStats(active);
   const roleItems = countBy(active, p => ROLE_LABELS[p.role] || 'Sem função');
   const companyItems = countBy(active, p => (p.empresa || '').trim() || 'Sem empresa');
   const cargaItems = countBy(active, p => CARGA_LABELS[p.carga] || 'Sem carga');
@@ -2615,6 +2640,9 @@ function renderDashboard(){
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${inactive.length}</div><div class="dash-metric-icon">⏸</div></div><div><div class="dash-metric-label">Colaboradores inativos</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${Math.min(100, inactive.length * 15)}%;background:#9ca3af"></div></div></div></div>
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${companyCount}</div><div class="dash-metric-icon">🏢</div></div><div><div class="dash-metric-label">Empresas ativas</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${Math.min(100, companyCount * 18)}%;background:#14b8a6"></div></div></div></div>
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${averageTenureText(active)}</div><div class="dash-metric-icon">⏱</div></div><div><div class="dash-metric-label">Antiguidade média</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:72%;background:#8b5cf6"></div></div></div></div>
+      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${ages.avg}</div><div class="dash-metric-icon">🎂</div></div><div><div class="dash-metric-label">Média de idades</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${ages.avg==='—'?0:68}%;background:#0ea5e9"></div></div></div></div>
+      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${ages.oldest ? ages.oldest.age + 'a' : '—'}</div><div class="dash-metric-icon">⬆️</div></div><div><div class="dash-metric-label">Mais velho${ages.oldest ? ': ' + escHtml(ages.oldest.p.name) : ''}</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${ages.oldest?85:0}%;background:#f59e0b"></div></div></div></div>
+      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${ages.youngest ? ages.youngest.age + 'a' : '—'}</div><div class="dash-metric-icon">⬇️</div></div><div><div class="dash-metric-label">Mais novo${ages.youngest ? ': ' + escHtml(ages.youngest.p.name) : ''}</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${ages.youngest?55:0}%;background:#14b8a6"></div></div></div></div>
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${vacationCoverage}%</div><div class="dash-metric-icon">🏖️</div></div><div><div class="dash-metric-label">Com férias marcadas</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${vacationCoverage}%;background:var(--c-ferias)"></div></div></div></div>
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${absenceTotal}</div><div class="dash-metric-icon">📊</div></div><div><div class="dash-metric-label">Dias de ausência registados</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${Math.min(100, absenceTotal ? 100 : 0)}%;background:var(--accent)"></div></div></div></div>
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value" style="color:var(--c-finjust)">${fiTotal}</div><div class="dash-metric-icon">⚠️</div></div><div><div class="dash-metric-label">Faltas injustificadas</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${Math.min(100, fiTotal * 12)}%;background:var(--c-finjust)"></div></div></div></div>
