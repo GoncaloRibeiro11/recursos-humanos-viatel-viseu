@@ -178,10 +178,11 @@
   #viewRH .rh-summary-row { display: flex; gap: 12px; align-items: stretch; justify-content: space-between; width: 100%; }
   #viewRH .rh-summary-cards { display: flex; gap: 12px; flex-wrap: wrap; }
   #viewRH .work-anniversary-card {
-    margin-left: auto; min-width: 340px; max-width: 520px; flex: 1; color: #052e5f;
+    min-width: 300px; max-width: 420px; flex: 1; color: #052e5f;
     background: linear-gradient(135deg, #eff6ff 0%, #fff 48%, #ecfeff 100%);
     border: 1px solid #bfdbfe; border-radius: 12px; padding: 14px 16px; box-shadow: 0 8px 22px rgba(37,99,235,.10);
   }
+  #viewRH .anniversary-card-wrap { display: flex; gap: 12px; flex-wrap: wrap; margin-left: auto; justify-content: flex-end; flex: 1; }
   #viewRH .work-anniversary-title { font-size: 14px; font-weight: 900; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
   #viewRH .work-anniversary-list { display: flex; flex-direction: column; gap: 10px; }
   #viewRH .work-anniversary-item { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; min-width: 0; }
@@ -2954,16 +2955,15 @@ async function shareBirthdayImage(personId){
   a.click();
 }
 function renderWorkAnniversaries(){
-  const birthdays = upcomingBirthdays(30).map(x => ({ ...x, type:'birthday' }));
-  const work = upcomingWorkAnniversaries(30).map(x => ({ ...x, type:'work' }));
-  const upcoming = [...birthdays, ...work]
+  const renderCard = (title, items, type) => {
+    const upcoming = items
     .sort((a,b) => a.days - b.days || a.person.name.localeCompare(b.person.name))
-    .slice(0,4);
-  if (!upcoming.length){
-    return `<div class="work-anniversary-card"><div class="work-anniversary-title">🎉 Aniversários</div><div class="dash-empty" style="padding:4px 0">Sem aniversários nos próximos 30 dias.</div></div>`;
-  }
-  return `<div class="work-anniversary-card"><div class="work-anniversary-title">🎉 Aniversários</div><div class="work-anniversary-list">${upcoming.map(x => {
-    const isBirthday = x.type === 'birthday';
+    .slice(0,3);
+    if (!upcoming.length){
+      return `<div class="work-anniversary-card"><div class="work-anniversary-title">${escHtml(title)}</div><div class="dash-empty" style="padding:4px 0">Sem registos nos próximos 30 dias.</div></div>`;
+    }
+    return `<div class="work-anniversary-card"><div class="work-anniversary-title">${escHtml(title)}</div><div class="work-anniversary-list">${upcoming.map(x => {
+    const isBirthday = type === 'birthday';
     const when = x.days === 0 ? 'Hoje' : `Daqui a ${x.days} dias`;
     const msg = isBirthday
       ? `Idade · ${x.years} ${x.years===1?'ano':'anos'}`
@@ -2972,7 +2972,12 @@ function renderWorkAnniversaries(){
       ? `<button class="work-anniversary-image-btn" onclick="${isBirthday ? 'shareBirthdayImage' : 'shareWorkAnniversaryImage'}('${x.person.id}')" title="Criar imagem para enviar pelo WhatsApp">WhatsApp</button>`
       : `<span class="rh-readonly muted" title="A imagem fica disponível no próprio dia">Imagem no dia</span>`;
     return `<div class="work-anniversary-item">${avatarHtml(x.person, 46)}<div class="work-anniversary-text"><div class="work-anniversary-name">${escHtml(x.person.name)}</div><div class="work-anniversary-meta">${when} · ${formatDatePt(x.date)}</div><div class="work-anniversary-greeting">${escHtml(msg)}</div></div>${action}</div>`;
-  }).join('')}</div></div>`;
+    }).join('')}</div></div>`;
+  };
+  return `<div class="anniversary-card-wrap">
+    ${renderCard('🎂 Aniversário de vida', upcomingBirthdays(30), 'birthday')}
+    ${renderCard('🎉 Aniversário de empresa', upcomingWorkAnniversaries(30), 'work')}
+  </div>`;
 }
 function upcomingWorkAnniversaries(limit = 30){
   return activePersons()
