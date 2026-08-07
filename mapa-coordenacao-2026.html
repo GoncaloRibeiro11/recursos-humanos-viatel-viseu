@@ -205,6 +205,22 @@
     font-size: 12px; color: var(--text-muted); background: #f8f9ff; border: 1px solid #dde3ff;
     border-radius: 8px; padding: 8px 12px; line-height: 1.5; margin-bottom: 16px;
   }
+  #viewAnniversarios .main { padding: 24px; overflow-x: auto; }
+  #viewAnniversarios .instructions {
+    font-size: 12px; color: var(--text-muted); background: #f8f9ff; border: 1px solid #dde3ff;
+    border-radius: 8px; padding: 8px 12px; line-height: 1.5; margin-bottom: 16px;
+  }
+  .anniversary-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .anniversary-card {
+    background: linear-gradient(135deg, #eff6ff 0%, #fff 52%, #ecfeff 100%);
+    border: 1px solid #bfdbfe; border-radius: 12px; padding: 16px; box-shadow: 0 8px 22px rgba(37,99,235,.08);
+  }
+  .anniversary-card.today { border-color: #86efac; background: linear-gradient(135deg, #ecfdf5 0%, #fff 52%, #eff6ff 100%); }
+  .anniversary-person { display: flex; gap: 12px; align-items: center; min-width: 0; }
+  .anniversary-name { font-size: 16px; font-weight: 900; color: #082b83; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .anniversary-meta { margin-top: 4px; font-size: 12px; font-weight: 800; color: #2563eb; }
+  .anniversary-msg { margin-top: 10px; font-size: 12px; color: #475569; line-height: 1.45; }
+  .anniversary-actions { margin-top: 12px; display: flex; justify-content: flex-end; }
   .dashboard { margin-bottom: 22px; }
   .dashboard-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
   .dash-grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 14px; }
@@ -647,10 +663,12 @@
     .header-actions .btn { white-space: nowrap; flex: 0 0 auto; }
 
     #viewDashboard .main,
+    #viewAnniversarios .main,
     #viewRH .main,
     #viewAssid .main,
     #viewFerias .main { padding: 12px; overflow-x: hidden; }
     #viewDashboard .instructions,
+    #viewAnniversarios .instructions,
     #viewRH .instructions,
     #viewAssid .instructions,
     #viewFerias .instructions { font-size: 11px; padding: 8px 10px; }
@@ -761,6 +779,7 @@
   <div class="tabs">
     <button class="tab active" id="tab-rh" onclick="switchTab('rh')">🧑‍💼 RH</button>
     <button class="tab" id="tab-dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
+    <button class="tab" id="tab-anniversarios" onclick="switchTab('anniversarios')">🎉 Aniversários</button>
     <button class="tab" id="tab-assid" onclick="switchTab('assid')">🗓️ Assiduidade</button>
     <button class="tab" id="tab-ferias" onclick="switchTab('ferias')">🏖️ Férias</button>
   </div>
@@ -824,6 +843,16 @@
       Resumo dos principais indicadores de RH, férias e assiduidade.
     </div>
     <div class="dashboard" id="dashboard"></div>
+  </div>
+</div>
+
+<!-- ===================== ANIVERSÁRIOS VIEW ===================== -->
+<div class="view" id="viewAnniversarios">
+  <div class="main">
+    <div class="instructions">
+      Consulta aqui os aniversários de empresa. O aviso mostra os próximos 30 dias, mas a imagem para WhatsApp só fica disponível no próprio dia.
+    </div>
+    <div id="anniversariosBoard"></div>
   </div>
 </div>
 
@@ -2006,10 +2035,12 @@ function migrateFromOldApps(){
 function switchTab(tab){
   activeTab = tab;
   document.getElementById('viewDashboard').classList.toggle('active', tab==='dashboard');
+  document.getElementById('viewAnniversarios').classList.toggle('active', tab==='anniversarios');
   document.getElementById('viewFerias').classList.toggle('active', tab==='ferias');
   document.getElementById('viewAssid').classList.toggle('active', tab==='assid');
   document.getElementById('viewRH').classList.toggle('active', tab==='rh');
   document.getElementById('tab-dashboard').classList.toggle('active', tab==='dashboard');
+  document.getElementById('tab-anniversarios').classList.toggle('active', tab==='anniversarios');
   document.getElementById('tab-ferias').classList.toggle('active', tab==='ferias');
   document.getElementById('tab-assid').classList.toggle('active', tab==='assid');
   document.getElementById('tab-rh').classList.toggle('active', tab==='rh');
@@ -2696,6 +2727,8 @@ function applyBolsaOutcome(personId, outcome){
 function renderAll(){
   if (activeTab === 'dashboard'){
     renderDashboard();
+  } else if (activeTab === 'anniversarios'){
+    renderAnniversarios();
   } else if (activeTab === 'ferias'){
     renderFeriasSidebar(); renderCalendar(); renderFeriasStats();
   } else if (activeTab === 'assid'){
@@ -2933,6 +2966,39 @@ function renderWorkAnniversaries(){
     return `<div class="work-anniversary-item">${avatarHtml(x.person, 46)}<div class="work-anniversary-text"><div class="work-anniversary-name">${escHtml(x.person.name)}</div><div class="work-anniversary-meta">${when} · ${x.years} ${x.years===1?'ano':'anos'} · ${formatDatePt(x.date)}</div><div class="work-anniversary-greeting">${escHtml(msg)}</div></div>${action}</div>`;
   }).join('')}</div></div>`;
 }
+function upcomingWorkAnniversaries(limit = 30){
+  return activePersons()
+    .map(nextAnniversaryInfo)
+    .filter(Boolean)
+    .filter(x => x.days <= limit)
+    .sort((a,b) => a.days - b.days || a.person.name.localeCompare(b.person.name));
+}
+function renderAnniversarios(){
+  const box = document.getElementById('anniversariosBoard');
+  if (!box) return;
+  const upcoming = upcomingWorkAnniversaries(30);
+  if (!upcoming.length){
+    box.innerHTML = `<div class="dash-empty">Sem aniversários de empresa nos próximos 30 dias.</div>`;
+    return;
+  }
+  box.innerHTML = `<div class="anniversary-board">${upcoming.map(x => {
+    const when = x.days === 0 ? 'Hoje' : `Daqui a ${x.days} dias`;
+    const action = x.days === 0
+      ? `<button class="work-anniversary-image-btn" onclick="shareWorkAnniversaryImage('${x.person.id}')" title="Criar imagem para enviar pelo WhatsApp">WhatsApp</button>`
+      : `<span class="rh-readonly muted" title="A imagem fica disponível no próprio dia">Imagem no dia</span>`;
+    return `<div class="anniversary-card ${x.days===0?'today':''}">
+      <div class="anniversary-person">
+        ${avatarHtml(x.person, 54)}
+        <div style="min-width:0">
+          <div class="anniversary-name">${escHtml(x.person.name)}</div>
+          <div class="anniversary-meta">${when} · ${x.years} ${x.years===1?'ano':'anos'} · ${formatDatePt(x.date)}</div>
+        </div>
+      </div>
+      <div class="anniversary-msg">Parabéns pelos ${x.years} ${x.years===1?'ano':'anos'} de casa.</div>
+      <div class="anniversary-actions">${action}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
 function openExitDateModal(personId){
   const person = state.persons.find(p => p.id === personId);
   if (!person) return;
@@ -2995,7 +3061,6 @@ function renderRH(){
         <div class="stat-card"><div class="stat-value" style="color:#999">${inativos}</div><div class="stat-label">Inativos</div></div>
         <div class="stat-card"><div class="stat-value">${nEmpresas}</div><div class="stat-label">Empresas</div></div>
       </div>
-      ${renderWorkAnniversaries()}
     </div>`;
 
   // tabela
