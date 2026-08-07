@@ -170,15 +170,22 @@
   #viewRH .rh-summary-row { display: flex; gap: 12px; align-items: stretch; justify-content: space-between; width: 100%; }
   #viewRH .rh-summary-cards { display: flex; gap: 12px; flex-wrap: wrap; }
   #viewRH .work-anniversary-card {
-    margin-left: auto; min-width: 280px; max-width: 390px; flex: 1; background: var(--surface); border: 1px solid var(--border);
-    border-radius: 10px; padding: 10px 12px;
+    margin-left: auto; min-width: 340px; max-width: 520px; flex: 1; color: #052e5f;
+    background: linear-gradient(135deg, #eff6ff 0%, #fff 48%, #ecfeff 100%);
+    border: 1px solid #bfdbfe; border-radius: 12px; padding: 14px 16px; box-shadow: 0 8px 22px rgba(37,99,235,.10);
   }
-  #viewRH .work-anniversary-title { font-size: 12px; font-weight: 800; margin-bottom: 8px; }
-  #viewRH .work-anniversary-list { display: flex; flex-direction: column; gap: 8px; }
-  #viewRH .work-anniversary-item { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  #viewRH .work-anniversary-title { font-size: 14px; font-weight: 900; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  #viewRH .work-anniversary-list { display: flex; flex-direction: column; gap: 10px; }
+  #viewRH .work-anniversary-item { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; min-width: 0; }
   #viewRH .work-anniversary-text { min-width: 0; flex: 1; }
-  #viewRH .work-anniversary-name { font-size: 12px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #viewRH .work-anniversary-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #viewRH .work-anniversary-name { font-size: 15px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #viewRH .work-anniversary-meta { font-size: 12px; color: #2563eb; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #viewRH .work-anniversary-greeting { margin-top: 4px; color: #475569; font-size: 12px; line-height: 1.35; }
+  #viewRH .work-anniversary-whatsapp {
+    border: 1px solid #86efac; background: #dcfce7; color: #166534; border-radius: 8px; padding: 7px 10px;
+    font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap;
+  }
+  #viewRH .work-anniversary-whatsapp:hover { background: #bbf7d0; }
   .stat-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
     padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; min-width: 110px;
@@ -2649,6 +2656,18 @@ function nextAnniversaryInfo(person){
   if (years <= 0) return null;
   return { person, days, years, date: isoDate(ann.getFullYear(), ann.getMonth()+1, ann.getDate()) };
 }
+function workAnniversaryMessage(info){
+  return `Hoje é dia de celebrar! Parabéns ${info.person.name} pelos ${info.years} ${info.years===1?'ano':'anos'} de casa. Obrigado pelo teu compromisso, dedicação e por fazeres parte da equipa.`;
+}
+function openWorkAnniversaryWhatsApp(personId){
+  const person = state.persons.find(p => p.id === personId);
+  if (!person) return;
+  const info = nextAnniversaryInfo(person);
+  if (!info) return;
+  const message = workAnniversaryMessage(info);
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(message).catch(() => {});
+  window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+}
 function renderWorkAnniversaries(){
   const upcoming = activePersons()
     .map(nextAnniversaryInfo)
@@ -2657,11 +2676,12 @@ function renderWorkAnniversaries(){
     .sort((a,b) => a.days - b.days || a.person.name.localeCompare(b.person.name))
     .slice(0,4);
   if (!upcoming.length){
-    return `<div class="work-anniversary-card"><div class="work-anniversary-title">Aniversários de empresa</div><div class="dash-empty" style="padding:4px 0">Sem aniversários nos próximos 30 dias.</div></div>`;
+    return `<div class="work-anniversary-card"><div class="work-anniversary-title">🎉 Aniversários de empresa</div><div class="dash-empty" style="padding:4px 0">Sem aniversários nos próximos 30 dias.</div></div>`;
   }
-  return `<div class="work-anniversary-card"><div class="work-anniversary-title">Aniversários de empresa</div><div class="work-anniversary-list">${upcoming.map(x => {
+  return `<div class="work-anniversary-card"><div class="work-anniversary-title">🎉 Aniversários de empresa</div><div class="work-anniversary-list">${upcoming.map(x => {
     const when = x.days === 0 ? 'Hoje' : `Daqui a ${x.days} dias`;
-    return `<div class="work-anniversary-item">${avatarHtml(x.person, 30)}<div class="work-anniversary-text"><div class="work-anniversary-name">${escHtml(x.person.name)}</div><div class="work-anniversary-meta">${when} · ${x.years} ${x.years===1?'ano':'anos'} · ${formatDatePt(x.date)}</div></div></div>`;
+    const msg = `Parabéns pelos ${x.years} ${x.years===1?'ano':'anos'} de casa.`;
+    return `<div class="work-anniversary-item">${avatarHtml(x.person, 46)}<div class="work-anniversary-text"><div class="work-anniversary-name">${escHtml(x.person.name)}</div><div class="work-anniversary-meta">${when} · ${x.years} ${x.years===1?'ano':'anos'} · ${formatDatePt(x.date)}</div><div class="work-anniversary-greeting">${escHtml(msg)}</div></div><button class="work-anniversary-whatsapp" onclick="openWorkAnniversaryWhatsApp('${x.person.id}')" title="Abrir WhatsApp com mensagem pronta">WhatsApp</button></div>`;
   }).join('')}</div></div>`;
 }
 function renderRH(){
