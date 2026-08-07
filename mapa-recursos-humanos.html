@@ -496,6 +496,8 @@
   .bolsa-outcome-meta { font-size: 12px; color: #9a3412; margin-top: 3px; }
   .bolsa-outcome-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .bolsa-outcome-actions .btn { padding: 7px 10px; font-size: 12px; white-space: nowrap; }
+  .exit-date-modal { width: 420px; max-width: calc(100vw - 24px); }
+  .exit-date-help { color: var(--text-muted); font-size: 12px; line-height: 1.45; margin-top: 8px; }
 
   .mgmt-list { flex: 1; overflow-y: auto; margin: 12px 0; }
   .mgmt-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
@@ -859,6 +861,24 @@
   </div>
 </div>
 
+<!-- EXIT DATE MODAL -->
+<div class="modal-overlay" id="exitDateModal">
+  <div class="modal exit-date-modal">
+    <h2>Data de saída obrigatória</h2>
+    <div class="exit-date-help" id="exitDateHelp">
+      Indica a data de saída para inativar este colaborador.
+    </div>
+    <div class="form-group" style="margin-top:16px">
+      <label>Data de saída</label>
+      <input type="date" id="exitDateInput">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="cancelExitDate()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmExitDate()">Confirmar inativação</button>
+    </div>
+  </div>
+</div>
+
 <!-- MANAGE PERSONS MODAL -->
 <div class="modal-overlay" id="mgmtModal">
   <div class="modal">
@@ -1022,6 +1042,7 @@ let editingVacId = null;
 let rhFilters = { name:'', role:'', chefe:'', empresa:'', carga:'', entrada:'', saida:'', ativo:'' };
 let rhEditingId = null;
 let rhShowInactive = false;
+let pendingExitPersonId = null;
 let bolsaOutcomeDismissed = false;
 let photoEditor = { personId:null, sourceCanvas:null, canvas:null, ctx:null, drawing:false, mode:'wand', brush:28, tolerance:48 };
 let currentIdCardPersonId = null;
@@ -2656,8 +2677,9 @@ function applyBolsaOutcome(personId, outcome){
   } else if (outcome === 'recibo_verde'){
     person.carga = 'recibo_verde';
   } else if (outcome === 'sair'){
-    person.ativo = false;
-    if (!person.saida) person.saida = todayIso();
+    document.getElementById('bolsaOutcomeModal')?.classList.remove('open');
+    openExitDateModal(personId);
+    return;
   }
   bolsaOutcomeDismissed = false;
   save();
@@ -2690,7 +2712,7 @@ function closeModal(id){
   if (id === 'vacModal'){ editingVacId = null; document.getElementById('vacModalTitle').textContent = '➕ Adicionar Férias'; }
   if (id === 'bolsaOutcomeModal') bolsaOutcomeDismissed = true;
 }
-document.querySelectorAll('.modal-overlay').forEach(el => { el.addEventListener('click', e => { if (e.target === el) closeModal(el.id); }); });
+document.querySelectorAll('.modal-overlay').forEach(el => { el.addEventListener('click', e => { if (e.target === el && el.id !== 'exitDateModal') closeModal(el.id); }); });
 
 // ===================== MANAGE PERSONS =====================
 function openManagePersons(){
@@ -2911,6 +2933,49 @@ function renderWorkAnniversaries(){
     return `<div class="work-anniversary-item">${avatarHtml(x.person, 46)}<div class="work-anniversary-text"><div class="work-anniversary-name">${escHtml(x.person.name)}</div><div class="work-anniversary-meta">${when} · ${x.years} ${x.years===1?'ano':'anos'} · ${formatDatePt(x.date)}</div><div class="work-anniversary-greeting">${escHtml(msg)}</div></div>${action}</div>`;
   }).join('')}</div></div>`;
 }
+function openExitDateModal(personId){
+  const person = state.persons.find(p => p.id === personId);
+  if (!person) return;
+  pendingExitPersonId = personId;
+  const input = document.getElementById('exitDateInput');
+  const help = document.getElementById('exitDateHelp');
+  if (help) help.textContent = `Indica a data de saída para inativar ${person.name}.`;
+  if (input){
+    input.value = normalizeDateValue(person.saida) || todayIso();
+    input.min = normalizeDateValue(person.entrada) || '';
+    setTimeout(() => input.focus(), 50);
+  }
+  document.getElementById('exitDateModal')?.classList.add('open');
+}
+function cancelExitDate(){
+  pendingExitPersonId = null;
+  document.getElementById('exitDateModal')?.classList.remove('open');
+  renderAll();
+}
+function confirmExitDate(){
+  const person = state.persons.find(p => p.id === pendingExitPersonId);
+  const input = document.getElementById('exitDateInput');
+  const saida = normalizeDateValue(input ? input.value : '');
+  if (!person) return;
+  if (!saida){
+    alert('Tens de preencher a data de saída.');
+    if (input) input.focus();
+    return;
+  }
+  const entrada = normalizeDateValue(person.entrada);
+  if (entrada && saida < entrada){
+    alert('A data de saída não pode ser anterior à data de entrada.');
+    if (input) input.focus();
+    return;
+  }
+  person.ativo = false;
+  person.saida = saida;
+  pendingExitPersonId = null;
+  rhShowInactive = true;
+  document.getElementById('exitDateModal')?.classList.remove('open');
+  save();
+  renderAll();
+}
 function renderRH(){
   // datalist de empresas
   const empresas = [...new Set(state.persons.map(p => p.empresa).filter(Boolean))].sort();
@@ -3071,8 +3136,14 @@ function rhUpdate(id, field, value){
   const p = state.persons.find(pp => pp.id === id);
   if (!p) return;
   if (field === 'ativo') {
-    p.ativo = !!value;
-    if (p.ativo) p.saida = '';
+    if (!!value){
+      p.ativo = true;
+      p.saida = '';
+    } else {
+      openExitDateModal(id);
+      renderRH();
+      return;
+    }
   }
   else if (field === 'empresa') p.empresa = value.trim();
   else if (field === 'telefone') p.telefone = value.trim();
