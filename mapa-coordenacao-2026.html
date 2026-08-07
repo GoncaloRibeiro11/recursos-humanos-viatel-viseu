@@ -2862,7 +2862,7 @@ async function buildWorkAnniversaryImage(info){
   ctx.fillStyle = green;
   canvasRoundRect(ctx, 690, 120, 275, 82, 41);
   ctx.fill();
-  drawCenteredText(ctx, 'Aniversário', 828, 161, 230, '800 38px Segoe UI, Arial', navy);
+  drawCenteredText(ctx, 'Parabéns', 828, 161, 230, '800 38px Segoe UI, Arial', navy);
 
   ctx.save();
   ctx.beginPath();
@@ -2924,7 +2924,7 @@ async function shareWorkAnniversaryImage(personId){
   const fileName = 'aniversario-' + normalizeFilterText(person.name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.png';
   const file = blob ? new File([blob], fileName, { type: 'image/png' }) : null;
   if (file && navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share){
-    await navigator.share({ files: [file], title: 'Aniversário de empresa', text: workAnniversaryMessage(info) });
+    await navigator.share({ files: [file], title: 'Parabéns', text: workAnniversaryMessage(info) });
     return;
   }
   const a = document.createElement('a');
@@ -2946,7 +2946,7 @@ async function shareBirthdayImage(personId){
   const fileName = 'aniversario-idade-' + normalizeFilterText(person.name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.png';
   const file = blob ? new File([blob], fileName, { type: 'image/png' }) : null;
   if (file && navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share){
-    await navigator.share({ files: [file], title: 'Aniversário', text: birthdayMessage(info) });
+    await navigator.share({ files: [file], title: 'Parabéns', text: birthdayMessage(info) });
     return;
   }
   const a = document.createElement('a');
@@ -2975,8 +2975,8 @@ function renderWorkAnniversaries(){
     }).join('')}</div></div>`;
   };
   return `<div class="anniversary-card-wrap">
-    ${renderCard('🎂 Aniversário de vida', upcomingBirthdays(30), 'birthday')}
-    ${renderCard('🎉 Aniversário de empresa', upcomingWorkAnniversaries(30), 'work')}
+    ${renderCard('🎂 Parabéns de vida', upcomingBirthdays(30), 'birthday')}
+    ${renderCard('🎉 Parabéns de empresa', upcomingWorkAnniversaries(30), 'work')}
   </div>`;
 }
 function upcomingWorkAnniversaries(limit = 30){
