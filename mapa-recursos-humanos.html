@@ -221,6 +221,12 @@
   .dash-empty { color: var(--text-muted); font-size: 12px; padding: 18px 0; }
   .dash-chip { display: inline-block; padding: 2px 7px; border-radius: 999px; background: #f3f4f6; font-size: 11px; font-weight: 600; }
   .dash-alert { color: #dc2626; font-weight: 700; }
+  .dash-person { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; vertical-align: middle; }
+  .dash-person .avatar { flex: 0 0 auto; }
+  .dash-person-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dash-metric-person { display: flex; align-items: center; gap: 7px; min-width: 0; margin-top: 3px; color: var(--text-muted); font-size: 11px; font-weight: 650; }
+  .dash-metric-person .avatar { flex: 0 0 auto; }
+  .dash-metric-person span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dash-hero { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)); gap: 12px; margin-bottom: 14px; }
   .dash-metric {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
@@ -2443,12 +2449,21 @@ function dashTable(headers, rows, emptyText){
   if (!rows.length) return `<div class="dash-empty">${emptyText}</div>`;
   return `<table class="dash-table"><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
 }
+function dashPersonHtml(person, size=24){
+  if (!person) return '—';
+  return `<span class="dash-person">${avatarHtml(person, size)}<span class="dash-person-name">${escHtml(person.name || '')}</span></span>`;
+}
+function dashMetricPersonHtml(person){
+  if (!person) return '';
+  return `<div class="dash-metric-person">${avatarHtml(person, 22)}<span>${escHtml(person.name || '')}</span></div>`;
+}
 function dashBars(items, emptyText, color='var(--accent)'){
   if (!items.length) return `<div class="dash-empty">${emptyText}</div>`;
   const max = Math.max(...items.map(x => x.value), 1);
   return `<div class="dash-bars">${items.map(x => {
     const pct = Math.max(3, Math.round((x.value / max) * 100));
-    return `<div class="dash-bar-row"><div class="dash-bar-label" title="${escHtml(x.label)}">${escHtml(x.label)}</div><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${pct}%;background:${x.color || color}"></div></div><div class="dash-bar-value">${x.value}</div></div>`;
+    const label = x.person ? dashPersonHtml(x.person, 22) : escHtml(x.label);
+    return `<div class="dash-bar-row"><div class="dash-bar-label" title="${escHtml(x.label)}">${label}</div><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${pct}%;background:${x.color || color}"></div></div><div class="dash-bar-value">${x.value}</div></div>`;
   }).join('')}</div>`;
 }
 function dashMonthBars(months){
@@ -2555,14 +2570,11 @@ function renderDashboard(){
   active.forEach(p => {
     const chefe = state.persons.find(pp => pp.id === p.chefeId);
     const label = chefe ? chefe.name : 'Sem chefe definido';
-    teamCounts[label] = (teamCounts[label] || 0) + 1;
+    if (!teamCounts[label]) teamCounts[label] = { label, value:0, person:chefe || null };
+    teamCounts[label].value++;
   });
-  const teamRows = Object.entries(teamCounts)
-    .sort((a,b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([name,count]) => [escHtml(name), `<span class="dash-chip">${count}</span>`]);
-  const teamItems = Object.entries(teamCounts)
-    .sort((a,b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([label, value]) => ({ label, value }));
+  const teamItems = Object.values(teamCounts)
+    .sort((a,b) => b.value - a.value || a.label.localeCompare(b.label));
   const inactive = state.persons.filter(p => p.ativo === false);
   const companyCount = new Set(active.map(p => (p.empresa || '').trim()).filter(Boolean)).size;
   const ages = ageStats(active);
@@ -2583,7 +2595,7 @@ function renderDashboard(){
     })
     .filter(x => x.missing.length)
     .slice(0,8)
-    .map(x => [escHtml(x.p.name), escHtml(x.missing.join(', '))]);
+    .map(x => [dashPersonHtml(x.p), escHtml(x.missing.join(', '))]);
   const recentPeopleRows = state.persons
     .filter(p => normalizeDateValue(p.entrada) || normalizeDateValue(p.saida))
     .map(p => {
@@ -2595,13 +2607,14 @@ function renderDashboard(){
     })
     .sort((a,b) => b.date.localeCompare(a.date))
     .slice(0,8)
-    .map(x => [x.type, escHtml(x.p.name), formatDatePt(x.date)]);
+    .map(x => [x.type, dashPersonHtml(x.p), formatDatePt(x.date)]);
 
-  const noVacationRows = noVacation.slice(0,8).map(p => [escHtml(p.name), escHtml(ROLE_LABELS[p.role] || '—')]);
+  const noVacationRows = noVacation.slice(0,8).map(p => [dashPersonHtml(p), escHtml(ROLE_LABELS[p.role] || '—')]);
   const topPeopleItems = abs.topPeople.map(x => ({
     label: x.p.name,
     value: x.total,
-    color: x.FI ? 'var(--c-finjust)' : 'var(--accent)'
+    color: x.FI ? 'var(--c-finjust)' : 'var(--accent)',
+    person: x.p
   }));
   const topDayItems = abs.topDays.map(x => ({ label: formatDatePt(x.date), value: x.total, color: 'var(--c-baixa)' }));
   const statusParts = [
@@ -2614,7 +2627,7 @@ function renderDashboard(){
   const vacationCoverage = active.length ? Math.round(((active.length - noVacation.length) / active.length) * 100) : 0;
   const fiTotal = abs.fiAlerts.reduce((s,x)=>s+x.count,0);
   const topPeopleRows = abs.topPeople.map(x => [
-    escHtml(x.p.name),
+    dashPersonHtml(x.p),
     `<span class="dash-chip">${x.total}</span>`,
     `Fé ${x.FE} · FJ ${x.FJ} · <span class="dash-alert">FI ${x.FI}</span> · B ${x.B}`,
   ]);
@@ -2624,14 +2637,14 @@ function renderDashboard(){
     escHtml(x.names.slice(0,6).join(', ')) + (x.names.length > 6 ? ` +${x.names.length-6}` : ''),
   ]);
   const fiRows = abs.fiAlerts.slice(0,8).map(x => [
-    escHtml(x.p.name),
+    dashPersonHtml(x.p),
     `<span class="dash-alert">${x.count}</span>`,
     formatDatePt(x.last),
   ]);
   const movementRows = [
-    ...entries.slice(0,6).map(p => ['Entrada', escHtml(p.name), formatDatePt(normalizeDateValue(p.entrada)), normalizeDateValue(p.entrada)]),
-    ...exits.slice(0,6).map(p => ['Saída', escHtml(p.name), formatDatePt(normalizeDateValue(p.saida)), normalizeDateValue(p.saida)]),
-  ].sort((a,b) => a[3].localeCompare(b[3])).map(([type,name,date]) => [type,name,date]);
+    ...entries.slice(0,6).map(p => ({ type:'Entrada', person:p, date:normalizeDateValue(p.entrada) })),
+    ...exits.slice(0,6).map(p => ({ type:'Saída', person:p, date:normalizeDateValue(p.saida) })),
+  ].sort((a,b) => a.date.localeCompare(b.date)).map(x => [x.type, dashPersonHtml(x.person), formatDatePt(x.date)]);
 
   box.innerHTML = `
     <div class="dashboard-title">Dashboard</div>
@@ -2641,8 +2654,8 @@ function renderDashboard(){
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${companyCount}</div><div class="dash-metric-icon">🏢</div></div><div><div class="dash-metric-label">Empresas ativas</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${Math.min(100, companyCount * 18)}%;background:#14b8a6"></div></div></div></div>
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${averageTenureText(active)}</div><div class="dash-metric-icon">⏱</div></div><div><div class="dash-metric-label">Antiguidade média</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:72%;background:#8b5cf6"></div></div></div></div>
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${ages.avg}</div><div class="dash-metric-icon">🎂</div></div><div><div class="dash-metric-label">Média de idades</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${ages.avg==='—'?0:68}%;background:#0ea5e9"></div></div></div></div>
-      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${ages.oldest ? ages.oldest.age + 'a' : '—'}</div><div class="dash-metric-icon">⬆️</div></div><div><div class="dash-metric-label">Mais velho${ages.oldest ? ': ' + escHtml(ages.oldest.p.name) : ''}</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${ages.oldest?85:0}%;background:#f59e0b"></div></div></div></div>
-      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${ages.youngest ? ages.youngest.age + 'a' : '—'}</div><div class="dash-metric-icon">⬇️</div></div><div><div class="dash-metric-label">Mais novo${ages.youngest ? ': ' + escHtml(ages.youngest.p.name) : ''}</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${ages.youngest?55:0}%;background:#14b8a6"></div></div></div></div>
+      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${ages.oldest ? ages.oldest.age + 'a' : '—'}</div><div class="dash-metric-icon">⬆️</div></div><div><div class="dash-metric-label">Mais velho</div>${dashMetricPersonHtml(ages.oldest ? ages.oldest.p : null)}<div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${ages.oldest?85:0}%;background:#f59e0b"></div></div></div></div>
+      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${ages.youngest ? ages.youngest.age + 'a' : '—'}</div><div class="dash-metric-icon">⬇️</div></div><div><div class="dash-metric-label">Mais novo</div>${dashMetricPersonHtml(ages.youngest ? ages.youngest.p : null)}<div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${ages.youngest?55:0}%;background:#14b8a6"></div></div></div></div>
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${vacationCoverage}%</div><div class="dash-metric-icon">🏖️</div></div><div><div class="dash-metric-label">Com férias marcadas</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${vacationCoverage}%;background:var(--c-ferias)"></div></div></div></div>
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${absenceTotal}</div><div class="dash-metric-icon">📊</div></div><div><div class="dash-metric-label">Dias de ausência registados</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${Math.min(100, absenceTotal ? 100 : 0)}%;background:var(--accent)"></div></div></div></div>
       <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value" style="color:var(--c-finjust)">${fiTotal}</div><div class="dash-metric-icon">⚠️</div></div><div><div class="dash-metric-label">Faltas injustificadas</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${Math.min(100, fiTotal * 12)}%;background:var(--c-finjust)"></div></div></div></div>
