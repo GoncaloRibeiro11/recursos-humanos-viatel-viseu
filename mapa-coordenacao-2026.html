@@ -2799,7 +2799,10 @@ function renderWorkAnniversaries(){
   return `<div class="work-anniversary-card"><div class="work-anniversary-title">🎉 Aniversários de empresa</div><div class="work-anniversary-list">${upcoming.map(x => {
     const when = x.days === 0 ? 'Hoje' : `Daqui a ${x.days} dias`;
     const msg = `Parabéns pelos ${x.years} ${x.years===1?'ano':'anos'} de casa.`;
-    return `<div class="work-anniversary-item">${avatarHtml(x.person, 46)}<div class="work-anniversary-text"><div class="work-anniversary-name">${escHtml(x.person.name)}</div><div class="work-anniversary-meta">${when} · ${x.years} ${x.years===1?'ano':'anos'} · ${formatDatePt(x.date)}</div><div class="work-anniversary-greeting">${escHtml(msg)}</div></div><button class="work-anniversary-image-btn" onclick="shareWorkAnniversaryImage('${x.person.id}')" title="Criar imagem para enviar pelo WhatsApp">WhatsApp</button></div>`;
+    const action = x.days === 0
+      ? `<button class="work-anniversary-image-btn" onclick="shareWorkAnniversaryImage('${x.person.id}')" title="Criar imagem para enviar pelo WhatsApp">WhatsApp</button>`
+      : `<span class="rh-readonly muted" title="A imagem fica disponível no próprio dia">Imagem no dia</span>`;
+    return `<div class="work-anniversary-item">${avatarHtml(x.person, 46)}<div class="work-anniversary-text"><div class="work-anniversary-name">${escHtml(x.person.name)}</div><div class="work-anniversary-meta">${when} · ${x.years} ${x.years===1?'ano':'anos'} · ${formatDatePt(x.date)}</div><div class="work-anniversary-greeting">${escHtml(msg)}</div></div>${action}</div>`;
   }).join('')}</div></div>`;
 }
 function renderRH(){
