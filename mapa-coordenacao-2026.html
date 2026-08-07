@@ -128,6 +128,12 @@
   }
   #viewRH .rh-filter:focus { border-color: var(--accent); }
   #viewRH .rh-table tr.inactive td { opacity: 0.5; }
+  #viewRH .rh-inactive-toggle-row td { background: #f8fafc; padding: 10px 14px; }
+  #viewRH .rh-inactive-toggle {
+    width: 100%; border: 1px dashed #cbd5e1; background: #fff; color: #475569; border-radius: 8px;
+    padding: 9px 12px; font-size: 12px; font-weight: 800; cursor: pointer; text-align: left;
+  }
+  #viewRH .rh-inactive-toggle:hover { background: #f1f5f9; color: #0f172a; }
   #viewRH .rh-name { display: flex; align-items: center; gap: 10px; font-weight: 600; }
   #viewRH .rh-photo-btn { border: 0; background: transparent; padding: 0; cursor: pointer; line-height: 0; border-radius: 50%; }
   #viewRH .rh-photo-btn.locked { cursor: default; }
@@ -1015,6 +1021,7 @@ let paintCode = 'P';
 let editingVacId = null;
 let rhFilters = { name:'', role:'', chefe:'', empresa:'', carga:'', entrada:'', saida:'', ativo:'' };
 let rhEditingId = null;
+let rhShowInactive = false;
 let bolsaOutcomeDismissed = false;
 let photoEditor = { personId:null, sourceCanvas:null, canvas:null, ctx:null, drawing:false, mode:'wand', brush:28, tolerance:48 };
 let currentIdCardPersonId = null;
@@ -2965,8 +2972,18 @@ function renderRH(){
         return aOrder - bOrder || a.idx - b.idx;
       })
       .map(x => x.p);
+    const inactiveCount = orderedPersons.filter(p => p.ativo === false).length;
+    let inactiveSeparatorAdded = false;
     orderedPersons.forEach(p => {
       const ativo = p.ativo !== false;
+      if (!ativo && !inactiveSeparatorAdded){
+        inactiveSeparatorAdded = true;
+        const expanded = rhShowInactive || rhFilters.ativo === 'inativo';
+        const label = expanded
+          ? `▾ Inativos (${inactiveCount}) - clicar para recolher`
+          : `▸ Inativos (${inactiveCount}) - clicar para mostrar`;
+        body += `<tr class="rh-inactive-toggle-row" id="rhInactiveToggleRow"><td colspan="12"><button class="rh-inactive-toggle" onclick="toggleRHInactive()">${escHtml(label)}</button></td></tr>`;
+      }
       const isEditing = rhEditingId === p.id;
       const chefeOpts = `<option value="">— Nenhum —</option>` + state.persons.filter(o => o.role === 'chefe_equipa' || o.role === 'coordenador' || o.id === p.chefeId)
         .map(o => `<option value="${o.id}" ${p.chefeId===o.id?'selected':''}>${escHtml(o.name)}${o.role&&ROLE_LABELS[o.role]?` (${ROLE_LABELS[o.role]})`:''}</option>`).join('');
@@ -3005,7 +3022,12 @@ function renderRH(){
 }
 function rhSetFilter(field, value){
   rhFilters[field] = value;
+  if (field === 'ativo' && value === 'inativo') rhShowInactive = true;
   applyRHFilters();
+}
+function toggleRHInactive(){
+  rhShowInactive = !rhShowInactive;
+  renderRH();
 }
 function rhEditPerson(id){
   rhEditingId = id;
@@ -3021,11 +3043,14 @@ function applyRHFilters(){
   if (!table) return;
   const rows = table.querySelectorAll('tbody tr[data-rh-row="1"]');
   const noResults = document.getElementById('rhNoResults');
+  const inactiveToggle = document.getElementById('rhInactiveToggleRow');
   const name = normalizeFilterText(rhFilters.name);
   const empresa = normalizeFilterText(rhFilters.empresa);
   let visible = 0;
+  let hiddenInactiveMatches = 0;
   rows.forEach(row => {
-    const show =
+    const collapsedInactive = row.dataset.ativo === 'inativo' && !rhShowInactive && rhFilters.ativo !== 'inativo';
+    const matches =
       (!name || row.dataset.name.includes(name)) &&
       (!rhFilters.role || row.dataset.role === rhFilters.role) &&
       (!rhFilters.chefe || row.dataset.chefe === rhFilters.chefe) &&
@@ -3034,10 +3059,13 @@ function applyRHFilters(){
       (!rhFilters.entrada || row.dataset.entrada === rhFilters.entrada) &&
       (!rhFilters.saida || row.dataset.saida === rhFilters.saida) &&
       (!rhFilters.ativo || row.dataset.ativo === rhFilters.ativo);
+    const show = !collapsedInactive && matches;
     row.style.display = show ? '' : 'none';
     if (show) visible++;
+    if (!show && collapsedInactive && matches) hiddenInactiveMatches++;
   });
-  if (noResults) noResults.style.display = rows.length && visible === 0 ? '' : 'none';
+  if (inactiveToggle) inactiveToggle.style.display = rhFilters.ativo === 'ativo' ? 'none' : '';
+  if (noResults) noResults.style.display = rows.length && visible === 0 && hiddenInactiveMatches === 0 ? '' : 'none';
 }
 function rhUpdate(id, field, value){
   const p = state.persons.find(pp => pp.id === id);
