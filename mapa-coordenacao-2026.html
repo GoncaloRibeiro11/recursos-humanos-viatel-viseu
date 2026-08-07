@@ -2706,10 +2706,17 @@ async function buildWorkAnniversaryImage(info){
   ctx.lineWidth = 4;
   ctx.stroke();
 
+  try {
+    const viatelLogo = await loadImageFromUrl('viatel.svg');
+    ctx.drawImage(viatelLogo, 125, 126, 190, 66);
+  } catch(e){
+    drawCenteredText(ctx, 'VIATEL', 220, 158, 190, '900 42px Segoe UI, Arial', navy);
+  }
+
   ctx.fillStyle = green;
-  canvasRoundRect(ctx, 115, 125, 850, 98, 49);
+  canvasRoundRect(ctx, 690, 120, 275, 82, 41);
   ctx.fill();
-  drawCenteredText(ctx, 'Aniversário de empresa', 540, 174, 720, '800 48px Segoe UI, Arial', navy);
+  drawCenteredText(ctx, 'Aniversário', 828, 161, 230, '800 38px Segoe UI, Arial', navy);
 
   ctx.save();
   ctx.beginPath();
@@ -2792,7 +2799,7 @@ function renderWorkAnniversaries(){
   return `<div class="work-anniversary-card"><div class="work-anniversary-title">🎉 Aniversários de empresa</div><div class="work-anniversary-list">${upcoming.map(x => {
     const when = x.days === 0 ? 'Hoje' : `Daqui a ${x.days} dias`;
     const msg = `Parabéns pelos ${x.years} ${x.years===1?'ano':'anos'} de casa.`;
-    return `<div class="work-anniversary-item">${avatarHtml(x.person, 46)}<div class="work-anniversary-text"><div class="work-anniversary-name">${escHtml(x.person.name)}</div><div class="work-anniversary-meta">${when} · ${x.years} ${x.years===1?'ano':'anos'} · ${formatDatePt(x.date)}</div><div class="work-anniversary-greeting">${escHtml(msg)}</div></div><button class="work-anniversary-image-btn" onclick="shareWorkAnniversaryImage('${x.person.id}')" title="Criar imagem para enviar no WhatsApp">Imagem</button></div>`;
+    return `<div class="work-anniversary-item">${avatarHtml(x.person, 46)}<div class="work-anniversary-text"><div class="work-anniversary-name">${escHtml(x.person.name)}</div><div class="work-anniversary-meta">${when} · ${x.years} ${x.years===1?'ano':'anos'} · ${formatDatePt(x.date)}</div><div class="work-anniversary-greeting">${escHtml(msg)}</div></div><button class="work-anniversary-image-btn" onclick="shareWorkAnniversaryImage('${x.person.id}')" title="Criar imagem para enviar pelo WhatsApp">WhatsApp</button></div>`;
   }).join('')}</div></div>`;
 }
 function renderRH(){
