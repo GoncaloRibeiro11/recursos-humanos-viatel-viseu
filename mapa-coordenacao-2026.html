@@ -181,11 +181,11 @@
   #viewRH .work-anniversary-name { font-size: 15px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #viewRH .work-anniversary-meta { font-size: 12px; color: #2563eb; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #viewRH .work-anniversary-greeting { margin-top: 4px; color: #475569; font-size: 12px; line-height: 1.35; }
-  #viewRH .work-anniversary-whatsapp {
+  #viewRH .work-anniversary-image-btn {
     border: 1px solid #86efac; background: #dcfce7; color: #166534; border-radius: 8px; padding: 7px 10px;
     font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap;
   }
-  #viewRH .work-anniversary-whatsapp:hover { background: #bbf7d0; }
+  #viewRH .work-anniversary-image-btn:hover { background: #bbf7d0; }
   .stat-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
     padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; min-width: 110px;
@@ -1328,6 +1328,24 @@ function drawCenteredText(ctx, text, x, y, maxWidth, font, color){
   }
   ctx.fillText(text, x, y);
 }
+function drawWrappedCanvasText(ctx, text, x, y, maxWidth, lineHeight, maxLines){
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  words.forEach(word => {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line){
+      lines.push(line);
+      line = word;
+    } else {
+      line = test;
+    }
+  });
+  if (line) lines.push(line);
+  const visible = lines.slice(0, maxLines);
+  if (lines.length > maxLines) visible[visible.length - 1] = visible[visible.length - 1].replace(/\s+\S*$/, '') + '...';
+  visible.forEach((ln, idx) => ctx.fillText(ln, x, y + idx * lineHeight));
+}
 function drawImageCover(ctx, img, x, y, w, h, focusX = 0.5, focusY = 0.43, zoom = 1){
   const sourceRatio = img.width / img.height;
   const targetRatio = w / h;
@@ -1350,6 +1368,9 @@ function drawImageCover(ctx, img, x, y, w, h, focusX = 0.5, focusY = 0.43, zoom 
   sx = Math.max(0, Math.min(sx, img.width - sw));
   sy = Math.max(0, Math.min(sy, img.height - sh));
   ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+}
+function canvasToBlob(canvas, type='image/png', quality=0.95){
+  return new Promise(resolve => canvas.toBlob(resolve, type, quality));
 }
 async function drawIdCardCanvas(person){
   const canvas = document.getElementById('idCardCanvas');
@@ -2659,14 +2680,104 @@ function nextAnniversaryInfo(person){
 function workAnniversaryMessage(info){
   return `Hoje é dia de celebrar! Parabéns ${info.person.name} pelos ${info.years} ${info.years===1?'ano':'anos'} de casa. Obrigado pelo teu compromisso, dedicação e por fazeres parte da equipa.`;
 }
-function openWorkAnniversaryWhatsApp(personId){
+async function buildWorkAnniversaryImage(info){
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1080;
+  const ctx = canvas.getContext('2d');
+  const navy = '#082b83';
+  const blue = '#2c9bd8';
+  const green = '#96ff13';
+  const purple = '#3026ff';
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const grad = ctx.createLinearGradient(0, 0, 1080, 1080);
+  grad.addColorStop(0, '#eff6ff');
+  grad.addColorStop(0.55, '#ffffff');
+  grad.addColorStop(1, '#dcfce7');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = '#ffffff';
+  canvasRoundRect(ctx, 70, 70, 940, 940, 44);
+  ctx.fill();
+  ctx.strokeStyle = '#bfdbfe';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+
+  ctx.fillStyle = green;
+  canvasRoundRect(ctx, 115, 125, 850, 98, 49);
+  ctx.fill();
+  drawCenteredText(ctx, 'Aniversário de empresa', 540, 174, 720, '800 48px Segoe UI, Arial', navy);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(540, 405, 156, 0, Math.PI * 2);
+  ctx.closePath();
+  ctx.fillStyle = blue;
+  ctx.fill();
+  ctx.clip();
+  if (info.person.photo){
+    try {
+      const photo = await loadImageFromUrl(info.person.photo);
+      drawImageCover(ctx, photo, 384, 249, 312, 312, 0.5, 0.38, 1.08);
+    } catch(e){
+      drawCenteredText(ctx, initials(info.person.name || ''), 540, 405, 230, '800 92px Segoe UI, Arial', '#ffffff');
+    }
+  } else {
+    drawCenteredText(ctx, initials(info.person.name || ''), 540, 405, 230, '800 92px Segoe UI, Arial', '#ffffff');
+  }
+  ctx.restore();
+
+  ctx.strokeStyle = purple;
+  ctx.lineWidth = 14;
+  ctx.beginPath();
+  ctx.arc(540, 405, 166, 0, Math.PI * 2);
+  ctx.stroke();
+
+  drawCenteredText(ctx, info.person.name || 'Colaborador', 540, 625, 780, '900 64px Segoe UI, Arial', navy);
+  drawCenteredText(ctx, `${info.years} ${info.years===1?'ano':'anos'} de casa`, 540, 700, 660, '800 44px Segoe UI, Arial', blue);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.font = '400 34px Segoe UI, Arial';
+  ctx.fillStyle = '#334155';
+  drawWrappedCanvasText(ctx, 'Obrigado pelo teu compromisso, dedicação e por fazeres parte da equipa.', 540, 770, 720, 46, 3);
+
+  ctx.fillStyle = navy;
+  canvasRoundRect(ctx, 250, 925, 580, 74, 37);
+  ctx.fill();
+  drawCenteredText(ctx, 'humaniza-te', 540, 962, 360, '400 34px Segoe UI, Arial', '#ffffff');
+
+  try {
+    const logo = await loadImageFromUrl('Logo_MEO.svg.webp');
+    ctx.drawImage(logo, 126, 905, 112, 112);
+  } catch(e){
+    ctx.fillStyle = purple;
+    ctx.beginPath();
+    ctx.arc(182, 961, 56, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  return canvas;
+}
+async function shareWorkAnniversaryImage(personId){
   const person = state.persons.find(p => p.id === personId);
   if (!person) return;
   const info = nextAnniversaryInfo(person);
   if (!info) return;
-  const message = workAnniversaryMessage(info);
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(message).catch(() => {});
-  window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+  const canvas = await buildWorkAnniversaryImage(info);
+  const blob = await canvasToBlob(canvas);
+  const fileName = 'aniversario-' + normalizeFilterText(person.name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.png';
+  const file = blob ? new File([blob], fileName, { type: 'image/png' }) : null;
+  if (file && navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share){
+    await navigator.share({ files: [file], title: 'Aniversário de empresa', text: workAnniversaryMessage(info) });
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = fileName;
+  a.click();
 }
 function renderWorkAnniversaries(){
   const upcoming = activePersons()
@@ -2681,7 +2792,7 @@ function renderWorkAnniversaries(){
   return `<div class="work-anniversary-card"><div class="work-anniversary-title">🎉 Aniversários de empresa</div><div class="work-anniversary-list">${upcoming.map(x => {
     const when = x.days === 0 ? 'Hoje' : `Daqui a ${x.days} dias`;
     const msg = `Parabéns pelos ${x.years} ${x.years===1?'ano':'anos'} de casa.`;
-    return `<div class="work-anniversary-item">${avatarHtml(x.person, 46)}<div class="work-anniversary-text"><div class="work-anniversary-name">${escHtml(x.person.name)}</div><div class="work-anniversary-meta">${when} · ${x.years} ${x.years===1?'ano':'anos'} · ${formatDatePt(x.date)}</div><div class="work-anniversary-greeting">${escHtml(msg)}</div></div><button class="work-anniversary-whatsapp" onclick="openWorkAnniversaryWhatsApp('${x.person.id}')" title="Abrir WhatsApp com mensagem pronta">WhatsApp</button></div>`;
+    return `<div class="work-anniversary-item">${avatarHtml(x.person, 46)}<div class="work-anniversary-text"><div class="work-anniversary-name">${escHtml(x.person.name)}</div><div class="work-anniversary-meta">${when} · ${x.years} ${x.years===1?'ano':'anos'} · ${formatDatePt(x.date)}</div><div class="work-anniversary-greeting">${escHtml(msg)}</div></div><button class="work-anniversary-image-btn" onclick="shareWorkAnniversaryImage('${x.person.id}')" title="Criar imagem para enviar no WhatsApp">Imagem</button></div>`;
   }).join('')}</div></div>`;
 }
 function renderRH(){
