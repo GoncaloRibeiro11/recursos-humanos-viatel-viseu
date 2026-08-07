@@ -113,7 +113,7 @@
     border-radius: 8px; padding: 8px 12px; line-height: 1.5; margin-bottom: 16px;
   }
   #viewRH .rh-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: auto; }
-  #viewRH table.rh-table { border-collapse: collapse; width: 100%; min-width: 1260px; font-size: 13px; }
+  #viewRH table.rh-table { border-collapse: collapse; width: 100%; min-width: 1360px; font-size: 13px; }
   #viewRH .rh-table th, #viewRH .rh-table td { border: 1px solid #eee; padding: 8px 10px; text-align: left; vertical-align: middle; }
   #viewRH .rh-table thead th {
     background: #fafafa; font-weight: 600; color: var(--text-muted); font-size: 11px;
@@ -210,6 +210,8 @@
     font-size: 12px; color: var(--text-muted); background: #f8f9ff; border: 1px solid #dde3ff;
     border-radius: 8px; padding: 8px 12px; line-height: 1.5; margin-bottom: 16px;
   }
+  .anniversary-section { margin-bottom: 22px; }
+  .anniversary-section h2 { font-size: 15px; font-weight: 900; margin-bottom: 12px; color: #082b83; }
   .anniversary-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
   .anniversary-card {
     background: linear-gradient(135deg, #eff6ff 0%, #fff 52%, #ecfeff 100%);
@@ -1068,7 +1070,7 @@ let selectedColor = COLORS[0];
 let currentMonth = (new Date().getFullYear() === YEAR) ? new Date().getMonth() : 0;
 let paintCode = 'P';
 let editingVacId = null;
-let rhFilters = { name:'', role:'', chefe:'', empresa:'', carga:'', entrada:'', saida:'', ativo:'' };
+let rhFilters = { name:'', role:'', chefe:'', empresa:'', carga:'', entrada:'', nascimento:'', saida:'', ativo:'' };
 let rhEditingId = null;
 let rhShowInactive = false;
 let pendingExitPersonId = null;
@@ -1107,6 +1109,7 @@ function normalizePerson(p){
   const person = { ...p };
   person.entrada = normalizeDateValue(person.entrada || person.dataEntrada || '');
   person.saida = normalizeDateValue(person.saida || person.dataSaida || '');
+  person.nascimento = normalizeDateValue(person.nascimento || person.dataNascimento || '');
   return person;
 }
 function todayIso(){
@@ -2014,7 +2017,7 @@ function migrateFromOldApps(){
   function addP(p){
     const key=(p.name||'').trim().toLowerCase();
     if (byName[key]) return byName[key];
-    const np=normalizePerson({ id: p.id || (Date.now().toString()+Math.random().toString(36).slice(2,6)), name:p.name, color:p.color||COLORS[persons.length%COLORS.length], role:p.role||'', ativo:p.ativo, entrada:p.entrada, saida:p.saida, dataEntrada:p.dataEntrada, dataSaida:p.dataSaida });
+    const np=normalizePerson({ id: p.id || (Date.now().toString()+Math.random().toString(36).slice(2,6)), name:p.name, color:p.color||COLORS[persons.length%COLORS.length], role:p.role||'', ativo:p.ativo, entrada:p.entrada, saida:p.saida, nascimento:p.nascimento, dataEntrada:p.dataEntrada, dataSaida:p.dataSaida, dataNascimento:p.dataNascimento });
     persons.push(np); byName[key]=np; return np;
   }
   const ferMap={}, assMap={};
@@ -2841,6 +2844,22 @@ function nextAnniversaryInfo(person){
 function workAnniversaryMessage(info){
   return `Hoje é dia de celebrar! Parabéns ${info.person.name} pelos ${info.years} ${info.years===1?'ano':'anos'} de casa. Obrigado pelo teu compromisso, dedicação e por fazeres parte da equipa.`;
 }
+function nextBirthdayInfo(person){
+  const nascimento = normalizeDateValue(person.nascimento);
+  if (!nascimento) return null;
+  const birth = dateFromIso(nascimento);
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  let ann = new Date(today.getFullYear(), birth.getMonth(), birth.getDate());
+  if (ann < today) ann = new Date(today.getFullYear() + 1, birth.getMonth(), birth.getDate());
+  const days = Math.round((ann - today) / 86400000);
+  const years = ann.getFullYear() - birth.getFullYear();
+  if (years <= 0) return null;
+  return { person, days, years, date: isoDate(ann.getFullYear(), ann.getMonth()+1, ann.getDate()) };
+}
+function birthdayMessage(info){
+  return `Hoje é dia de celebrar! Parabéns ${info.person.name} pelo teu aniversário. Que seja um dia feliz, com muita energia e bons momentos.`;
+}
 async function buildWorkAnniversaryImage(info){
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
@@ -2905,13 +2924,13 @@ async function buildWorkAnniversaryImage(info){
   ctx.stroke();
 
   drawCenteredText(ctx, info.person.name || 'Colaborador', 540, 625, 780, '900 64px Segoe UI, Arial', navy);
-  drawCenteredText(ctx, `${info.years} ${info.years===1?'ano':'anos'} de casa`, 540, 700, 660, '800 44px Segoe UI, Arial', blue);
+  drawCenteredText(ctx, info.imageSubtitle || `${info.years} ${info.years===1?'ano':'anos'} de casa`, 540, 700, 660, '800 44px Segoe UI, Arial', blue);
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.font = '400 34px Segoe UI, Arial';
   ctx.fillStyle = '#334155';
-  drawWrappedCanvasText(ctx, 'Obrigado pelo teu compromisso, dedicação e por fazeres parte da equipa.', 540, 770, 720, 46, 3);
+  drawWrappedCanvasText(ctx, info.imageMessage || 'Obrigado pelo teu compromisso, dedicação e por fazeres parte da equipa.', 540, 770, 720, 46, 3);
 
   ctx.fillStyle = navy;
   canvasRoundRect(ctx, 250, 925, 580, 74, 37);
@@ -2947,6 +2966,28 @@ async function shareWorkAnniversaryImage(personId){
   a.download = fileName;
   a.click();
 }
+async function shareBirthdayImage(personId){
+  const person = state.persons.find(p => p.id === personId);
+  if (!person) return;
+  const info = nextBirthdayInfo(person);
+  if (!info) return;
+  const canvas = await buildWorkAnniversaryImage({
+    ...info,
+    imageSubtitle: `${info.years} ${info.years===1?'ano':'anos'}`,
+    imageMessage: 'Que seja um dia feliz, com muita energia e bons momentos.',
+  });
+  const blob = await canvasToBlob(canvas);
+  const fileName = 'aniversario-idade-' + normalizeFilterText(person.name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.png';
+  const file = blob ? new File([blob], fileName, { type: 'image/png' }) : null;
+  if (file && navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share){
+    await navigator.share({ files: [file], title: 'Aniversário', text: birthdayMessage(info) });
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = fileName;
+  a.click();
+}
 function renderWorkAnniversaries(){
   const upcoming = activePersons()
     .map(nextAnniversaryInfo)
@@ -2973,31 +3014,49 @@ function upcomingWorkAnniversaries(limit = 30){
     .filter(x => x.days <= limit)
     .sort((a,b) => a.days - b.days || a.person.name.localeCompare(b.person.name));
 }
-function renderAnniversarios(){
-  const box = document.getElementById('anniversariosBoard');
-  if (!box) return;
-  const upcoming = upcomingWorkAnniversaries(30);
-  if (!upcoming.length){
-    box.innerHTML = `<div class="dash-empty">Sem aniversários de empresa nos próximos 30 dias.</div>`;
-    return;
-  }
-  box.innerHTML = `<div class="anniversary-board">${upcoming.map(x => {
+function upcomingBirthdays(limit = 30){
+  return activePersons()
+    .map(nextBirthdayInfo)
+    .filter(Boolean)
+    .filter(x => x.days <= limit)
+    .sort((a,b) => a.days - b.days || a.person.name.localeCompare(b.person.name));
+}
+function renderAnniversarySection(title, items, type){
+  if (!items.length) return `<div class="anniversary-section"><h2>${escHtml(title)}</h2><div class="dash-empty">Sem registos nos próximos 30 dias.</div></div>`;
+  return `<div class="anniversary-section"><h2>${escHtml(title)}</h2><div class="anniversary-board">${items.map(x => {
     const when = x.days === 0 ? 'Hoje' : `Daqui a ${x.days} dias`;
+    const isBirthday = type === 'birthday';
     const action = x.days === 0
-      ? `<button class="work-anniversary-image-btn" onclick="shareWorkAnniversaryImage('${x.person.id}')" title="Criar imagem para enviar pelo WhatsApp">WhatsApp</button>`
+      ? `<button class="work-anniversary-image-btn" onclick="${isBirthday ? 'shareBirthdayImage' : 'shareWorkAnniversaryImage'}('${x.person.id}')" title="Criar imagem para enviar pelo WhatsApp">WhatsApp</button>`
       : `<span class="rh-readonly muted" title="A imagem fica disponível no próprio dia">Imagem no dia</span>`;
+    const meta = isBirthday
+      ? `${when} · ${x.years} ${x.years===1?'ano':'anos'} · ${formatDatePt(x.date)}`
+      : `${when} · ${x.years} ${x.years===1?'ano':'anos'} de casa · ${formatDatePt(x.date)}`;
+    const msg = isBirthday
+      ? `Parabéns pelo aniversário de ${x.years} ${x.years===1?'ano':'anos'}.`
+      : `Parabéns pelos ${x.years} ${x.years===1?'ano':'anos'} de casa.`;
     return `<div class="anniversary-card ${x.days===0?'today':''}">
       <div class="anniversary-person">
         ${avatarHtml(x.person, 54)}
         <div style="min-width:0">
           <div class="anniversary-name">${escHtml(x.person.name)}</div>
-          <div class="anniversary-meta">${when} · ${x.years} ${x.years===1?'ano':'anos'} · ${formatDatePt(x.date)}</div>
+          <div class="anniversary-meta">${meta}</div>
         </div>
       </div>
-      <div class="anniversary-msg">Parabéns pelos ${x.years} ${x.years===1?'ano':'anos'} de casa.</div>
+      <div class="anniversary-msg">${escHtml(msg)}</div>
       <div class="anniversary-actions">${action}</div>
     </div>`;
-  }).join('')}</div>`;
+  }).join('')}</div></div>`;
+}
+function renderAnniversarios(){
+  const box = document.getElementById('anniversariosBoard');
+  if (!box) return;
+  const birthdays = upcomingBirthdays(30);
+  const work = upcomingWorkAnniversaries(30);
+  box.innerHTML = [
+    renderAnniversarySection('Aniversários de idade', birthdays, 'birthday'),
+    renderAnniversarySection('Aniversários de empresa', work, 'work'),
+  ].join('');
 }
 function openExitDateModal(personId){
   const person = state.persons.find(p => p.id === personId);
@@ -3084,6 +3143,7 @@ function renderRH(){
     <th><div class="rh-th-title">Telefone</div></th>
     <th><div class="rh-th-title">AGV</div></th>
     <th><div class="rh-th-title">Carga horária</div><select class="rh-filter" onchange="rhSetFilter('carga',this.value)"><option value="">Todas</option>${cargaFilterOpts}</select></th>
+    <th><div class="rh-th-title">Nascimento</div><input class="rh-filter" type="date" value="${escHtml(rhFilters.nascimento)}" onchange="rhSetFilter('nascimento',this.value)"></th>
     <th><div class="rh-th-title">Data entrada</div><input class="rh-filter" type="date" value="${escHtml(rhFilters.entrada)}" onchange="rhSetFilter('entrada',this.value)"></th>
     <th><div class="rh-th-title">Data sa&iacute;da</div><input class="rh-filter" type="date" value="${escHtml(rhFilters.saida)}" onchange="rhSetFilter('saida',this.value)"></th>
     <th><div class="rh-th-title">Tempo de casa</div></th>
@@ -3092,7 +3152,7 @@ function renderRH(){
   </tr></thead>`;
   let body = '<tbody>';
   if (state.persons.length === 0){
-    body += `<tr><td colspan="12"><div class="empty-state">Nenhum colaborador. Adiciona abaixo. 👇</div></td></tr>`;
+    body += `<tr><td colspan="13"><div class="empty-state">Nenhum colaborador. Adiciona abaixo. 👇</div></td></tr>`;
   } else {
     const orderedPersons = state.persons
       .map((p, idx) => ({ p, idx }))
@@ -3112,7 +3172,7 @@ function renderRH(){
         const label = expanded
           ? `▾ Inativos (${inactiveCount}) - clicar para recolher`
           : `▸ Inativos (${inactiveCount}) - clicar para mostrar`;
-        body += `<tr class="rh-inactive-toggle-row" id="rhInactiveToggleRow"><td colspan="12"><button class="rh-inactive-toggle" onclick="toggleRHInactive()">${escHtml(label)}</button></td></tr>`;
+        body += `<tr class="rh-inactive-toggle-row" id="rhInactiveToggleRow"><td colspan="13"><button class="rh-inactive-toggle" onclick="toggleRHInactive()">${escHtml(label)}</button></td></tr>`;
       }
       const isEditing = rhEditingId === p.id;
       const chefeOpts = `<option value="">— Nenhum —</option>` + state.persons.filter(o => o.role === 'chefe_equipa' || o.role === 'coordenador' || o.id === p.chefeId)
@@ -3120,6 +3180,7 @@ function renderRH(){
       const roleOpts = ROLES.map(r => `<option value="${r.value}" ${(p.role||'')===r.value?'selected':''}>${r.label}</option>`).join('');
       const cargaOpts = CARGAS.map(c => `<option value="${c.value}" ${(p.carga||'')===c.value?'selected':''}>${c.label}</option>`).join('');
       const chefe = state.persons.find(pp => pp.id === p.chefeId);
+      const nascimento = normalizeDateValue(p.nascimento);
       const entrada = normalizeDateValue(p.entrada);
       const saida = normalizeDateValue(p.saida);
       const saidaParaCalculo = ativo ? '' : saida;
@@ -3129,7 +3190,7 @@ function renderRH(){
       const tempoCasa = tenureText(entrada, saidaParaCalculo);
       const tempoClass = entrada ? 'rh-tenure' : 'rh-tenure muted';
       const photoAction = isEditing ? `onclick="pickPhoto('${p.id}')"` : '';
-      body += `<tr class="${ativo?'':'inactive'} ${isEditing?'editing':''}" data-rh-row="1" data-name="${escHtml(normalizeFilterText(p.name))}" data-role="${escHtml(p.role||'')}" data-chefe="${escHtml(p.chefeId||'')}" data-empresa="${escHtml(normalizeFilterText(p.empresa||''))}" data-carga="${escHtml(p.carga||'')}" data-entrada="${escHtml(entrada)}" data-saida="${escHtml(saida)}" data-ativo="${ativo?'ativo':'inativo'}">
+      body += `<tr class="${ativo?'':'inactive'} ${isEditing?'editing':''}" data-rh-row="1" data-name="${escHtml(normalizeFilterText(p.name))}" data-role="${escHtml(p.role||'')}" data-chefe="${escHtml(p.chefeId||'')}" data-empresa="${escHtml(normalizeFilterText(p.empresa||''))}" data-carga="${escHtml(p.carga||'')}" data-nascimento="${escHtml(nascimento)}" data-entrada="${escHtml(entrada)}" data-saida="${escHtml(saida)}" data-ativo="${ativo?'ativo':'inativo'}">
         <td data-label="Colaborador"><div class="rh-name"><button class="rh-photo-btn ${isEditing?'':'locked'}" ${photoAction} title="${isEditing?(p.photo?'Mudar foto':'Adicionar foto'):'Bloqueado. Clica em Editar.'}">${avatarHtml(p, 28)}</button><span>${escHtml(p.name)}${ativo?'':'<span class="badge-inativo">inativo</span>'}</span></div></td>
         <td data-label="Função">${isEditing ? `<select class="rh-select" onchange="rhUpdate('${p.id}','role',this.value)">${roleOpts}</select>` : rhRead(ROLE_LABELS[p.role])}</td>
         <td data-label="Chefe">${isEditing ? `<select class="rh-select" onchange="rhUpdate('${p.id}','chefeId',this.value)">${chefeOpts}</select>` : rhRead(chefe ? chefe.name : '')}</td>
@@ -3137,6 +3198,7 @@ function renderRH(){
         <td data-label="Telefone">${isEditing ? `<input class="rh-input" value="${escHtml(p.telefone||'')}" placeholder="Telefone..." onchange="rhUpdate('${p.id}','telefone',this.value)">` : rhRead(p.telefone)}</td>
         <td data-label="AGV">${isEditing ? `<input class="rh-input" value="${escHtml(p.agv||'')}" placeholder="AGV..." onchange="rhUpdate('${p.id}','agv',this.value)">` : rhRead(p.agv)}</td>
         <td data-label="Carga">${isEditing ? `<select class="rh-select" onchange="rhUpdate('${p.id}','carga',this.value)">${cargaOpts}</select>` : rhRead(CARGA_LABELS[p.carga])}</td>
+        <td data-label="Nascimento">${isEditing ? `<input class="rh-input" type="date" value="${escHtml(nascimento)}" onchange="rhUpdate('${p.id}','nascimento',this.value)">` : rhRead(formatDatePt(nascimento))}</td>
         <td data-label="Entrada">${isEditing ? `<input class="rh-input" type="date" value="${escHtml(entrada)}" onchange="rhUpdate('${p.id}','entrada',this.value)">` : rhRead(formatDatePt(entrada))}</td>
         <td data-label="Saída">${saidaField}</td>
         <td data-label="Tempo"><span class="${tempoClass}">${escHtml(tempoCasa)}</span></td>
@@ -3144,7 +3206,7 @@ function renderRH(){
         <td data-label="Ações"><button class="rh-edit-btn" onclick="${isEditing?`rhFinishEdit('${p.id}')`:`rhEditPerson('${p.id}')`}">${isEditing?'Guardar':'Editar'}</button><button class="rh-card-btn" onclick="openIdCard('${p.id}')">Cartao</button><button class="rh-del" onclick="rhDeletePerson('${p.id}')">Remover</button></td>
       </tr>`;
     });
-    body += `<tr id="rhNoResults" style="display:none"><td colspan="12"><div class="empty-state">Sem resultados para os filtros atuais.</div></td></tr>`;
+    body += `<tr id="rhNoResults" style="display:none"><td colspan="13"><div class="empty-state">Sem resultados para os filtros atuais.</div></td></tr>`;
   }
   body += '</tbody>';
   table.innerHTML = head + body;
@@ -3186,6 +3248,7 @@ function applyRHFilters(){
       (!rhFilters.chefe || row.dataset.chefe === rhFilters.chefe) &&
       (!empresa || row.dataset.empresa.includes(empresa)) &&
       (!rhFilters.carga || row.dataset.carga === rhFilters.carga) &&
+      (!rhFilters.nascimento || row.dataset.nascimento === rhFilters.nascimento) &&
       (!rhFilters.entrada || row.dataset.entrada === rhFilters.entrada) &&
       (!rhFilters.saida || row.dataset.saida === rhFilters.saida) &&
       (!rhFilters.ativo || row.dataset.ativo === rhFilters.ativo);
@@ -3213,7 +3276,7 @@ function rhUpdate(id, field, value){
   else if (field === 'empresa') p.empresa = value.trim();
   else if (field === 'telefone') p.telefone = value.trim();
   else if (field === 'agv') p.agv = value.trim();
-  else if (field === 'entrada' || field === 'saida') p[field] = normalizeDateValue(value);
+  else if (field === 'entrada' || field === 'saida' || field === 'nascimento') p[field] = normalizeDateValue(value);
   else p[field] = value;
   save();
   renderAll();
