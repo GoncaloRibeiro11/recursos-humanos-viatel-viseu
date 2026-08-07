@@ -309,6 +309,25 @@
   #viewFerias .legend-box { width: 24px; height: 14px; border-radius: 3px; flex-shrink: 0; }
 
   #viewFerias .main { flex: 1; padding: 24px; overflow-x: auto; }
+  #viewFerias .ferias-toolbar {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  #viewFerias .ferias-view-toggle {
+    display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: #f3f4f6;
+  }
+  #viewFerias .ferias-view-toggle button,
+  #viewFerias .ferias-week-nav button {
+    border: 1px solid transparent; border-radius: 8px; background: transparent; padding: 7px 11px;
+    font-size: 12px; font-weight: 700; cursor: pointer; color: var(--text-muted);
+  }
+  #viewFerias .ferias-view-toggle button.active {
+    background: var(--surface); border-color: var(--border); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  #viewFerias .ferias-week-nav { display: flex; align-items: center; gap: 8px; }
+  #viewFerias .ferias-week-nav button { background: var(--surface); border-color: var(--border); color: var(--text); }
+  #viewFerias .ferias-week-nav button:hover { background: #f5f5f7; }
+  #viewFerias .ferias-week-label { min-width: 220px; text-align: center; font-size: 13px; font-weight: 750; text-transform: capitalize; }
   #viewFerias .calendar-grid {
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1100px;
   }
@@ -356,6 +375,26 @@
     display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px;
     font-size: 12px; font-weight: 600; background: #f0f4ff; border: 1px solid #c7d2ff; margin-top: 4px;
   }
+  #viewFerias .week-grid {
+    display: grid; grid-template-columns: repeat(7, minmax(130px, 1fr)); gap: 10px; min-width: 980px;
+  }
+  #viewFerias .week-day-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; min-height: 420px;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #viewFerias .week-day-card.weekend { background: #f8f8f9; }
+  #viewFerias .week-day-card.today { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,85,255,0.08); }
+  #viewFerias .week-day-head { padding: 10px 11px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  #viewFerias .week-day-name { font-size: 11px; color: var(--text-muted); font-weight: 800; text-transform: uppercase; }
+  #viewFerias .week-day-num { font-size: 20px; font-weight: 800; }
+  #viewFerias .week-day-body { padding: 9px; flex: 1; display: flex; flex-direction: column; gap: 7px; cursor: pointer; }
+  #viewFerias .week-day-body:hover { background: #f8fbff; }
+  #viewFerias .week-vac-person { display: flex; align-items: center; gap: 7px; border: 1px solid #e5e7eb; border-left: 4px solid currentColor; border-radius: 8px; padding: 7px; background: #fff; min-width: 0; }
+  #viewFerias .week-vac-text { min-width: 0; flex: 1; }
+  #viewFerias .week-vac-name { color: #1f2937; font-size: 12px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #viewFerias .week-vac-role { color: var(--text-muted); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+  #viewFerias .week-empty,
+  #viewFerias .week-locked { color: var(--text-muted); font-size: 12px; padding: 8px 2px; }
   #viewFerias .person-stats { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 4px; }
   #viewFerias .person-stat-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
   #viewFerias .person-stat-bar-bg { flex: 1; height: 6px; background: #eee; border-radius: 3px; overflow: hidden; }
@@ -656,7 +695,7 @@
     #viewDashboard .main,
     #viewRH .main,
     #viewAssid .main,
-    #viewFerias .main { padding: 12px; overflow-x: hidden; }
+    #viewFerias .main { padding: 12px; overflow-x: auto; }
     #viewDashboard .instructions,
     #viewRH .instructions,
     #viewAssid .instructions,
@@ -799,6 +838,17 @@
     </div>
     <div class="main">
       <div class="stats-bar" id="feriasStats"></div>
+      <div class="ferias-toolbar">
+        <div class="ferias-view-toggle">
+          <button id="feriasViewMonth" class="active" onclick="setFeriasView('month')">Mês</button>
+          <button id="feriasViewWeek" onclick="setFeriasView('week')">Semana</button>
+        </div>
+        <div class="ferias-week-nav" id="feriasWeekNav" style="display:none">
+          <button onclick="changeFeriasWeek(-1)" title="Semana anterior">‹</button>
+          <div class="ferias-week-label" id="feriasWeekLabel"></div>
+          <button onclick="changeFeriasWeek(1)" title="Semana seguinte">›</button>
+        </div>
+      </div>
       <div class="calendar-grid" id="calendarGrid"></div>
     </div>
   </div>
@@ -1044,6 +1094,8 @@ let activeTab = 'rh';
 let selectedPerson = null;
 let selectedColor = COLORS[0];
 let currentMonth = (new Date().getFullYear() === YEAR) ? new Date().getMonth() : 0;
+let feriasView = 'month';
+let feriasWeekStart = '';
 let paintCode = 'P';
 let editingVacId = null;
 let rhFilters = { name:'', role:'', chefe:'', empresa:'', carga:'', entrada:'', nascimento:'', saida:'', ativo:'' };
@@ -2055,6 +2107,40 @@ function autoSelectNextColor(){
   const used = state.persons.map(p => p.color);
   selectedColor = COLORS.find(c => !used.includes(c)) || COLORS[state.persons.length % COLORS.length];
 }
+function feriasMondayOf(dateStr){
+  const base = new Date((normalizeDateValue(dateStr) || todayIso()) + 'T00:00:00');
+  const dow = base.getDay();
+  const offset = dow === 0 ? -6 : 1 - dow;
+  base.setDate(base.getDate() + offset);
+  if (base.getFullYear() < YEAR) return `${YEAR}-01-01`;
+  if (base.getFullYear() > YEAR) return `${YEAR}-12-28`;
+  return isoDate(base.getFullYear(), base.getMonth() + 1, base.getDate());
+}
+function ensureFeriasWeekStart(){
+  if (!feriasWeekStart) feriasWeekStart = feriasMondayOf(todayIso());
+  return feriasWeekStart;
+}
+function weekDatesFrom(startIso){
+  const start = new Date(startIso + 'T00:00:00');
+  return Array.from({ length:7 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return isoDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  }).filter(ds => ds.startsWith(`${YEAR}-`));
+}
+function setFeriasView(view){
+  feriasView = view === 'week' ? 'week' : 'month';
+  ensureFeriasWeekStart();
+  renderCalendar();
+}
+function changeFeriasWeek(delta){
+  const current = new Date(ensureFeriasWeekStart() + 'T00:00:00');
+  current.setDate(current.getDate() + (delta * 7));
+  if (current.getFullYear() < YEAR) current.setFullYear(YEAR, 0, 1);
+  if (current.getFullYear() > YEAR) current.setFullYear(YEAR, 11, 28);
+  feriasWeekStart = feriasMondayOf(isoDate(current.getFullYear(), current.getMonth() + 1, current.getDate()));
+  renderCalendar();
+}
 
 // ===================== FÉRIAS: VACATIONS =====================
 function getVacationsForDay(dateStr){ return state.vacations.filter(v => v.start <= dateStr && v.end >= dateStr); }
@@ -2113,6 +2199,17 @@ function deleteVacation(id){ state.vacations = state.vacations.filter(v => v.id 
 function renderCalendar(){
   const grid = document.getElementById('calendarGrid');
   grid.innerHTML = '';
+  const monthBtn = document.getElementById('feriasViewMonth');
+  const weekBtn = document.getElementById('feriasViewWeek');
+  const weekNav = document.getElementById('feriasWeekNav');
+  if (monthBtn) monthBtn.classList.toggle('active', feriasView === 'month');
+  if (weekBtn) weekBtn.classList.toggle('active', feriasView === 'week');
+  if (weekNav) weekNav.style.display = feriasView === 'week' ? '' : 'none';
+  grid.className = feriasView === 'week' ? 'week-grid' : 'calendar-grid';
+  if (feriasView === 'week'){
+    renderWeekCalendar(grid);
+    return;
+  }
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
@@ -2165,6 +2262,54 @@ function renderCalendar(){
     card.appendChild(dg);
     grid.appendChild(card);
   }
+}
+function renderWeekCalendar(grid){
+  const dates = weekDatesFrom(ensureFeriasWeekStart());
+  const label = document.getElementById('feriasWeekLabel');
+  if (label && dates.length){
+    label.textContent = `${formatDatePt(dates[0])} a ${formatDatePt(dates[dates.length - 1])}`;
+  }
+  const todayStr = todayIso();
+  dates.forEach(ds => {
+    const dt = new Date(ds + 'T00:00:00');
+    const dow = dt.getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const isHoliday = HOLIDAYS_2026.has(ds);
+    const working = isWorkingDay(ds);
+    const card = document.createElement('div');
+    card.className = 'week-day-card' + (isWeekend ? ' weekend' : '') + (ds === todayStr ? ' today' : '');
+    const head = document.createElement('div');
+    head.className = 'week-day-head';
+    head.innerHTML = `<div><div class="week-day-name">${DAY_NAMES[dow]}</div><div class="week-day-num">${dt.getDate()}</div></div><div class="weekday">${MONTH_NAMES[dt.getMonth()].slice(0,3)}</div>`;
+    card.appendChild(head);
+    const body = document.createElement('div');
+    body.className = 'week-day-body';
+    body.onclick = () => {
+      if (working) openVacEditor(ds);
+    };
+    if (!working){
+      body.innerHTML = `<div class="week-locked">${isHoliday ? escHtml(HOLIDAY_NAMES[ds] || 'Feriado') : 'Fim de semana'}</div>`;
+    } else {
+      const vacHere = getVacationsForDay(ds)
+        .filter(v => isActive(v.personId))
+        .map(v => ({ v, person: state.persons.find(p => p.id === v.personId) }))
+        .filter(x => x.person)
+        .sort((a,b) => a.person.name.localeCompare(b.person.name));
+      if (!vacHere.length){
+        body.innerHTML = '<div class="week-empty">Sem férias marcadas.</div>';
+      } else {
+        vacHere.forEach(({ person }) => {
+          const item = document.createElement('div');
+          item.className = 'week-vac-person';
+          item.style.color = person.color || 'var(--accent)';
+          item.innerHTML = `${avatarHtml(person, 28)}<div class="week-vac-text"><div class="week-vac-name">${escHtml(person.name)}</div><div class="week-vac-role">${escHtml(ROLE_LABELS[person.role] || 'Colaborador')}</div></div>`;
+          body.appendChild(item);
+        });
+      }
+    }
+    card.appendChild(body);
+    grid.appendChild(card);
+  });
 }
 function renderFeriasSidebar(){
   const list = document.getElementById('personList');
