@@ -128,11 +128,19 @@
   #viewRH .rh-table tr.inactive td { opacity: 0.5; }
   #viewRH .rh-name { display: flex; align-items: center; gap: 10px; font-weight: 600; }
   #viewRH .rh-photo-btn { border: 0; background: transparent; padding: 0; cursor: pointer; line-height: 0; border-radius: 50%; }
+  #viewRH .rh-photo-btn.locked { cursor: default; }
   #viewRH .rh-photo-btn:hover .avatar { box-shadow: 0 0 0 2px var(--accent) !important; }
+  #viewRH .rh-photo-btn.locked:hover .avatar { box-shadow: 0 0 0 2px #2c9bd8 !important; }
   #viewRH .rh-select, #viewRH .rh-input {
     padding: 6px 8px; border-radius: 7px; border: 1px solid var(--border);
     font-size: 13px; outline: none; width: 100%; background: #fff; min-width: 120px;
   }
+  #viewRH .rh-readonly {
+    display: block; min-width: 92px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding: 6px 0; font-size: 12px; font-weight: 600; color: #222;
+  }
+  #viewRH .rh-readonly.muted { color: var(--text-muted); font-weight: 500; }
+  #viewRH tr.editing td { background: #f8fbff; }
   #viewRH .rh-select:focus, #viewRH .rh-input:focus { border-color: var(--accent); }
   #viewRH .rh-input[type="date"] { min-width: 136px; }
   #viewRH .rh-tenure { display: inline-block; min-width: 96px; font-size: 12px; font-weight: 600; white-space: nowrap; }
@@ -141,6 +149,8 @@
   #viewRH .rh-del:hover { background: #fee2e2; }
   #viewRH .rh-card-btn { padding: 5px 9px; border-radius: 6px; border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; font-size: 12px; cursor: pointer; white-space: nowrap; margin-right: 6px; }
   #viewRH .rh-card-btn:hover { background: #dbeafe; }
+  #viewRH .rh-edit-btn { padding: 5px 9px; border-radius: 6px; border: 1px solid #bbf7d0; background: #f0fdf4; color: #15803d; font-size: 12px; cursor: pointer; white-space: nowrap; margin-right: 6px; }
+  #viewRH .rh-edit-btn:hover { background: #dcfce7; }
   #viewRH .rh-add { display: flex; gap: 8px; margin-top: 16px; align-items: center; flex-wrap: wrap; }
   #viewRH .rh-add input { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; outline: none; min-width: 220px; }
   #viewRH .rh-add input:focus { border-color: var(--accent); }
@@ -157,6 +167,18 @@
   .badge-inativo { display: inline-block; font-size: 10px; font-weight: 700; color: #999; background: #eee; padding: 1px 6px; border-radius: 8px; margin-left: 6px; vertical-align: middle; }
 
   .stats-bar { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  #viewRH .rh-summary-row { display: flex; gap: 12px; align-items: stretch; justify-content: space-between; width: 100%; }
+  #viewRH .rh-summary-cards { display: flex; gap: 12px; flex-wrap: wrap; }
+  #viewRH .work-anniversary-card {
+    margin-left: auto; min-width: 280px; max-width: 390px; flex: 1; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px;
+  }
+  #viewRH .work-anniversary-title { font-size: 12px; font-weight: 800; margin-bottom: 8px; }
+  #viewRH .work-anniversary-list { display: flex; flex-direction: column; gap: 8px; }
+  #viewRH .work-anniversary-item { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  #viewRH .work-anniversary-text { min-width: 0; flex: 1; }
+  #viewRH .work-anniversary-name { font-size: 12px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #viewRH .work-anniversary-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .stat-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
     padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; min-width: 110px;
@@ -957,6 +979,7 @@ let currentMonth = (new Date().getFullYear() === YEAR) ? new Date().getMonth() :
 let paintCode = 'P';
 let editingVacId = null;
 let rhFilters = { name:'', role:'', chefe:'', empresa:'', carga:'', entrada:'', saida:'', ativo:'' };
+let rhEditingId = null;
 let photoEditor = { personId:null, sourceCanvas:null, canvas:null, ctx:null, drawing:false, mode:'wand', brush:28, tolerance:48 };
 let currentIdCardPersonId = null;
 
@@ -2609,6 +2632,38 @@ function mgmtDeletePerson(id){
   save(); renderMgmtModal(); renderAll();
 }
 // ===================== RH =====================
+function rhRead(value, empty='—'){
+  const text = value === false ? 'Não' : (value === true ? 'Sim' : (value || empty));
+  return `<span class="rh-readonly${text===empty?' muted':''}" title="${escHtml(String(text))}">${escHtml(String(text))}</span>`;
+}
+function nextAnniversaryInfo(person){
+  const entrada = normalizeDateValue(person.entrada);
+  if (!entrada) return null;
+  const start = dateFromIso(entrada);
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  let ann = new Date(today.getFullYear(), start.getMonth(), start.getDate());
+  if (ann < today) ann = new Date(today.getFullYear() + 1, start.getMonth(), start.getDate());
+  const days = Math.round((ann - today) / 86400000);
+  const years = ann.getFullYear() - start.getFullYear();
+  if (years <= 0) return null;
+  return { person, days, years, date: isoDate(ann.getFullYear(), ann.getMonth()+1, ann.getDate()) };
+}
+function renderWorkAnniversaries(){
+  const upcoming = activePersons()
+    .map(nextAnniversaryInfo)
+    .filter(Boolean)
+    .filter(x => x.days <= 30)
+    .sort((a,b) => a.days - b.days || a.person.name.localeCompare(b.person.name))
+    .slice(0,4);
+  if (!upcoming.length){
+    return `<div class="work-anniversary-card"><div class="work-anniversary-title">Aniversários de empresa</div><div class="dash-empty" style="padding:4px 0">Sem aniversários nos próximos 30 dias.</div></div>`;
+  }
+  return `<div class="work-anniversary-card"><div class="work-anniversary-title">Aniversários de empresa</div><div class="work-anniversary-list">${upcoming.map(x => {
+    const when = x.days === 0 ? 'Hoje' : `Daqui a ${x.days} dias`;
+    return `<div class="work-anniversary-item">${avatarHtml(x.person, 30)}<div class="work-anniversary-text"><div class="work-anniversary-name">${escHtml(x.person.name)}</div><div class="work-anniversary-meta">${when} · ${x.years} ${x.years===1?'ano':'anos'} · ${formatDatePt(x.date)}</div></div></div>`;
+  }).join('')}</div></div>`;
+}
 function renderRH(){
   // datalist de empresas
   const empresas = [...new Set(state.persons.map(p => p.empresa).filter(Boolean))].sort();
@@ -2621,10 +2676,15 @@ function renderRH(){
   const inativos = total - ativos;
   const nEmpresas = empresas.length;
   document.getElementById('rhStats').innerHTML = `
-    <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Colaboradores</div></div>
-    <div class="stat-card"><div class="stat-value" style="color:var(--c-presente)">${ativos}</div><div class="stat-label">Ativos</div></div>
-    <div class="stat-card"><div class="stat-value" style="color:#999">${inativos}</div><div class="stat-label">Inativos</div></div>
-    <div class="stat-card"><div class="stat-value">${nEmpresas}</div><div class="stat-label">Empresas</div></div>`;
+    <div class="rh-summary-row">
+      <div class="rh-summary-cards">
+        <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Colaboradores</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--c-presente)">${ativos}</div><div class="stat-label">Ativos</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#999">${inativos}</div><div class="stat-label">Inativos</div></div>
+        <div class="stat-card"><div class="stat-value">${nEmpresas}</div><div class="stat-label">Empresas</div></div>
+      </div>
+      ${renderWorkAnniversaries()}
+    </div>`;
 
   // tabela
   const table = document.getElementById('rhTable');
@@ -2667,31 +2727,34 @@ function renderRH(){
       .map(x => x.p);
     orderedPersons.forEach(p => {
       const ativo = p.ativo !== false;
+      const isEditing = rhEditingId === p.id;
       const chefeOpts = `<option value="">— Nenhum —</option>` + state.persons.filter(o => o.role === 'chefe_equipa' || o.role === 'coordenador' || o.id === p.chefeId)
         .map(o => `<option value="${o.id}" ${p.chefeId===o.id?'selected':''}>${escHtml(o.name)}${o.role&&ROLE_LABELS[o.role]?` (${ROLE_LABELS[o.role]})`:''}</option>`).join('');
       const roleOpts = ROLES.map(r => `<option value="${r.value}" ${(p.role||'')===r.value?'selected':''}>${r.label}</option>`).join('');
       const cargaOpts = CARGAS.map(c => `<option value="${c.value}" ${(p.carga||'')===c.value?'selected':''}>${c.label}</option>`).join('');
+      const chefe = state.persons.find(pp => pp.id === p.chefeId);
       const entrada = normalizeDateValue(p.entrada);
       const saida = normalizeDateValue(p.saida);
       const saidaParaCalculo = ativo ? '' : saida;
       const saidaField = ativo
-        ? '<span class="rh-tenure muted">—</span>'
-        : `<input class="rh-input" type="date" value="${escHtml(saida)}" onchange="rhUpdate('${p.id}','saida',this.value)">`;
+        ? rhRead('')
+        : (isEditing ? `<input class="rh-input" type="date" value="${escHtml(saida)}" onchange="rhUpdate('${p.id}','saida',this.value)">` : rhRead(formatDatePt(saida)));
       const tempoCasa = tenureText(entrada, saidaParaCalculo);
       const tempoClass = entrada ? 'rh-tenure' : 'rh-tenure muted';
-      body += `<tr class="${ativo?'':'inactive'}" data-rh-row="1" data-name="${escHtml(normalizeFilterText(p.name))}" data-role="${escHtml(p.role||'')}" data-chefe="${escHtml(p.chefeId||'')}" data-empresa="${escHtml(normalizeFilterText(p.empresa||''))}" data-carga="${escHtml(p.carga||'')}" data-entrada="${escHtml(entrada)}" data-saida="${escHtml(saida)}" data-ativo="${ativo?'ativo':'inativo'}">
-        <td data-label="Colaborador"><div class="rh-name"><button class="rh-photo-btn" onclick="pickPhoto('${p.id}')" title="${p.photo?'Mudar foto':'Adicionar foto'}">${avatarHtml(p, 28)}</button><span>${escHtml(p.name)}${ativo?'':'<span class="badge-inativo">inativo</span>'}</span></div></td>
-        <td data-label="Função"><select class="rh-select" onchange="rhUpdate('${p.id}','role',this.value)">${roleOpts}</select></td>
-        <td data-label="Chefe"><select class="rh-select" onchange="rhUpdate('${p.id}','chefeId',this.value)">${chefeOpts}</select></td>
-        <td data-label="Empresa"><input class="rh-input" list="empresaList" value="${escHtml(p.empresa||'')}" placeholder="Empresa..." onchange="rhUpdate('${p.id}','empresa',this.value)"></td>
-        <td data-label="Telefone"><input class="rh-input" value="${escHtml(p.telefone||'')}" placeholder="Telefone..." onchange="rhUpdate('${p.id}','telefone',this.value)"></td>
-        <td data-label="AGV"><input class="rh-input" value="${escHtml(p.agv||'')}" placeholder="AGV..." onchange="rhUpdate('${p.id}','agv',this.value)"></td>
-        <td data-label="Carga"><select class="rh-select" onchange="rhUpdate('${p.id}','carga',this.value)">${cargaOpts}</select></td>
-        <td data-label="Entrada"><input class="rh-input" type="date" value="${escHtml(entrada)}" onchange="rhUpdate('${p.id}','entrada',this.value)"></td>
+      const photoAction = isEditing ? `onclick="pickPhoto('${p.id}')"` : '';
+      body += `<tr class="${ativo?'':'inactive'} ${isEditing?'editing':''}" data-rh-row="1" data-name="${escHtml(normalizeFilterText(p.name))}" data-role="${escHtml(p.role||'')}" data-chefe="${escHtml(p.chefeId||'')}" data-empresa="${escHtml(normalizeFilterText(p.empresa||''))}" data-carga="${escHtml(p.carga||'')}" data-entrada="${escHtml(entrada)}" data-saida="${escHtml(saida)}" data-ativo="${ativo?'ativo':'inativo'}">
+        <td data-label="Colaborador"><div class="rh-name"><button class="rh-photo-btn ${isEditing?'':'locked'}" ${photoAction} title="${isEditing?(p.photo?'Mudar foto':'Adicionar foto'):'Bloqueado. Clica em Editar.'}">${avatarHtml(p, 28)}</button><span>${escHtml(p.name)}${ativo?'':'<span class="badge-inativo">inativo</span>'}</span></div></td>
+        <td data-label="Função">${isEditing ? `<select class="rh-select" onchange="rhUpdate('${p.id}','role',this.value)">${roleOpts}</select>` : rhRead(ROLE_LABELS[p.role])}</td>
+        <td data-label="Chefe">${isEditing ? `<select class="rh-select" onchange="rhUpdate('${p.id}','chefeId',this.value)">${chefeOpts}</select>` : rhRead(chefe ? chefe.name : '')}</td>
+        <td data-label="Empresa">${isEditing ? `<input class="rh-input" list="empresaList" value="${escHtml(p.empresa||'')}" placeholder="Empresa..." onchange="rhUpdate('${p.id}','empresa',this.value)">` : rhRead(p.empresa)}</td>
+        <td data-label="Telefone">${isEditing ? `<input class="rh-input" value="${escHtml(p.telefone||'')}" placeholder="Telefone..." onchange="rhUpdate('${p.id}','telefone',this.value)">` : rhRead(p.telefone)}</td>
+        <td data-label="AGV">${isEditing ? `<input class="rh-input" value="${escHtml(p.agv||'')}" placeholder="AGV..." onchange="rhUpdate('${p.id}','agv',this.value)">` : rhRead(p.agv)}</td>
+        <td data-label="Carga">${isEditing ? `<select class="rh-select" onchange="rhUpdate('${p.id}','carga',this.value)">${cargaOpts}</select>` : rhRead(CARGA_LABELS[p.carga])}</td>
+        <td data-label="Entrada">${isEditing ? `<input class="rh-input" type="date" value="${escHtml(entrada)}" onchange="rhUpdate('${p.id}','entrada',this.value)">` : rhRead(formatDatePt(entrada))}</td>
         <td data-label="Saída">${saidaField}</td>
         <td data-label="Tempo"><span class="${tempoClass}">${escHtml(tempoCasa)}</span></td>
-        <td data-label="Ativo"><div class="ativo-cell"><label class="switch"><input type="checkbox" ${ativo?'checked':''} onchange="rhUpdate('${p.id}','ativo',this.checked)"><span class="slider"></span></label><span class="ativo-txt">${ativo?'Ativo':'Inativo'}</span></div></td>
-        <td data-label="Ações"><button class="rh-card-btn" onclick="openIdCard('${p.id}')">Cartao</button><button class="rh-del" onclick="rhDeletePerson('${p.id}')">Remover</button></td>
+        <td data-label="Ativo">${isEditing ? `<div class="ativo-cell"><label class="switch"><input type="checkbox" ${ativo?'checked':''} onchange="rhUpdate('${p.id}','ativo',this.checked)"><span class="slider"></span></label><span class="ativo-txt">${ativo?'Ativo':'Inativo'}</span></div>` : rhRead(ativo ? 'Ativo' : 'Inativo')}</td>
+        <td data-label="Ações"><button class="rh-edit-btn" onclick="${isEditing?`rhFinishEdit('${p.id}')`:`rhEditPerson('${p.id}')`}">${isEditing?'Guardar':'Editar'}</button><button class="rh-card-btn" onclick="openIdCard('${p.id}')">Cartao</button><button class="rh-del" onclick="rhDeletePerson('${p.id}')">Remover</button></td>
       </tr>`;
     });
     body += `<tr id="rhNoResults" style="display:none"><td colspan="12"><div class="empty-state">Sem resultados para os filtros atuais.</div></td></tr>`;
@@ -2703,6 +2766,15 @@ function renderRH(){
 function rhSetFilter(field, value){
   rhFilters[field] = value;
   applyRHFilters();
+}
+function rhEditPerson(id){
+  rhEditingId = id;
+  renderRH();
+}
+function rhFinishEdit(id){
+  if (rhEditingId === id) rhEditingId = null;
+  save();
+  renderAll();
 }
 function applyRHFilters(){
   const table = document.getElementById('rhTable');
@@ -2762,6 +2834,7 @@ function rhDeletePerson(id){
   state.vacations = state.vacations.filter(v => v.personId !== id);
   Object.keys(state.records).forEach(k => { if (k.startsWith(id+'|')) delete state.records[k]; });
   if (selectedPerson === id) selectedPerson = null;
+  if (rhEditingId === id) rhEditingId = null;
   save(); renderAll();
 }
 
