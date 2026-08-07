@@ -77,6 +77,8 @@
   .btn:hover { background: #f0f0f0; }
   .btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
   .btn-primary:hover { background: #1d4ed8; }
+  .btn.danger { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }
+  .btn.danger:hover { background: #fecaca; }
 
   .view { display: none; }
   .view.active { display: block; }
@@ -477,6 +479,17 @@
   .photo-editor-tools label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
   .photo-editor-tools input[type="range"] { width: 110px; }
   .photo-editor-help { color: var(--text-muted); font-size: 12px; line-height: 1.4; margin-top: 8px; }
+  .bolsa-outcome-modal { width: 620px; max-width: calc(100vw - 24px); }
+  .bolsa-outcome-help { color: var(--text-muted); font-size: 12px; line-height: 1.45; margin-top: 8px; }
+  .bolsa-outcome-list { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; overflow-y: auto; min-height: 0; }
+  .bolsa-outcome-row {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center;
+    border: 1px solid #fed7aa; background: #fff7ed; border-radius: 10px; padding: 12px;
+  }
+  .bolsa-outcome-name { font-size: 14px; font-weight: 800; }
+  .bolsa-outcome-meta { font-size: 12px; color: #9a3412; margin-top: 3px; }
+  .bolsa-outcome-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .bolsa-outcome-actions .btn { padding: 7px 10px; font-size: 12px; white-space: nowrap; }
 
   .mgmt-list { flex: 1; overflow-y: auto; margin: 12px 0; }
   .mgmt-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
@@ -826,6 +839,20 @@
   </div>
 </div>
 
+<!-- BOLSA FORMAÇÃO OUTCOME MODAL -->
+<div class="modal-overlay" id="bolsaOutcomeModal">
+  <div class="modal bolsa-outcome-modal">
+    <h2>⚠️ Desfecho da Bolsa de Formação</h2>
+    <div class="bolsa-outcome-help">
+      Estes colaboradores já atingiram 60 dias em Bolsa de Formação. Escolhe um desfecho para cada um.
+    </div>
+    <div class="bolsa-outcome-list" id="bolsaOutcomeList"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('bolsaOutcomeModal')">Decidir mais tarde</button>
+    </div>
+  </div>
+</div>
+
 <!-- MANAGE PERSONS MODAL -->
 <div class="modal-overlay" id="mgmtModal">
   <div class="modal">
@@ -963,6 +990,7 @@ const CARGAS = [
   { value:'30h', label:'30 horas' },
   { value:'20h', label:'20 horas' },
   { value:'bolsa_formacao', label:'Bolsa de Formação' },
+  { value:'recibo_verde', label:'Recibo verde' },
 ];
 const CARGA_LABELS = Object.fromEntries(CARGAS.filter(c => c.value).map(c => [c.value, c.label]));
 
@@ -987,6 +1015,7 @@ let paintCode = 'P';
 let editingVacId = null;
 let rhFilters = { name:'', role:'', chefe:'', empresa:'', carga:'', entrada:'', saida:'', ativo:'' };
 let rhEditingId = null;
+let bolsaOutcomeDismissed = false;
 let photoEditor = { personId:null, sourceCanvas:null, canvas:null, ctx:null, drawing:false, mode:'wand', brush:28, tolerance:48 };
 let currentIdCardPersonId = null;
 
@@ -1022,6 +1051,18 @@ function normalizePerson(p){
   person.entrada = normalizeDateValue(person.entrada || person.dataEntrada || '');
   person.saida = normalizeDateValue(person.saida || person.dataSaida || '');
   return person;
+}
+function todayIso(){
+  const now = new Date();
+  return isoDate(now.getFullYear(), now.getMonth() + 1, now.getDate());
+}
+function daysSinceIso(dateStr){
+  const iso = normalizeDateValue(dateStr);
+  if (!iso) return null;
+  const start = new Date(iso + 'T00:00:00');
+  const today = new Date(todayIso() + 'T00:00:00');
+  if (isNaN(start) || isNaN(today)) return null;
+  return Math.floor((today - start) / 86400000);
 }
 function tenureText(entrada, saida){
   const entradaIso = normalizeDateValue(entrada);
@@ -2566,6 +2607,62 @@ function renderDashboard(){
     </div>`;
 }
 
+// ===================== BOLSA FORMAÇÃO OUTCOMES =====================
+function bolsaFormacaoDuePersons(){
+  return state.persons
+    .map(p => ({ person: p, days: daysSinceIso(p.entrada) }))
+    .filter(x => x.person.ativo !== false && x.person.carga === 'bolsa_formacao' && x.days !== null && x.days >= 60)
+    .sort((a, b) => b.days - a.days || a.person.name.localeCompare(b.person.name));
+}
+function checkBolsaFormacaoOutcomes(){
+  if (bolsaOutcomeDismissed) return;
+  const modal = document.getElementById('bolsaOutcomeModal');
+  if (!modal || modal.classList.contains('open')) return;
+  const due = bolsaFormacaoDuePersons();
+  if (!due.length) return;
+  renderBolsaOutcomeModal(due);
+  modal.classList.add('open');
+}
+function renderBolsaOutcomeModal(due){
+  const list = document.getElementById('bolsaOutcomeList');
+  if (!list) return;
+  list.innerHTML = due.map(({ person, days }) => `
+    <div class="bolsa-outcome-row">
+      ${avatarHtml(person, 42)}
+      <div>
+        <div class="bolsa-outcome-name">${escHtml(person.name)}</div>
+        <div class="bolsa-outcome-meta">Bolsa de Formação há ${days} dias · Entrada ${formatDatePt(person.entrada)}</div>
+      </div>
+      <div class="bolsa-outcome-actions">
+        <button class="btn" onclick="applyBolsaOutcome('${person.id}','20h')">20 horas</button>
+        <button class="btn" onclick="applyBolsaOutcome('${person.id}','recibo_verde')">Recibo verde</button>
+        <button class="btn danger" onclick="applyBolsaOutcome('${person.id}','sair')">Sair</button>
+      </div>
+    </div>
+  `).join('');
+}
+function applyBolsaOutcome(personId, outcome){
+  const person = state.persons.find(p => p.id === personId);
+  if (!person) return;
+  if (outcome === '20h'){
+    person.carga = '20h';
+  } else if (outcome === 'recibo_verde'){
+    person.carga = 'recibo_verde';
+  } else if (outcome === 'sair'){
+    person.ativo = false;
+    if (!person.saida) person.saida = todayIso();
+  }
+  bolsaOutcomeDismissed = false;
+  save();
+  const due = bolsaFormacaoDuePersons();
+  if (due.length){
+    renderBolsaOutcomeModal(due);
+  } else {
+    document.getElementById('bolsaOutcomeModal')?.classList.remove('open');
+  }
+  renderAll();
+}
+
 // ===================== RENDER ALL =====================
 function renderAll(){
   if (activeTab === 'dashboard'){
@@ -2577,14 +2674,16 @@ function renderAll(){
   } else if (activeTab === 'rh'){
     renderRH(); renderColorPicker();
   }
+  setTimeout(checkBolsaFormacaoOutcomes, 0);
 }
 
 // ===================== MODALS =====================
 function closeModal(id){
   document.getElementById(id).classList.remove('open');
   if (id === 'vacModal'){ editingVacId = null; document.getElementById('vacModalTitle').textContent = '➕ Adicionar Férias'; }
+  if (id === 'bolsaOutcomeModal') bolsaOutcomeDismissed = true;
 }
-document.querySelectorAll('.modal-overlay').forEach(el => { el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); }); });
+document.querySelectorAll('.modal-overlay').forEach(el => { el.addEventListener('click', e => { if (e.target === el) closeModal(el.id); }); });
 
 // ===================== MANAGE PERSONS =====================
 function openManagePersons(){
