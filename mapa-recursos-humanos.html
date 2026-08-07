@@ -203,6 +203,7 @@
   .dash-bar-value { text-align: right; font-weight: 700; font-size: 12px; }
   .dash-months { display: grid; grid-template-columns: repeat(12, minmax(18px, 1fr)); gap: 7px; align-items: end; min-height: 148px; padding-top: 8px; }
   .dash-month { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+  .dash-month-value { height: 14px; font-size: 10px; font-weight: 700; color: var(--c-ferias); line-height: 1; }
   .dash-month-bar { width: 100%; max-width: 28px; height: 104px; border-radius: 7px; background: #eef0f3; display: flex; align-items: end; overflow: hidden; }
   .dash-month-fill { width: 100%; min-height: 2px; border-radius: 7px 7px 0 0; background: var(--c-ferias); }
   .dash-month-label { font-size: 10px; color: var(--text-muted); }
@@ -2332,7 +2333,7 @@ function dashMonthBars(months){
   const max = Math.max(...months, 1);
   return `<div class="dash-months">${months.map((value, i) => {
     const pct = Math.round((value / max) * 100);
-    return `<div class="dash-month" title="${MONTH_NAMES[i]}: ${value} dias"><div class="dash-month-bar"><div class="dash-month-fill" style="height:${pct}%"></div></div><div class="dash-month-label">${MONTH_NAMES[i].slice(0,3)}</div></div>`;
+    return `<div class="dash-month" title="${MONTH_NAMES[i]}: ${value} dias"><div class="dash-month-value">${value}</div><div class="dash-month-bar"><div class="dash-month-fill" style="height:${pct}%"></div></div><div class="dash-month-label">${MONTH_NAMES[i].slice(0,3)}</div></div>`;
   }).join('')}</div>`;
 }
 function dashMovementMonths(entriesByMonth, exitsByMonth){
