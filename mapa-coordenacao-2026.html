@@ -1105,6 +1105,7 @@ let pendingExitPersonId = null;
 let bolsaOutcomeDismissed = false;
 let photoEditor = { personId:null, sourceCanvas:null, canvas:null, ctx:null, drawing:false, mode:'wand', brush:28, tolerance:48 };
 let currentIdCardPersonId = null;
+let photosFacingRightMigrationRunning = false;
 
 // ===================== HELPERS =====================
 function updateDeviceMode(){
@@ -1182,6 +1183,44 @@ function avatarHtml(p, size){
     return `<span class="avatar" style="width:${size}px;height:${size}px;${ring}"><img src="${p.photo}" alt=""></span>`;
   }
   return `<span class="avatar" style="width:${size}px;height:${size}px;background:${p.color}"></span>`;
+}
+async function mirrorPhotoDataUrl(dataUrl){
+  const img = await loadImageFromUrl(dataUrl);
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(img, 0, 0);
+  return canvas.toDataURL('image/png');
+}
+async function ensurePhotosFaceRight(){
+  if (photosFacingRightMigrationRunning) return;
+  const pending = state.persons.filter(p => p.photo && !p.photoFacingRight);
+  if (!pending.length) return;
+  photosFacingRightMigrationRunning = true;
+  let changed = false;
+  try {
+    for (const p of pending){
+      try {
+        p.photo = await mirrorPhotoDataUrl(p.photo);
+        p.photoFacingRight = true;
+        changed = true;
+      } catch(e){
+        console.warn('Não foi possível virar a foto de', p.name, e);
+      }
+    }
+    if (changed){
+      save();
+      renderAll();
+      if (document.getElementById('mgmtModal')?.classList.contains('open')) renderMgmtModal();
+    }
+  } finally {
+    photosFacingRightMigrationRunning = false;
+  }
 }
 function removePhotoBackground(ctx, size){
   const image = ctx.getImageData(0, 0, size, size);
@@ -1405,7 +1444,7 @@ function setupPhotoEditorEvents(){
   canvas.addEventListener('pointerup', () => { photoEditor.drawing = false; });
   canvas.addEventListener('pointercancel', () => { photoEditor.drawing = false; });
 }
-function savePhotoEditor(){
+async function savePhotoEditor(){
   if (!photoEditor.canvas || !photoEditor.personId) return;
   const size = 320;
   const finalCanvas = document.createElement('canvas');
@@ -1424,7 +1463,8 @@ function savePhotoEditor(){
   ctx.restore();
   const p = state.persons.find(pp => pp.id === photoEditor.personId);
   if (p){
-    p.photo = finalCanvas.toDataURL('image/png');
+    p.photo = await mirrorPhotoDataUrl(finalCanvas.toDataURL('image/png'));
+    p.photoFacingRight = true;
     save();
     closeModal('photoEditorModal');
     renderAll();
@@ -1837,12 +1877,12 @@ async function buildPhotoDataUrl(file, opts = {}){
 function setPhotoFromFile(file, id){
   if (!file) return;
   document.body.style.cursor = 'progress';
-  const person = state.persons.find(pp => pp.id === id);
-  const photoOpts = { mirror: !!(person && person.role === 'vendedor') };
+  const photoOpts = { mirror: true };
   buildPhotoDataUrl(file, photoOpts).then(dataUrl => {
     const p = state.persons.find(pp => pp.id === id);
     if (p){
       p.photo = dataUrl;
+      p.photoFacingRight = true;
       save();
       renderAll();
       if (document.getElementById('mgmtModal').classList.contains('open')) renderMgmtModal();
@@ -1861,7 +1901,7 @@ function pickPhoto(id){
 }
 function removePhoto(id){
   const p = state.persons.find(pp => pp.id === id);
-  if (p){ delete p.photo; save(); renderAll(); if (document.getElementById('mgmtModal').classList.contains('open')) renderMgmtModal(); }
+  if (p){ delete p.photo; delete p.photoFacingRight; save(); renderAll(); if (document.getElementById('mgmtModal').classList.contains('open')) renderMgmtModal(); }
 }
 function dateStrOf(m, d){ return `${YEAR}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
 function isWorkingDay(dateStr){
@@ -2897,6 +2937,7 @@ function renderAll(){
   } else if (activeTab === 'rh'){
     renderRH(); renderColorPicker();
   }
+  setTimeout(ensurePhotosFaceRight, 0);
   setTimeout(checkBolsaFormacaoOutcomes, 0);
 }
 
