@@ -1114,6 +1114,12 @@ function updateDeviceMode(){
 }
 function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function normalizeFilterText(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function normalizePhone(value){ return String(value || '').replace(/\D/g, ''); }
+function formatPhone(value){
+  const digits = normalizePhone(value);
+  if (!digits) return '';
+  return digits.replace(/(\d{3})(?=\d)/g, '$1 ').trim();
+}
 function initials(name){ const p = name.trim().split(/\s+/); return p.length===1 ? p[0].slice(0,2).toUpperCase() : (p[0][0]+p[p.length-1][0]).toUpperCase(); }
 function isActive(pid){ const p = state.persons.find(pp => pp.id === pid); return !!p && p.ativo !== false; }
 function activePersons(){ return state.persons.filter(p => p.ativo !== false); }
@@ -1521,7 +1527,7 @@ async function drawIdCardCanvas(person){
   ctx.stroke();
 
   drawCenteredText(ctx, person.name || 'Colaborador', 255, 85, 300, '700 40px Segoe UI, Arial', navy);
-  drawCenteredText(ctx, person.telefone || 'Telefone', 255, 140, 310, '400 40px Segoe UI, Arial', navy);
+  drawCenteredText(ctx, formatPhone(person.telefone) || 'Telefone', 255, 140, 310, '400 40px Segoe UI, Arial', navy);
 
   ctx.fillStyle = green;
   canvasRoundRect(ctx, 48, 194, 423, 112, 28);
@@ -3317,7 +3323,7 @@ function renderRH(){
         <td data-label="Função">${isEditing ? `<select class="rh-select" onchange="rhUpdate('${p.id}','role',this.value)">${roleOpts}</select>` : rhRead(ROLE_LABELS[p.role])}</td>
         <td data-label="Chefe">${isEditing ? `<select class="rh-select" onchange="rhUpdate('${p.id}','chefeId',this.value)">${chefeOpts}</select>` : rhRead(chefe ? chefe.name : '')}</td>
         <td data-label="Empresa">${isEditing ? `<input class="rh-input" list="empresaList" value="${escHtml(p.empresa||'')}" placeholder="Empresa..." onchange="rhUpdate('${p.id}','empresa',this.value)">` : rhRead(p.empresa)}</td>
-        <td data-label="Telefone">${isEditing ? `<input class="rh-input" value="${escHtml(p.telefone||'')}" placeholder="Telefone..." onchange="rhUpdate('${p.id}','telefone',this.value)">` : rhRead(p.telefone)}</td>
+        <td data-label="Telefone">${isEditing ? `<input class="rh-input" value="${escHtml(formatPhone(p.telefone))}" placeholder="Telefone..." inputmode="tel" onchange="rhUpdate('${p.id}','telefone',this.value)">` : rhRead(formatPhone(p.telefone))}</td>
         <td data-label="AGV">${isEditing ? `<input class="rh-input" value="${escHtml(p.agv||'')}" placeholder="AGV..." onchange="rhUpdate('${p.id}','agv',this.value)">` : rhRead(p.agv)}</td>
         <td data-label="Carga">${isEditing ? `<select class="rh-select" onchange="rhUpdate('${p.id}','carga',this.value)">${cargaOpts}</select>` : rhRead(CARGA_LABELS[p.carga])}</td>
         <td data-label="Nascimento">${isEditing ? `<input class="rh-input" type="date" value="${escHtml(nascimento)}" onchange="rhUpdate('${p.id}','nascimento',this.value)">` : rhRead(formatDatePt(nascimento))}</td>
@@ -3396,7 +3402,7 @@ function rhUpdate(id, field, value){
     }
   }
   else if (field === 'empresa') p.empresa = value.trim();
-  else if (field === 'telefone') p.telefone = value.trim();
+  else if (field === 'telefone') p.telefone = normalizePhone(value);
   else if (field === 'agv') p.agv = value.trim();
   else if (field === 'entrada' || field === 'saida' || field === 'nascimento') p[field] = normalizeDateValue(value);
   else p[field] = value;
