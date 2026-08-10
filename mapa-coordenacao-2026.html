@@ -95,16 +95,23 @@
     border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
     flex-shrink: 0; overflow: hidden; vertical-align: middle; box-sizing: border-box;
   }
-  .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; transform: scaleX(-1); }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .avatar.flip-x img { transform: scaleX(-1); }
   .mgmt-photo-btn {
     width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border);
     background: #f5f5f7; cursor: pointer; overflow: hidden; padding: 0; font-size: 14px;
     flex-shrink: 0; display: flex; align-items: center; justify-content: center;
   }
-  .mgmt-photo-btn img { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .mgmt-photo-btn img { width: 100%; height: 100%; object-fit: cover; }
+  .mgmt-photo-btn img.flip-x { transform: scaleX(-1); }
   .mgmt-photo-btn:hover { border-color: var(--accent); }
   .mgmt-photo-del { border: none; background: none; color: #bbb; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
   .mgmt-photo-del:hover { color: #dc2626; }
+  .photo-flip-btn {
+    border: 1px solid #dbeafe; background: #eff6ff; color: #1d4ed8; border-radius: 7px;
+    padding: 4px 7px; font-size: 11px; font-weight: 800; cursor: pointer; white-space: nowrap;
+  }
+  .photo-flip-btn:hover { background: #dbeafe; }
 
   /* ===================== RH VIEW ===================== */
   #viewRH .main { padding: 24px; overflow-x: auto; }
@@ -1180,7 +1187,7 @@ function avatarHtml(p, size){
   size = size || 24;
   const ring = `box-shadow:0 0 0 2px ${p.photo ? '#2c9bd8' : p.color};`;
   if (p.photo){
-    return `<span class="avatar" style="width:${size}px;height:${size}px;${ring}"><img src="${p.photo}" alt=""></span>`;
+    return `<span class="avatar ${p.photoMirror ? 'flip-x' : ''}" style="width:${size}px;height:${size}px;${ring}"><img src="${p.photo}" alt=""></span>`;
   }
   return `<span class="avatar" style="width:${size}px;height:${size}px;background:${p.color}"></span>`;
 }
@@ -1598,7 +1605,7 @@ async function drawIdCardCanvas(person){
   if (person.photo){
     try {
       const photo = await loadImageFromUrl(person.photo);
-      drawImageCover(ctx, photo, 601, 29, 201, 309, 0.5, 0.4, 1.14, true);
+      drawImageCover(ctx, photo, 601, 29, 201, 309, 0.5, 0.4, 1.14, !!person.photoMirror);
     } catch(e){
       drawCenteredText(ctx, initials(person.name || ''), 701, 184, 150, '700 54px Segoe UI, Arial', '#ffffff');
     }
@@ -1910,6 +1917,15 @@ function pickPhoto(id){
 function removePhoto(id){
   const p = state.persons.find(pp => pp.id === id);
   if (p){ delete p.photo; delete p.photoFacingRight; save(); renderAll(); if (document.getElementById('mgmtModal').classList.contains('open')) renderMgmtModal(); }
+}
+function togglePhotoMirror(id){
+  const p = state.persons.find(pp => pp.id === id);
+  if (!p || !p.photo) return;
+  p.photoMirror = !p.photoMirror;
+  delete p.photoFacingRight;
+  save();
+  renderAll();
+  if (document.getElementById('mgmtModal')?.classList.contains('open')) renderMgmtModal();
 }
 function dateStrOf(m, d){ return `${YEAR}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
 function isWorkingDay(dateStr){
@@ -2971,7 +2987,8 @@ function renderMgmtModal(){
         <div style="position:relative;display:flex;align-items:center;gap:6px">
           <button class="mgmt-color-btn" style="background:${p.color}" onclick="toggleEditColorPicker(event,'${p.id}')" title="Alterar cor"></button>
           <div class="color-picker-popover" id="color-pop-${p.id}"></div>
-          <button class="mgmt-photo-btn" onclick="pickPhoto('${p.id}')" title="${p.photo?'Mudar foto':'Adicionar foto'}">${p.photo?`<img src="${p.photo}" alt="">`:'📷'}</button>
+          <button class="mgmt-photo-btn" onclick="pickPhoto('${p.id}')" title="${p.photo?'Mudar foto':'Adicionar foto'}">${p.photo?`<img class="${p.photoMirror?'flip-x':''}" src="${p.photo}" alt="">`:'📷'}</button>
+          ${p.photo?`<button class="photo-flip-btn" onclick="togglePhotoMirror('${p.id}')" title="Virar esta foto">Virar</button>`:''}
           ${p.photo?`<button class="mgmt-photo-del" onclick="removePhoto('${p.id}')" title="Remover foto">×</button>`:''}
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0">
@@ -3114,7 +3131,7 @@ async function buildWorkAnniversaryImage(info){
   if (info.person.photo){
     try {
       const photo = await loadImageFromUrl(info.person.photo);
-      drawImageCover(ctx, photo, 384, 249, 312, 312, 0.5, 0.38, 1.08, true);
+      drawImageCover(ctx, photo, 384, 249, 312, 312, 0.5, 0.38, 1.08, !!info.person.photoMirror);
     } catch(e){
       drawCenteredText(ctx, initials(info.person.name || ''), 540, 405, 230, '800 92px Segoe UI, Arial', '#ffffff');
     }
@@ -3379,7 +3396,7 @@ function renderRH(){
         <td data-label="Saída">${saidaField}</td>
         <td data-label="Tempo"><span class="${tempoClass}">${escHtml(tempoCasa)}</span></td>
         <td data-label="Ativo">${isEditing ? `<div class="ativo-cell"><label class="switch"><input type="checkbox" ${ativo?'checked':''} onchange="rhUpdate('${p.id}','ativo',this.checked)"><span class="slider"></span></label><span class="ativo-txt">${ativo?'Ativo':'Inativo'}</span></div>` : rhRead(ativo ? 'Ativo' : 'Inativo')}</td>
-        <td data-label="Ações"><button class="rh-edit-btn" onclick="${isEditing?`rhFinishEdit('${p.id}')`:`rhEditPerson('${p.id}')`}">${isEditing?'Guardar':'Editar'}</button><button class="rh-card-btn" onclick="openIdCard('${p.id}')">Cartao</button><button class="rh-del" onclick="rhDeletePerson('${p.id}')">Remover</button></td>
+        <td data-label="Ações"><button class="rh-edit-btn" onclick="${isEditing?`rhFinishEdit('${p.id}')`:`rhEditPerson('${p.id}')`}">${isEditing?'Guardar':'Editar'}</button><button class="rh-card-btn" onclick="openIdCard('${p.id}')">Cartao</button>${p.photo?`<button class="photo-flip-btn" onclick="togglePhotoMirror('${p.id}')">Virar</button>`:''}<button class="rh-del" onclick="rhDeletePerson('${p.id}')">Remover</button></td>
       </tr>`;
     });
     body += `<tr id="rhNoResults" style="display:none"><td colspan="13"><div class="empty-state">Sem resultados para os filtros atuais.</div></td></tr>`;
