@@ -1655,7 +1655,7 @@ async function drawIdCardCanvas(person){
   ctx.fillStyle = '#ffffff';
   ctx.fillText('Parceiro MEO: Viatel', 546, 381);
   ctx.font = '400 20px Segoe UI, Arial';
-  ctx.fillText('Nº ' + (person.agv || '24563939'), 546, 406);
+  if (person.agv) ctx.fillText('Nº ' + person.agv, 546, 406);
 }
 async function drawIdCardBackCanvas(){
   const canvas = document.getElementById('idCardBackCanvas');
