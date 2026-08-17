@@ -519,6 +519,12 @@
     overflow-y: auto; min-height: 0; flex: 1;
   }
   .id-card-modal .modal-actions { flex-shrink: 0; }
+  .id-card-photo-tools {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px;
+    color: var(--text-muted); font-size: 12px;
+  }
+  .id-card-photo-tools label { display: flex; align-items: center; gap: 6px; }
+  .id-card-photo-tools input[type="range"] { width: 120px; }
   #idCardCanvas,
   #idCardBackCanvas {
     width: 830px; max-width: 100%; height: auto; border-radius: 8px;
@@ -962,6 +968,12 @@
       <canvas id="idCardCanvas" width="830" height="467"></canvas>
       <canvas id="idCardBackCanvas" width="830" height="467"></canvas>
     </div>
+    <div class="id-card-photo-tools" id="idCardPhotoTools" style="display:none">
+      <span>Foto no cartão:</span>
+      <label>Zoom <input type="range" id="idCardPhotoZoom" min="100" max="160" value="114" oninput="adjustIdCardPhoto('zoom', this.value)"></label>
+      <label>Altura <input type="range" id="idCardPhotoY" min="20" max="70" value="40" oninput="adjustIdCardPhoto('focusY', this.value)"></label>
+      <button class="btn" onclick="resetIdCardPhoto()">Repor foto</button>
+    </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('idCardModal')">Fechar</button>
       <button class="btn" onclick="downloadIdCardBack()">Descarregar verso</button>
@@ -1152,6 +1164,9 @@ function normalizePerson(p){
   person.entrada = normalizeDateValue(person.entrada || person.dataEntrada || '');
   person.saida = normalizeDateValue(person.saida || person.dataSaida || '');
   person.nascimento = normalizeDateValue(person.nascimento || person.dataNascimento || '');
+  person.photoCardZoom = Number(person.photoCardZoom || 0) || '';
+  person.photoCardFocusX = Number(person.photoCardFocusX || 0) || '';
+  person.photoCardFocusY = Number(person.photoCardFocusY || 0) || '';
   return person;
 }
 function todayIso(){
@@ -1605,7 +1620,10 @@ async function drawIdCardCanvas(person){
   if (person.photo){
     try {
       const photo = await loadImageFromUrl(person.photo);
-      drawImageCover(ctx, photo, 601, 29, 201, 309, 0.5, 0.4, 1.14, !!person.photoMirror);
+      const photoFocusX = person.photoCardFocusX || 0.5;
+      const photoFocusY = person.photoCardFocusY || 0.4;
+      const photoZoom = person.photoCardZoom || 1.14;
+      drawImageCover(ctx, photo, 601, 29, 201, 309, photoFocusX, photoFocusY, photoZoom, !!person.photoMirror);
     } catch(e){
       drawCenteredText(ctx, initials(person.name || ''), 701, 184, 150, '700 54px Segoe UI, Arial', '#ffffff');
     }
@@ -1662,6 +1680,7 @@ function openIdCard(id){
   const person = state.persons.find(p => p.id === id);
   if (!person) return;
   document.getElementById('idCardModal').classList.add('open');
+  syncIdCardPhotoControls(person);
   drawIdCardBackCanvas();
   drawIdCardCanvas(person).catch(() => {
     const canvas = document.getElementById('idCardCanvas');
@@ -1671,6 +1690,33 @@ function openIdCard(id){
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     drawCenteredText(ctx, person.name || 'Colaborador', canvas.width / 2, canvas.height / 2, 500, '700 40px Segoe UI, Arial', '#111827');
   });
+}
+function syncIdCardPhotoControls(person){
+  const tools = document.getElementById('idCardPhotoTools');
+  const zoom = document.getElementById('idCardPhotoZoom');
+  const focusY = document.getElementById('idCardPhotoY');
+  if (!tools || !zoom || !focusY) return;
+  tools.style.display = person && person.photo ? '' : 'none';
+  zoom.value = Math.round((person.photoCardZoom || 1.14) * 100);
+  focusY.value = Math.round((person.photoCardFocusY || 0.4) * 100);
+}
+function adjustIdCardPhoto(field, value){
+  const person = state.persons.find(p => p.id === currentIdCardPersonId);
+  if (!person) return;
+  if (field === 'zoom') person.photoCardZoom = Math.max(1, Math.min(1.6, Number(value) / 100));
+  if (field === 'focusY') person.photoCardFocusY = Math.max(0.2, Math.min(0.7, Number(value) / 100));
+  save();
+  drawIdCardCanvas(person);
+}
+function resetIdCardPhoto(){
+  const person = state.persons.find(p => p.id === currentIdCardPersonId);
+  if (!person) return;
+  delete person.photoCardZoom;
+  delete person.photoCardFocusX;
+  delete person.photoCardFocusY;
+  syncIdCardPhotoControls(person);
+  save();
+  drawIdCardCanvas(person);
 }
 function downloadIdCard(){
   const person = state.persons.find(p => p.id === currentIdCardPersonId);
