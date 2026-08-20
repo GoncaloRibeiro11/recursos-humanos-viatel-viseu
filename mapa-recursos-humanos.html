@@ -477,7 +477,8 @@
   }
   #viewAssid td.day-cell.weekend { background: #f5f5f7; cursor: default; }
   #viewAssid td.day-cell.holiday { background: #fff4e6; color: #f97316; cursor: default; font-weight: 700; font-size: 10px; }
-  #viewAssid td.day-cell.weekend:hover, #viewAssid td.day-cell.holiday:hover { outline: none; }
+  #viewAssid td.day-cell.locked { background: #f1f5f9; color: #94a3b8; cursor: default; font-weight: 700; }
+  #viewAssid td.day-cell.weekend:hover, #viewAssid td.day-cell.holiday:hover, #viewAssid td.day-cell.locked:hover { outline: none; }
   #viewAssid td.sum-cell { font-weight: 700; background: #f9f9fb; padding: 0 6px; min-width: 42px; }
   #viewAssid td.sum-cell.pct { font-size: 11px; }
   #viewAssid tbody tr:hover td.col-name { background: #f5f5f7; }
@@ -879,7 +880,7 @@
   </div>
   <div class="main">
     <div class="instructions">
-      Escolhe um estado em <strong>"Marcar"</strong> e clica nas células dos dias. Clica de novo na mesma célula para limpar. Os dias de <strong style="color:var(--c-ferias)">Férias</strong> aparecem automaticamente a partir do separador Férias (podes marcar outro estado por cima, se necessário). Fins de semana e feriados estão bloqueados.
+      Escolhe um estado em <strong>"Marcar"</strong> e clica nas células dos dias. Clica de novo na mesma célula para limpar. Os dias de <strong style="color:var(--c-ferias)">Férias</strong> aparecem automaticamente a partir do separador Férias (podes marcar outro estado por cima, se necessário). Fins de semana, feriados e dias fora da data de entrada/saída do colaborador estão bloqueados.
     </div>
     <div class="stats-bar" id="assidStats"></div>
     <div class="sheet-wrap"><table class="sheet" id="sheet"></table></div>
@@ -1980,6 +1981,21 @@ function isWorkingDay(dateStr){
   if (HOLIDAYS_2026.has(dateStr)) return false;
   return true;
 }
+function isPersonDateActive(person, dateStr){
+  if (!person || !dateStr) return false;
+  const entrada = normalizeDateValue(person.entrada);
+  const saida = normalizeDateValue(person.saida);
+  if (entrada && dateStr < entrada) return false;
+  if (saida && dateStr > saida) return false;
+  return true;
+}
+function personDateLockReason(person, dateStr){
+  const entrada = normalizeDateValue(person && person.entrada);
+  const saida = normalizeDateValue(person && person.saida);
+  if (entrada && dateStr < entrada) return `Antes da entrada (${formatDatePt(entrada)})`;
+  if (saida && dateStr > saida) return `Depois da saída (${formatDatePt(saida)})`;
+  return '';
+}
 function countWorkingDays(start, end){
   let count=0; let d=new Date(start); const e=new Date(end);
   while (d<=e){ const ds=d.toISOString().slice(0,10); if (isWorkingDay(ds)) count++; d.setDate(d.getDate()+1); }
@@ -1988,6 +2004,14 @@ function countWorkingDays(start, end){
 function countWorkingDaysInMonth(){
   const dim = new Date(YEAR, currentMonth+1, 0).getDate(); let n=0;
   for (let d=1; d<=dim; d++) if (isWorkingDay(dateStrOf(currentMonth,d))) n++;
+  return n;
+}
+function countWorkingDaysForPersonInMonth(person){
+  const dim = new Date(YEAR, currentMonth+1, 0).getDate(); let n=0;
+  for (let d=1; d<=dim; d++){
+    const ds = dateStrOf(currentMonth, d);
+    if (isWorkingDay(ds) && isPersonDateActive(person, ds)) n++;
+  }
   return n;
 }
 
@@ -2529,6 +2553,8 @@ function recKey(pid, dateStr){ return pid + '|' + dateStr; }
 function getRec(pid, dateStr){ return state.records[recKey(pid, dateStr)] || ''; }
 function cellClick(pid, dateStr){
   if (!isWorkingDay(dateStr)) return;
+  const person = state.persons.find(p => p.id === pid);
+  if (!isPersonDateActive(person, dateStr)) return;
   const k = recKey(pid, dateStr);
   if (state.records[k] === paintCode) delete state.records[k];
   else state.records[k] = paintCode;
@@ -2580,6 +2606,11 @@ function renderSheet(){
         const hol = HOLIDAYS_2026.has(ds);
         if (we){ body += `<td class="day-cell weekend"></td>`; continue; }
         if (hol){ body += `<td class="day-cell holiday" title="Feriado: ${escHtml(HOLIDAY_NAMES[ds]||'Feriado')}">F</td>`; continue; }
+        if (!isPersonDateActive(p, ds)){
+          const reason = personDateLockReason(p, ds);
+          body += `<td class="day-cell locked" title="${escHtml(MONTH_NAMES[currentMonth] + ' ' + d + ' · ' + reason)}">–</td>`;
+          continue;
+        }
         const code = getRec(p.id, ds);
         if (code){
           if (code==='P') cP++; else if (code==='FE') cFE++; else if (code==='FJ') cFJ++; else if (code==='FI') cFI++; else if (code==='B') cB++;
@@ -2592,7 +2623,7 @@ function renderSheet(){
           body += `<td class="day-cell" onclick="cellClick('${p.id}','${ds}')" title="${MONTH_NAMES[currentMonth]} ${d}"></td>`;
         }
       }
-      const tw = countWorkingDaysInMonth();
+      const tw = countWorkingDaysForPersonInMonth(p);
       const pct = tw ? Math.round((cP/tw)*100) : 0;
       body += `<td class="sum-cell" style="color:var(--c-ferias)">${cFE}</td><td class="sum-cell" style="color:var(--c-presente)">${cP}</td><td class="sum-cell" style="color:var(--c-fjust)">${cFJ}</td><td class="sum-cell" style="color:var(--c-finjust)">${cFI}</td><td class="sum-cell" style="color:var(--c-baixa)">${cB}</td><td class="sum-cell pct">${pct}%</td></tr>`;
     });
@@ -2605,7 +2636,8 @@ function renderAssidLegend(){
   box.innerHTML = `<div class="legend-item"><div class="legend-box" style="background:var(--c-ferias);background-image:repeating-linear-gradient(45deg,rgba(255,255,255,0.25) 0 3px,transparent 3px 6px)">${FERIAS_STATUS.short}</div>Férias (automático)</div>`
     + STATUSES.map(s => `<div class="legend-item"><div class="legend-box" style="background:${s.color}">${s.short}</div>${s.label}</div>`).join('')
     + `<div class="legend-item"><div class="legend-box" style="background:#f5f5f7;color:#bbb">–</div>Fim de semana</div>`
-    + `<div class="legend-item"><div class="legend-box" style="background:#fff4e6;color:#f97316">F</div>Feriado nacional</div>`;
+    + `<div class="legend-item"><div class="legend-box" style="background:#fff4e6;color:#f97316">F</div>Feriado nacional</div>`
+    + `<div class="legend-item"><div class="legend-box" style="background:#f1f5f9;color:#94a3b8">–</div>Fora da entrada/saída</div>`;
 }
 function renderAssidStats(){
   const bar = document.getElementById('assidStats');
@@ -2613,7 +2645,15 @@ function renderAssidStats(){
   const workDays = countWorkingDaysInMonth();
   let tP=0,tFJ=0,tFI=0,tB=0,tFE=0;
   const apsStat = activePersons();
-  apsStat.forEach(p => { for (let d=1; d<=dim; d++){ const ds=dateStrOf(currentMonth,d); const c=getRec(p.id, ds); if (c==='P') tP++; else if (c==='FE') tFE++; else if (c==='FJ') tFJ++; else if (c==='FI') tFI++; else if (c==='B') tB++; else if (!c && isWorkingDay(ds) && isOnVacation(p.id, ds)) tFE++; } });
+  apsStat.forEach(p => {
+    for (let d=1; d<=dim; d++){
+      const ds=dateStrOf(currentMonth,d);
+      if (!isWorkingDay(ds) || !isPersonDateActive(p, ds)) continue;
+      const c=getRec(p.id, ds);
+      if (c==='P') tP++; else if (c==='FE') tFE++; else if (c==='FJ') tFJ++; else if (c==='FI') tFI++; else if (c==='B') tB++;
+      else if (!c && isOnVacation(p.id, ds)) tFE++;
+    }
+  });
   bar.innerHTML = `
     <div class="stat-card"><div class="stat-value">${apsStat.length}</div><div class="stat-label">Colaboradores</div></div>
     <div class="stat-card"><div class="stat-value">${workDays}</div><div class="stat-label">Dias úteis no mês</div></div>
@@ -2681,6 +2721,7 @@ function absenceSummary(activePeople){
 
   activePeople.forEach(p => {
     dates.forEach(ds => {
+      if (!isPersonDateActive(p, ds)) return;
       const code = getRec(p.id, ds);
       let type = '';
       if (code === 'FE' || code === 'FJ' || code === 'FI' || code === 'B') type = code;
@@ -3773,6 +3814,7 @@ function doPrintAssid(){
       const we = dow===0||dow===6; const hol = HOLIDAYS_2026.has(ds);
       if (we){ tds += '<td class="we"></td>'; continue; }
       if (hol){ tds += '<td class="we" style="color:#f97316;font-weight:700">F</td>'; continue; }
+      if (!isPersonDateActive(p, ds)){ tds += '<td class="we" style="color:#94a3b8;font-weight:700">–</td>'; continue; }
       const code = getRec(p.id, ds);
       if (code){
         if (code==='P') cP++; else if (code==='FE') cFE++; else if (code==='FJ') cFJ++; else if (code==='FI') cFI++; else if (code==='B') cB++;
