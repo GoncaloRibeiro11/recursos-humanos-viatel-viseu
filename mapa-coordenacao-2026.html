@@ -1762,13 +1762,13 @@ async function drawIdCardCanvas(person){
   const waPhone = whatsappPhone(person.telefone);
   if (waPhone){
     ctx.fillStyle = '#ffffff';
-    canvasRoundRect(ctx, 489, 213, 102, 102, 12);
+    canvasRoundRect(ctx, 456, 180, 134, 134, 14);
     ctx.fill();
     ctx.strokeStyle = '#dbeafe';
     ctx.lineWidth = 2;
-    canvasRoundRect(ctx, 489, 213, 102, 102, 12);
+    canvasRoundRect(ctx, 456, 180, 134, 134, 14);
     ctx.stroke();
-    drawQrCode(ctx, 'https://wa.me/' + waPhone, 497, 221, 86);
+    drawQrCode(ctx, 'https://wa.me/' + waPhone, 464, 188, 118);
   }
 
   ctx.fillStyle = blue;
