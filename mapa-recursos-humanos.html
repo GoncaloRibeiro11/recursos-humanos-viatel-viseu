@@ -1141,6 +1141,14 @@ function formatPhone(value){
   if (!digits) return '';
   return digits.replace(/(\d{3})(?=\d)/g, '$1 ').trim();
 }
+function whatsappPhone(value){
+  const digits = normalizePhone(value);
+  if (!digits) return '';
+  if (digits.startsWith('00')) return digits.slice(2);
+  if (digits.startsWith('351')) return digits;
+  if (digits.length === 9) return '351' + digits;
+  return digits;
+}
 function initials(name){ const p = name.trim().split(/\s+/); return p.length===1 ? p[0].slice(0,2).toUpperCase() : (p[0][0]+p[p.length-1][0]).toUpperCase(); }
 function isActive(pid){ const p = state.persons.find(pp => pp.id === pid); return !!p && p.ativo !== false; }
 function activePersons(){ return state.persons.filter(p => p.ativo !== false); }
@@ -1575,6 +1583,124 @@ function drawImageCover(ctx, img, x, y, w, h, focusX = 0.5, focusY = 0.43, zoom 
     ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
   }
 }
+function qrGfMul(x, y){
+  let z = 0;
+  for (let i = 7; i >= 0; i--){
+    z = (z << 1) ^ ((z >>> 7) * 0x11d);
+    if ((y >>> i) & 1) z ^= x;
+  }
+  return z & 255;
+}
+function qrReedSolomon(data, degree){
+  const divisor = Array(degree).fill(0);
+  divisor[degree - 1] = 1;
+  let root = 1;
+  for (let i = 0; i < degree; i++){
+    for (let j = 0; j < degree; j++){
+      divisor[j] = qrGfMul(divisor[j], root);
+      if (j + 1 < degree) divisor[j] ^= divisor[j + 1];
+    }
+    root = qrGfMul(root, 2);
+  }
+  const rem = Array(degree).fill(0);
+  data.forEach(byte => {
+    const factor = byte ^ rem.shift();
+    rem.push(0);
+    divisor.forEach((coef, idx) => { rem[idx] ^= qrGfMul(coef, factor); });
+  });
+  return rem;
+}
+function qrFormatBits(mask){
+  const data = (1 << 3) | mask; // ECC level L
+  let rem = data;
+  for (let i = 0; i < 10; i++) rem = (rem << 1) ^ (((rem >>> 9) & 1) ? 0x537 : 0);
+  return ((data << 10) | (rem & 0x3ff)) ^ 0x5412;
+}
+function makeQrMatrix(text){
+  const version = 3;
+  const size = 29;
+  const dataCodewords = 55;
+  const eccCodewords = 15;
+  const bytes = Array.from(new TextEncoder().encode(text)).slice(0, 50);
+  const bits = [];
+  const put = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1); };
+  put(0x4, 4);
+  put(bytes.length, 8);
+  bytes.forEach(b => put(b, 8));
+  put(0, Math.min(4, dataCodewords * 8 - bits.length));
+  while (bits.length % 8) bits.push(0);
+  const data = [];
+  for (let i = 0; i < bits.length; i += 8) data.push(bits.slice(i, i + 8).reduce((v, b) => (v << 1) | b, 0));
+  for (let pad = 0xec; data.length < dataCodewords; pad ^= 0xfd) data.push(pad);
+  const codewords = data.concat(qrReedSolomon(data, eccCodewords));
+  const m = Array.from({length:size}, () => Array(size).fill(false));
+  const r = Array.from({length:size}, () => Array(size).fill(false));
+  const set = (x, y, dark, reserved = true) => {
+    if (x < 0 || y < 0 || x >= size || y >= size) return;
+    m[y][x] = !!dark;
+    if (reserved) r[y][x] = true;
+  };
+  const finder = (x, y) => {
+    for (let dy = -1; dy <= 7; dy++) for (let dx = -1; dx <= 7; dx++){
+      const xx = x + dx, yy = y + dy;
+      const dark = dx >= 0 && dx <= 6 && dy >= 0 && dy <= 6 && (dx === 0 || dx === 6 || dy === 0 || dy === 6 || (dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4));
+      set(xx, yy, dark);
+    }
+  };
+  finder(0,0); finder(size - 7,0); finder(0,size - 7);
+  for (let i = 8; i < size - 8; i++){
+    set(i, 6, i % 2 === 0);
+    set(6, i, i % 2 === 0);
+  }
+  for (let y = 20; y <= 24; y++) for (let x = 20; x <= 24; x++){
+    set(x, y, x === 20 || x === 24 || y === 20 || y === 24 || (x === 22 && y === 22));
+  }
+  set(8, 21, true);
+  for (let i = 0; i < 9; i++){ set(8, i, false); set(i, 8, false); }
+  for (let i = 0; i < 8; i++){ set(size - 1 - i, 8, false); set(8, size - 1 - i, false); }
+  const allBits = [];
+  codewords.forEach(b => putToArray(allBits, b, 8));
+  let idx = 0, upward = true;
+  for (let x = size - 1; x > 0; x -= 2){
+    if (x === 6) x--;
+    for (let yy = 0; yy < size; yy++){
+      const y = upward ? size - 1 - yy : yy;
+      for (let dx = 0; dx < 2; dx++){
+        const xx = x - dx;
+        if (r[y][xx]) continue;
+        const dark = (allBits[idx++] || 0) === 1;
+        m[y][xx] = dark ^ ((xx + y) % 2 === 0);
+      }
+    }
+    upward = !upward;
+  }
+  const fmt = qrFormatBits(0);
+  const bit = i => ((fmt >>> i) & 1) !== 0;
+  for (let i = 0; i <= 5; i++) set(8, i, bit(i));
+  set(8, 7, bit(6)); set(8, 8, bit(7)); set(7, 8, bit(8));
+  for (let i = 9; i < 15; i++) set(14 - i, 8, bit(i));
+  for (let i = 0; i < 8; i++) set(size - 1 - i, 8, bit(i));
+  for (let i = 8; i < 15; i++) set(8, size - 15 + i, bit(i));
+  return m;
+}
+function putToArray(arr, val, len){
+  for (let i = len - 1; i >= 0; i--) arr.push((val >>> i) & 1);
+}
+function drawQrCode(ctx, text, x, y, size){
+  const matrix = makeQrMatrix(text);
+  const quiet = 4;
+  const modules = matrix.length + quiet * 2;
+  const cell = Math.floor(size / modules);
+  const drawn = cell * modules;
+  const ox = x + Math.floor((size - drawn) / 2);
+  const oy = y + Math.floor((size - drawn) / 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(x, y, size, size);
+  ctx.fillStyle = '#111827';
+  matrix.forEach((row, yy) => row.forEach((dark, xx) => {
+    if (dark) ctx.fillRect(ox + (xx + quiet) * cell, oy + (yy + quiet) * cell, cell, cell);
+  }));
+}
 function canvasToBlob(canvas, type='image/png', quality=0.95){
   return new Promise(resolve => canvas.toBlob(resolve, type, quality));
 }
@@ -1632,6 +1758,19 @@ async function drawIdCardCanvas(person){
     drawCenteredText(ctx, initials(person.name || ''), 701, 184, 150, '700 54px Segoe UI, Arial', '#ffffff');
   }
   ctx.restore();
+
+  const waPhone = whatsappPhone(person.telefone);
+  if (waPhone){
+    ctx.fillStyle = '#ffffff';
+    canvasRoundRect(ctx, 493, 219, 91, 112, 12);
+    ctx.fill();
+    ctx.strokeStyle = '#dbeafe';
+    ctx.lineWidth = 2;
+    canvasRoundRect(ctx, 493, 219, 91, 112, 12);
+    ctx.stroke();
+    drawQrCode(ctx, 'https://wa.me/' + waPhone, 501, 226, 76);
+    drawCenteredText(ctx, 'WhatsApp', 538, 314, 74, '700 11px Segoe UI, Arial', navy);
+  }
 
   ctx.fillStyle = blue;
   canvasRoundRect(ctx, 37, 351, 755, 71, 35);
