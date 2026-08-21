@@ -426,6 +426,12 @@
   }
   #viewAssid .month-nav button:hover { background: #f0f0f0; }
   #viewAssid .month-label { font-size: 16px; font-weight: 600; min-width: 180px; text-align: center; text-transform: capitalize; }
+  #viewAssid .assid-period-toggle { display: flex; gap: 4px; padding: 3px; border-radius: 9px; background: #f1f5f9; }
+  #viewAssid .assid-period-toggle button {
+    height: 30px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent;
+    cursor: pointer; font-size: 12px; font-weight: 700; color: var(--text-muted);
+  }
+  #viewAssid .assid-period-toggle button.active { background: var(--surface); color: var(--accent); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
 
   #viewAssid .assid-filters { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
   #viewAssid .assid-filter { display: flex; flex-direction: column; gap: 3px; min-width: 142px; }
@@ -890,6 +896,10 @@
       <div class="month-label" id="monthLabel"></div>
       <button onclick="changeMonth(1)" title="Mês seguinte">›</button>
     </div>
+    <div class="assid-period-toggle">
+      <button id="assidModePayroll" class="active" onclick="setAssidPeriodMode('payroll')">Ponto 21-20</button>
+      <button id="assidModeMonth" onclick="setAssidPeriodMode('month')">Mês</button>
+    </div>
     <div class="assid-filters" id="assidFilters"></div>
     <div class="paint-modes" id="paintModes"><span class="paint-label">Marcar:</span></div>
   </div>
@@ -1129,6 +1139,7 @@ let activeTab = 'rh';
 let selectedPerson = null;
 let selectedColor = COLORS[0];
 let currentMonth = (new Date().getFullYear() === YEAR) ? new Date().getMonth() : 0;
+let assidPeriodMode = 'payroll';
 let feriasView = 'month';
 let feriasWeekStart = '';
 let paintCode = 'P';
@@ -2168,6 +2179,34 @@ function countWorkingDaysForPersonInMonth(person){
   }
   return n;
 }
+function assidPeriodDates(){
+  const dates = [];
+  let start, end;
+  if (assidPeriodMode === 'payroll'){
+    start = new Date(YEAR, currentMonth - 1, 21);
+    end = new Date(YEAR, currentMonth, 20);
+  } else {
+    start = new Date(YEAR, currentMonth, 1);
+    end = new Date(YEAR, currentMonth + 1, 0);
+  }
+  const d = new Date(start);
+  while (d <= end){
+    dates.push(isoDate(d.getFullYear(), d.getMonth() + 1, d.getDate()));
+    d.setDate(d.getDate() + 1);
+  }
+  return dates;
+}
+function assidPeriodLabel(){
+  if (assidPeriodMode !== 'payroll') return MONTH_NAMES[currentMonth];
+  const dates = assidPeriodDates();
+  return `Ponto ${formatDatePt(dates[0]).slice(0,5)} a ${formatDatePt(dates[dates.length - 1]).slice(0,5)}`;
+}
+function countWorkingDaysInAssidPeriod(){
+  return assidPeriodDates().filter(ds => isWorkingDay(ds)).length;
+}
+function countWorkingDaysForPersonInAssidPeriod(person){
+  return assidPeriodDates().filter(ds => isWorkingDay(ds) && isPersonDateActive(person, ds)).length;
+}
 
 // ===================== STORAGE + MIGRATION =====================
 const STORAGE_KEY = 'mapa-coordenacao-2026';
@@ -2715,6 +2754,18 @@ function cellClick(pid, dateStr){
   save(); renderSheet(); renderAssidStats();
 }
 function changeMonth(delta){ currentMonth = Math.max(0, Math.min(11, currentMonth+delta)); renderSheet(); renderAssidStats(); }
+function setAssidPeriodMode(mode){
+  assidPeriodMode = mode === 'month' ? 'month' : 'payroll';
+  renderAssidPeriodButtons();
+  renderSheet();
+  renderAssidStats();
+}
+function renderAssidPeriodButtons(){
+  const payroll = document.getElementById('assidModePayroll');
+  const month = document.getElementById('assidModeMonth');
+  if (payroll) payroll.classList.toggle('active', assidPeriodMode === 'payroll');
+  if (month) month.classList.toggle('active', assidPeriodMode === 'month');
+}
 
 function renderPaintModes(){
   const box = document.getElementById('paintModes');
@@ -2776,23 +2827,25 @@ function clearAssidFilters(){
   renderAssidStats();
 }
 function renderSheet(){
-  document.getElementById('monthLabel').textContent = MONTH_NAMES[currentMonth];
+  document.getElementById('monthLabel').textContent = assidPeriodLabel();
   const table = document.getElementById('sheet');
-  const dim = new Date(YEAR, currentMonth+1, 0).getDate();
+  const dates = assidPeriodDates();
   let head = '<thead><tr><th class="col-name">Colaborador</th>';
-  for (let d=1; d<=dim; d++){
-    const ds = dateStrOf(currentMonth, d);
-    const dow = new Date(YEAR, currentMonth, d).getDay();
+  dates.forEach(ds => {
+    const dt = new Date(ds + 'T00:00:00');
+    const d = dt.getDate();
+    const dow = dt.getDay();
     const we = dow===0||dow===6;
     const hol = HOLIDAYS_2026.has(ds);
     const cls = 'day-th' + (we?' weekend':'') + (hol?' holiday':'');
-    head += `<th class="${cls}" title="${hol?(HOLIDAY_NAMES[ds]||'Feriado'):''}">${d}<span class="dow">${DAY_NAMES[dow][0]}</span></th>`;
-  }
+    const monthBit = assidPeriodMode === 'payroll' ? `<span class="dow">${MONTH_NAMES[dt.getMonth()].slice(0,3)}</span>` : `<span class="dow">${DAY_NAMES[dow][0]}</span>`;
+    head += `<th class="${cls}" title="${escHtml(formatDatePt(ds) + (hol ? ' · ' + (HOLIDAY_NAMES[ds] || 'Feriado') : ''))}">${d}${monthBit}</th>`;
+  });
   head += '<th class="sum-th" title="Férias">Fé</th><th class="sum-th" title="Presenças">P</th><th class="sum-th" title="Faltas justificadas">FJ</th><th class="sum-th" title="Faltas injustificadas">FI</th><th class="sum-th" title="Baixa médica">B</th><th class="sum-th" title="% presença em dias úteis">%</th></tr></thead>';
   let body = '<tbody>';
   const apsSheet = filteredAssidPersons();
   if (apsSheet.length === 0){
-    body += `<tr><td class="col-name">—</td><td colspan="${dim+6}"><div class="empty-state">Nenhum colaborador encontrado com os filtros atuais.</div></td></tr>`;
+    body += `<tr><td class="col-name">—</td><td colspan="${dates.length+6}"><div class="empty-state">Nenhum colaborador encontrado com os filtros atuais.</div></td></tr>`;
   } else {
     apsSheet.forEach(p => {
       const roleStr = p.role && ROLE_LABELS[p.role] ? ROLE_LABELS[p.role] : '';
@@ -2800,31 +2853,32 @@ function renderSheet(){
         ${avatarHtml(p, 24)}
         <div class="name-text"><span>${escHtml(p.name)}</span>${roleStr?`<span class="name-role">${roleStr}</span>`:''}</div></div></td>`;
       let cP=0,cFJ=0,cFI=0,cB=0,cFE=0;
-      for (let d=1; d<=dim; d++){
-        const ds = dateStrOf(currentMonth, d);
-        const dow = new Date(YEAR, currentMonth, d).getDay();
+      for (const ds of dates){
+        const dt = new Date(ds + 'T00:00:00');
+        const d = dt.getDate();
+        const dow = dt.getDay();
         const we = dow===0||dow===6;
         const hol = HOLIDAYS_2026.has(ds);
         if (we){ body += `<td class="day-cell weekend"></td>`; continue; }
         if (hol){ body += `<td class="day-cell holiday" title="Feriado: ${escHtml(HOLIDAY_NAMES[ds]||'Feriado')}">F</td>`; continue; }
         if (!isPersonDateActive(p, ds)){
           const reason = personDateLockReason(p, ds);
-          body += `<td class="day-cell locked" title="${escHtml(MONTH_NAMES[currentMonth] + ' ' + d + ' · ' + reason)}">–</td>`;
+          body += `<td class="day-cell locked" title="${escHtml(formatDatePt(ds) + ' · ' + reason)}">–</td>`;
           continue;
         }
         const code = getRec(p.id, ds);
         if (code){
           if (code==='P') cP++; else if (code==='FE') cFE++; else if (code==='FJ') cFJ++; else if (code==='FI') cFI++; else if (code==='B') cB++;
           const st = STATUS_MAP[code];
-          body += `<td class="day-cell" style="background:${st.color}" onclick="cellClick('${p.id}','${ds}')" title="${MONTH_NAMES[currentMonth]} ${d} · ${st.label}">${st.short}</td>`;
+          body += `<td class="day-cell" style="background:${st.color}" onclick="cellClick('${p.id}','${ds}')" title="${formatDatePt(ds)} · ${st.label}">${st.short}</td>`;
         } else if (isOnVacation(p.id, ds)){
           cFE++;
-          body += `<td class="day-cell ferias" onclick="cellClick('${p.id}','${ds}')" title="${MONTH_NAMES[currentMonth]} ${d} · Férias (do mapa de férias)">${FERIAS_STATUS.short}</td>`;
+          body += `<td class="day-cell ferias" onclick="cellClick('${p.id}','${ds}')" title="${formatDatePt(ds)} · Férias (do mapa de férias)">${FERIAS_STATUS.short}</td>`;
         } else {
-          body += `<td class="day-cell" onclick="cellClick('${p.id}','${ds}')" title="${MONTH_NAMES[currentMonth]} ${d}"></td>`;
+          body += `<td class="day-cell" onclick="cellClick('${p.id}','${ds}')" title="${formatDatePt(ds)}"></td>`;
         }
       }
-      const tw = countWorkingDaysForPersonInMonth(p);
+      const tw = countWorkingDaysForPersonInAssidPeriod(p);
       const pct = tw ? Math.round((cP/tw)*100) : 0;
       body += `<td class="sum-cell" style="color:var(--c-ferias)">${cFE}</td><td class="sum-cell" style="color:var(--c-presente)">${cP}</td><td class="sum-cell" style="color:var(--c-fjust)">${cFJ}</td><td class="sum-cell" style="color:var(--c-finjust)">${cFI}</td><td class="sum-cell" style="color:var(--c-baixa)">${cB}</td><td class="sum-cell pct">${pct}%</td></tr>`;
     });
@@ -2842,13 +2896,12 @@ function renderAssidLegend(){
 }
 function renderAssidStats(){
   const bar = document.getElementById('assidStats');
-  const dim = new Date(YEAR, currentMonth+1, 0).getDate();
-  const workDays = countWorkingDaysInMonth();
+  const dates = assidPeriodDates();
+  const workDays = countWorkingDaysInAssidPeriod();
   let tP=0,tFJ=0,tFI=0,tB=0,tFE=0;
   const apsStat = filteredAssidPersons();
   apsStat.forEach(p => {
-    for (let d=1; d<=dim; d++){
-      const ds=dateStrOf(currentMonth,d);
+    for (const ds of dates){
       if (!isWorkingDay(ds) || !isPersonDateActive(p, ds)) continue;
       const c=getRec(p.id, ds);
       if (c==='P') tP++; else if (c==='FE') tFE++; else if (c==='FJ') tFJ++; else if (c==='FI') tFI++; else if (c==='B') tB++;
@@ -3245,7 +3298,7 @@ function renderAll(){
   } else if (activeTab === 'ferias'){
     renderFeriasSidebar(); renderCalendar(); renderFeriasStats();
   } else if (activeTab === 'assid'){
-    renderAssidFilters(); renderPaintModes(); renderSheet(); renderAssidLegend(); renderAssidStats();
+    renderAssidPeriodButtons(); renderAssidFilters(); renderPaintModes(); renderSheet(); renderAssidLegend(); renderAssidStats();
   } else if (activeTab === 'rh'){
     renderRH(); renderColorPicker();
   }
@@ -3997,21 +4050,23 @@ function doPrintFerias(){
 
 // --- Assiduidade print ---
 function doPrintAssid(){
-  const dim = new Date(YEAR, currentMonth+1, 0).getDate();
+  const dates = assidPeriodDates();
   const now = new Date().toLocaleDateString('pt-PT');
   let head = '<tr><th class="pname">Colaborador</th>';
-  for (let d=1; d<=dim; d++){
-    const dow = new Date(YEAR, currentMonth, d).getDay();
-    const we = (dow===0||dow===6) || HOLIDAYS_2026.has(dateStrOf(currentMonth,d));
-    head += `<th class="${we?'we':''}">${d}</th>`;
-  }
+  dates.forEach(ds => {
+    const dt = new Date(ds + 'T00:00:00');
+    const dow = dt.getDay();
+    const we = (dow===0||dow===6) || HOLIDAYS_2026.has(ds);
+    const monthBit = assidPeriodMode === 'payroll' ? `<br><span style="font-size:8px;color:#888">${MONTH_NAMES[dt.getMonth()].slice(0,3)}</span>` : '';
+    head += `<th class="${we?'we':''}">${dt.getDate()}${monthBit}</th>`;
+  });
   head += '<th>Fé</th><th>P</th><th>FJ</th><th>FI</th><th>B</th></tr>';
   let rows = '';
   filteredAssidPersons().forEach(p => {
     let cP=0,cFJ=0,cFI=0,cB=0,cFE=0; let tds = `<td class="pname">${escHtml(p.name)}</td>`;
-    for (let d=1; d<=dim; d++){
-      const ds = dateStrOf(currentMonth, d);
-      const dow = new Date(YEAR, currentMonth, d).getDay();
+    for (const ds of dates){
+      const dt = new Date(ds + 'T00:00:00');
+      const dow = dt.getDay();
       const we = dow===0||dow===6; const hol = HOLIDAYS_2026.has(ds);
       if (we){ tds += '<td class="we"></td>'; continue; }
       if (hol){ tds += '<td class="we" style="color:#f97316;font-weight:700">F</td>'; continue; }
@@ -4032,7 +4087,7 @@ function doPrintAssid(){
     rows += `<tr>${tds}</tr>`;
   });
   const legend = `<div class="print-legend-item"><div class="print-legend-box" style="background:${FERIAS_STATUS.raw}">${FERIAS_STATUS.short}</div>${FERIAS_STATUS.label}</div>` + STATUSES.map(s => `<div class="print-legend-item"><div class="print-legend-box" style="background:${s.raw}">${s.short}</div>${s.label}</div>`).join('');
-  document.getElementById('printArea').innerHTML = `<div class="print-title">🗓️ Mapa de Assiduidade — ${MONTH_NAMES[currentMonth]}</div><div class="print-subtitle">Recursos Humanos · Impresso em ${now}</div><div class="print-legend">${legend}</div><table class="print-sheet"><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+  document.getElementById('printArea').innerHTML = `<div class="print-title">🗓️ Mapa de Assiduidade — ${assidPeriodLabel()}</div><div class="print-subtitle">Recursos Humanos · Impresso em ${now}</div><div class="print-legend">${legend}</div><table class="print-sheet"><thead>${head}</thead><tbody>${rows}</tbody></table>`;
   closeModal('printAssidModal');
   setTimeout(() => window.print(), 100);
 }
