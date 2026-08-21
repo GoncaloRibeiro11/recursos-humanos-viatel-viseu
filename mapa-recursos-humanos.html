@@ -441,6 +441,9 @@
     height: 32px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface);
     padding: 0 9px; font-size: 12px; color: var(--text);
   }
+  #viewAssid .assid-filter select[multiple] {
+    height: 74px; padding: 4px 6px; min-width: 156px;
+  }
   #viewAssid .assid-clear-btn {
     height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px;
     background: var(--surface); cursor: pointer; font-size: 12px; color: var(--text-muted);
@@ -1145,7 +1148,7 @@ let feriasWeekStart = '';
 let paintCode = 'P';
 let editingVacId = null;
 let rhFilters = { name:'', role:'', chefe:'', empresa:'', carga:'', entrada:'', nascimento:'', saida:'', ativo:'' };
-let assidFilters = { name:'', role:'', chefe:'', empresa:'', carga:'' };
+let assidFilters = { name:'', role:[], chefe:[], empresa:[], carga:[] };
 let rhEditingId = null;
 let rhShowInactive = false;
 let pendingExitPersonId = null;
@@ -2779,15 +2782,26 @@ function renderPaintModes(){
     box.appendChild(btn);
   });
 }
+function assidFilterValues(field){
+  const value = assidFilters[field];
+  if (Array.isArray(value)) return value;
+  return value ? [value] : [];
+}
+function assidMultiSelected(select){
+  return Array.from(select.selectedOptions).map(opt => opt.value).filter(Boolean);
+}
 function filteredAssidPersons(){
   const name = normalizeFilterText(assidFilters.name);
-  const empresa = normalizeFilterText(assidFilters.empresa);
+  const roles = assidFilterValues('role');
+  const chefes = assidFilterValues('chefe');
+  const empresas = assidFilterValues('empresa').map(normalizeFilterText);
+  const cargas = assidFilterValues('carga');
   return activePersons().filter(p =>
     (!name || normalizeFilterText(p.name).includes(name)) &&
-    (!assidFilters.role || p.role === assidFilters.role) &&
-    (!assidFilters.chefe || p.chefeId === assidFilters.chefe) &&
-    (!empresa || normalizeFilterText(p.empresa) === empresa) &&
-    (!assidFilters.carga || p.carga === assidFilters.carga)
+    (!roles.length || roles.includes(p.role)) &&
+    (!chefes.length || chefes.includes(p.chefeId)) &&
+    (!empresas.length || empresas.includes(normalizeFilterText(p.empresa))) &&
+    (!cargas.length || cargas.includes(p.carga))
   );
 }
 function renderAssidFilters(){
@@ -2803,16 +2817,20 @@ function renderAssidFilters(){
     .sort((a,b) => a.localeCompare(b));
   const cargas = [...new Set(active.map(p => p.carga).filter(Boolean))]
     .sort((a,b) => (CARGA_LABELS[a] || a).localeCompare(CARGA_LABELS[b] || b));
-  const roleOptions = roles.map(role => `<option value="${escHtml(role)}" ${assidFilters.role===role?'selected':''}>${escHtml(ROLE_LABELS[role] || role)}</option>`).join('');
-  const chefeOptions = chefes.map(p => `<option value="${escHtml(p.id)}" ${assidFilters.chefe===p.id?'selected':''}>${escHtml(p.name)}</option>`).join('');
-  const empresaOptions = empresas.map(empresa => `<option value="${escHtml(empresa)}" ${assidFilters.empresa===empresa?'selected':''}>${escHtml(empresa)}</option>`).join('');
-  const cargaOptions = cargas.map(carga => `<option value="${escHtml(carga)}" ${assidFilters.carga===carga?'selected':''}>${escHtml(CARGA_LABELS[carga] || carga)}</option>`).join('');
+  const selectedRoles = assidFilterValues('role');
+  const selectedChefes = assidFilterValues('chefe');
+  const selectedEmpresas = assidFilterValues('empresa');
+  const selectedCargas = assidFilterValues('carga');
+  const roleOptions = roles.map(role => `<option value="${escHtml(role)}" ${selectedRoles.includes(role)?'selected':''}>${escHtml(ROLE_LABELS[role] || role)}</option>`).join('');
+  const chefeOptions = chefes.map(p => `<option value="${escHtml(p.id)}" ${selectedChefes.includes(p.id)?'selected':''}>${escHtml(p.name)}</option>`).join('');
+  const empresaOptions = empresas.map(empresa => `<option value="${escHtml(empresa)}" ${selectedEmpresas.includes(empresa)?'selected':''}>${escHtml(empresa)}</option>`).join('');
+  const cargaOptions = cargas.map(carga => `<option value="${escHtml(carga)}" ${selectedCargas.includes(carga)?'selected':''}>${escHtml(CARGA_LABELS[carga] || carga)}</option>`).join('');
   box.innerHTML = `
     <div class="assid-filter"><label>Colaborador</label><input value="${escHtml(assidFilters.name)}" placeholder="Filtrar..." oninput="assidSetFilter('name', this.value)"></div>
-    <div class="assid-filter"><label>Função</label><select onchange="assidSetFilter('role', this.value)"><option value="">Todas</option>${roleOptions}</select></div>
-    <div class="assid-filter"><label>Chefe</label><select onchange="assidSetFilter('chefe', this.value)"><option value="">Todos</option>${chefeOptions}</select></div>
-    <div class="assid-filter"><label>Empresa</label><select onchange="assidSetFilter('empresa', this.value)"><option value="">Todas</option>${empresaOptions}</select></div>
-    <div class="assid-filter"><label>Carga horária</label><select onchange="assidSetFilter('carga', this.value)"><option value="">Todas</option>${cargaOptions}</select></div>
+    <div class="assid-filter"><label>Função</label><select multiple size="3" onchange="assidSetMultiFilter('role', this)">${roleOptions}</select></div>
+    <div class="assid-filter"><label>Chefe</label><select multiple size="3" onchange="assidSetMultiFilter('chefe', this)">${chefeOptions}</select></div>
+    <div class="assid-filter"><label>Empresa</label><select multiple size="3" onchange="assidSetMultiFilter('empresa', this)">${empresaOptions}</select></div>
+    <div class="assid-filter"><label>Carga horária</label><select multiple size="3" onchange="assidSetMultiFilter('carga', this)">${cargaOptions}</select></div>
     <button class="assid-clear-btn" onclick="clearAssidFilters()">Limpar</button>`;
 }
 function assidSetFilter(field, value){
@@ -2820,8 +2838,13 @@ function assidSetFilter(field, value){
   renderSheet();
   renderAssidStats();
 }
+function assidSetMultiFilter(field, select){
+  assidFilters[field] = assidMultiSelected(select);
+  renderSheet();
+  renderAssidStats();
+}
 function clearAssidFilters(){
-  assidFilters = { name:'', role:'', chefe:'', empresa:'', carga:'' };
+  assidFilters = { name:'', role:[], chefe:[], empresa:[], carga:[] };
   renderAssidFilters();
   renderSheet();
   renderAssidStats();
