@@ -427,6 +427,20 @@
   #viewAssid .month-nav button:hover { background: #f0f0f0; }
   #viewAssid .month-label { font-size: 16px; font-weight: 600; min-width: 180px; text-align: center; text-transform: capitalize; }
 
+  #viewAssid .assid-filters { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+  #viewAssid .assid-filter { display: flex; flex-direction: column; gap: 3px; min-width: 142px; }
+  #viewAssid .assid-filter label { font-size: 10px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; }
+  #viewAssid .assid-filter input,
+  #viewAssid .assid-filter select {
+    height: 32px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface);
+    padding: 0 9px; font-size: 12px; color: var(--text);
+  }
+  #viewAssid .assid-clear-btn {
+    height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px;
+    background: var(--surface); cursor: pointer; font-size: 12px; color: var(--text-muted);
+  }
+  #viewAssid .assid-clear-btn:hover { background: #f5f5f7; color: var(--text); }
+
   #viewAssid .paint-modes { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   #viewAssid .paint-label { font-size: 12px; color: var(--text-muted); font-weight: 600; }
   #viewAssid .paint-btn {
@@ -876,6 +890,7 @@
       <div class="month-label" id="monthLabel"></div>
       <button onclick="changeMonth(1)" title="Mês seguinte">›</button>
     </div>
+    <div class="assid-filters" id="assidFilters"></div>
     <div class="paint-modes" id="paintModes"><span class="paint-label">Marcar:</span></div>
   </div>
   <div class="main">
@@ -1119,6 +1134,7 @@ let feriasWeekStart = '';
 let paintCode = 'P';
 let editingVacId = null;
 let rhFilters = { name:'', role:'', chefe:'', empresa:'', carga:'', entrada:'', nascimento:'', saida:'', ativo:'' };
+let assidFilters = { name:'', role:'', chefe:'' };
 let rhEditingId = null;
 let rhShowInactive = false;
 let pendingExitPersonId = null;
@@ -2712,6 +2728,42 @@ function renderPaintModes(){
     box.appendChild(btn);
   });
 }
+function filteredAssidPersons(){
+  const name = normalizeFilterText(assidFilters.name);
+  return activePersons().filter(p =>
+    (!name || normalizeFilterText(p.name).includes(name)) &&
+    (!assidFilters.role || p.role === assidFilters.role) &&
+    (!assidFilters.chefe || p.chefeId === assidFilters.chefe)
+  );
+}
+function renderAssidFilters(){
+  const box = document.getElementById('assidFilters');
+  if (!box) return;
+  const active = activePersons();
+  const roles = [...new Set(active.map(p => p.role).filter(Boolean))]
+    .sort((a,b) => (ROLE_LABELS[a] || a).localeCompare(ROLE_LABELS[b] || b));
+  const chefeIds = [...new Set(active.map(p => p.chefeId).filter(Boolean))];
+  const chefes = chefeIds.map(id => state.persons.find(p => p.id === id)).filter(Boolean)
+    .sort((a,b) => a.name.localeCompare(b.name));
+  const roleOptions = roles.map(role => `<option value="${escHtml(role)}" ${assidFilters.role===role?'selected':''}>${escHtml(ROLE_LABELS[role] || role)}</option>`).join('');
+  const chefeOptions = chefes.map(p => `<option value="${escHtml(p.id)}" ${assidFilters.chefe===p.id?'selected':''}>${escHtml(p.name)}</option>`).join('');
+  box.innerHTML = `
+    <div class="assid-filter"><label>Colaborador</label><input value="${escHtml(assidFilters.name)}" placeholder="Filtrar..." oninput="assidSetFilter('name', this.value)"></div>
+    <div class="assid-filter"><label>Função</label><select onchange="assidSetFilter('role', this.value)"><option value="">Todas</option>${roleOptions}</select></div>
+    <div class="assid-filter"><label>Chefe</label><select onchange="assidSetFilter('chefe', this.value)"><option value="">Todos</option>${chefeOptions}</select></div>
+    <button class="assid-clear-btn" onclick="clearAssidFilters()">Limpar</button>`;
+}
+function assidSetFilter(field, value){
+  assidFilters[field] = value;
+  renderSheet();
+  renderAssidStats();
+}
+function clearAssidFilters(){
+  assidFilters = { name:'', role:'', chefe:'' };
+  renderAssidFilters();
+  renderSheet();
+  renderAssidStats();
+}
 function renderSheet(){
   document.getElementById('monthLabel').textContent = MONTH_NAMES[currentMonth];
   const table = document.getElementById('sheet');
@@ -2727,9 +2779,9 @@ function renderSheet(){
   }
   head += '<th class="sum-th" title="Férias">Fé</th><th class="sum-th" title="Presenças">P</th><th class="sum-th" title="Faltas justificadas">FJ</th><th class="sum-th" title="Faltas injustificadas">FI</th><th class="sum-th" title="Baixa médica">B</th><th class="sum-th" title="% presença em dias úteis">%</th></tr></thead>';
   let body = '<tbody>';
-  const apsSheet = activePersons();
+  const apsSheet = filteredAssidPersons();
   if (apsSheet.length === 0){
-    body += `<tr><td class="col-name">—</td><td colspan="${dim+6}"><div class="empty-state">Nenhum colaborador ativo. Adiciona no separador RH.</div></td></tr>`;
+    body += `<tr><td class="col-name">—</td><td colspan="${dim+6}"><div class="empty-state">Nenhum colaborador encontrado com os filtros atuais.</div></td></tr>`;
   } else {
     apsSheet.forEach(p => {
       const roleStr = p.role && ROLE_LABELS[p.role] ? ROLE_LABELS[p.role] : '';
@@ -2782,7 +2834,7 @@ function renderAssidStats(){
   const dim = new Date(YEAR, currentMonth+1, 0).getDate();
   const workDays = countWorkingDaysInMonth();
   let tP=0,tFJ=0,tFI=0,tB=0,tFE=0;
-  const apsStat = activePersons();
+  const apsStat = filteredAssidPersons();
   apsStat.forEach(p => {
     for (let d=1; d<=dim; d++){
       const ds=dateStrOf(currentMonth,d);
@@ -3182,7 +3234,7 @@ function renderAll(){
   } else if (activeTab === 'ferias'){
     renderFeriasSidebar(); renderCalendar(); renderFeriasStats();
   } else if (activeTab === 'assid'){
-    renderPaintModes(); renderSheet(); renderAssidLegend(); renderAssidStats();
+    renderAssidFilters(); renderPaintModes(); renderSheet(); renderAssidLegend(); renderAssidStats();
   } else if (activeTab === 'rh'){
     renderRH(); renderColorPicker();
   }
@@ -3944,7 +3996,7 @@ function doPrintAssid(){
   }
   head += '<th>Fé</th><th>P</th><th>FJ</th><th>FI</th><th>B</th></tr>';
   let rows = '';
-  activePersons().forEach(p => {
+  filteredAssidPersons().forEach(p => {
     let cP=0,cFJ=0,cFI=0,cB=0,cFE=0; let tds = `<td class="pname">${escHtml(p.name)}</td>`;
     for (let d=1; d<=dim; d++){
       const ds = dateStrOf(currentMonth, d);
