@@ -1134,7 +1134,7 @@ let feriasWeekStart = '';
 let paintCode = 'P';
 let editingVacId = null;
 let rhFilters = { name:'', role:'', chefe:'', empresa:'', carga:'', entrada:'', nascimento:'', saida:'', ativo:'' };
-let assidFilters = { name:'', role:'', chefe:'', empresa:'' };
+let assidFilters = { name:'', role:'', chefe:'', empresa:'', carga:'' };
 let rhEditingId = null;
 let rhShowInactive = false;
 let pendingExitPersonId = null;
@@ -2735,7 +2735,8 @@ function filteredAssidPersons(){
     (!name || normalizeFilterText(p.name).includes(name)) &&
     (!assidFilters.role || p.role === assidFilters.role) &&
     (!assidFilters.chefe || p.chefeId === assidFilters.chefe) &&
-    (!empresa || normalizeFilterText(p.empresa) === empresa)
+    (!empresa || normalizeFilterText(p.empresa) === empresa) &&
+    (!assidFilters.carga || p.carga === assidFilters.carga)
   );
 }
 function renderAssidFilters(){
@@ -2749,14 +2750,18 @@ function renderAssidFilters(){
     .sort((a,b) => a.name.localeCompare(b.name));
   const empresas = [...new Set(active.map(p => (p.empresa || '').trim()).filter(Boolean))]
     .sort((a,b) => a.localeCompare(b));
+  const cargas = [...new Set(active.map(p => p.carga).filter(Boolean))]
+    .sort((a,b) => (CARGA_LABELS[a] || a).localeCompare(CARGA_LABELS[b] || b));
   const roleOptions = roles.map(role => `<option value="${escHtml(role)}" ${assidFilters.role===role?'selected':''}>${escHtml(ROLE_LABELS[role] || role)}</option>`).join('');
   const chefeOptions = chefes.map(p => `<option value="${escHtml(p.id)}" ${assidFilters.chefe===p.id?'selected':''}>${escHtml(p.name)}</option>`).join('');
   const empresaOptions = empresas.map(empresa => `<option value="${escHtml(empresa)}" ${assidFilters.empresa===empresa?'selected':''}>${escHtml(empresa)}</option>`).join('');
+  const cargaOptions = cargas.map(carga => `<option value="${escHtml(carga)}" ${assidFilters.carga===carga?'selected':''}>${escHtml(CARGA_LABELS[carga] || carga)}</option>`).join('');
   box.innerHTML = `
     <div class="assid-filter"><label>Colaborador</label><input value="${escHtml(assidFilters.name)}" placeholder="Filtrar..." oninput="assidSetFilter('name', this.value)"></div>
     <div class="assid-filter"><label>Função</label><select onchange="assidSetFilter('role', this.value)"><option value="">Todas</option>${roleOptions}</select></div>
     <div class="assid-filter"><label>Chefe</label><select onchange="assidSetFilter('chefe', this.value)"><option value="">Todos</option>${chefeOptions}</select></div>
     <div class="assid-filter"><label>Empresa</label><select onchange="assidSetFilter('empresa', this.value)"><option value="">Todas</option>${empresaOptions}</select></div>
+    <div class="assid-filter"><label>Carga horária</label><select onchange="assidSetFilter('carga', this.value)"><option value="">Todas</option>${cargaOptions}</select></div>
     <button class="assid-clear-btn" onclick="clearAssidFilters()">Limpar</button>`;
 }
 function assidSetFilter(field, value){
@@ -2765,7 +2770,7 @@ function assidSetFilter(field, value){
   renderAssidStats();
 }
 function clearAssidFilters(){
-  assidFilters = { name:'', role:'', chefe:'', empresa:'' };
+  assidFilters = { name:'', role:'', chefe:'', empresa:'', carga:'' };
   renderAssidFilters();
   renderSheet();
   renderAssidStats();
