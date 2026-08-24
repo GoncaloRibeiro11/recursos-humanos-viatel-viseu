@@ -8,6 +8,10 @@
 recuperado-*.json
 recover-*.js
 docx-extraido/
+vercel-protegido/public/
+vercel-protegido/.vercel/
+vercel-protegido/node_modules/
+vercel-protegido/.gitignore
 
 # Sistema
 Thumbs.db
