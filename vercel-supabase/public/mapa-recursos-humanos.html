@@ -866,9 +866,51 @@
   .auth-user {
     display: none;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     font-size: 12px;
     color: var(--text-muted);
+    padding: 4px 8px 4px 4px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: #fff;
+    max-width: 260px;
+  }
+  .auth-user-photo {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #2c9bd8;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex: 0 0 auto;
+    color: #fff;
+    font-weight: 800;
+    font-size: 11px;
+    box-shadow: 0 0 0 2px #2c9bd8;
+  }
+  .auth-user-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .auth-user-text {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+  }
+  .auth-user-name {
+    color: var(--text);
+    font-weight: 700;
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .auth-user-role {
+    color: var(--text-muted);
+    font-size: 10px;
   }
   body.authenticated .auth-user { display: inline-flex; }
   body:not(.authenticated) {
@@ -923,7 +965,14 @@
     <button class="tab" id="tab-ferias" onclick="switchTab('ferias')">🏖️ Férias</button>
   </div>
   <div class="header-actions">
-    <div class="auth-user"><span id="authUserLabel"></span><button class="btn" onclick="supabaseLogout()">Sair</button></div>
+    <div class="auth-user">
+      <span class="auth-user-photo" id="authUserPhoto">RH</span>
+      <span class="auth-user-text">
+        <span class="auth-user-name" id="authUserName">Utilizador</span>
+        <span class="auth-user-role" id="authUserRole">RH</span>
+      </span>
+      <button class="btn" onclick="supabaseLogout()">Sair</button>
+    </div>
     <button class="btn btn-primary admin-only" onclick="openManagePersons()">👥 Colaboradores</button>
     <button class="btn" id="btnVerFerias" onclick="openVacationsList()" style="display:none">📋 Ver férias</button>
     <button class="btn" onclick="openPrint()">🖨️ Imprimir</button>
@@ -2514,9 +2563,20 @@ function migrateFromOldApps(){
 function setAuthUi(loggedIn){
   document.body.classList.toggle('authenticated', !!loggedIn);
   document.body.classList.toggle('is-admin', isAdminUser());
-  const label = document.getElementById('authUserLabel');
-  if (label && currentProfile){
-    label.textContent = `${currentProfile.display_name || 'Utilizador'} · ${currentProfile.role === 'admin' ? 'Admin' : 'Gestor'}`;
+  const nameEl = document.getElementById('authUserName');
+  const roleEl = document.getElementById('authUserRole');
+  const photoEl = document.getElementById('authUserPhoto');
+  if (!currentProfile || !nameEl || !roleEl || !photoEl) return;
+  const person = currentProfile.person_id ? state.persons.find(p => p.id === currentProfile.person_id) : null;
+  const displayName = (person && person.name) || currentProfile.display_name || 'Utilizador';
+  nameEl.textContent = displayName;
+  roleEl.textContent = currentProfile.role === 'admin' ? 'Admin RH' : 'Gestor de equipa';
+  if (person && person.photo){
+    photoEl.innerHTML = `<img src="${person.photo}" alt="">`;
+    photoEl.style.background = '#2c9bd8';
+  } else {
+    photoEl.textContent = initials(displayName);
+    photoEl.style.background = (person && person.color) || '#2c9bd8';
   }
 }
 function showAuth(message){
@@ -2644,6 +2704,7 @@ async function loadFromSupabase(){
   });
   applyStateData({ persons, vacations, records });
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
+  setAuthUi(true);
 }
 function queueSupabaseSave(){
   if (!isAdminUser()) return;
