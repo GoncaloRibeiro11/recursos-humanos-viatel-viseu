@@ -2567,8 +2567,16 @@ function setAuthUi(loggedIn){
   const roleEl = document.getElementById('authUserRole');
   const photoEl = document.getElementById('authUserPhoto');
   if (!currentProfile || !nameEl || !roleEl || !photoEl) return;
-  const person = currentProfile.person_id ? state.persons.find(p => p.id === currentProfile.person_id) : null;
-  const displayName = (person && person.name) || currentProfile.display_name || 'Utilizador';
+  const profileName = currentProfile.display_name || '';
+  let person = currentProfile.person_id ? state.persons.find(p => p.id === currentProfile.person_id) : null;
+  if (!person && profileName){
+    const profileKey = normalizeFilterText(profileName);
+    person = state.persons.find(p => {
+      const nameKey = normalizeFilterText(p.name || '');
+      return nameKey === profileKey || nameKey.includes(profileKey) || profileKey.includes(nameKey);
+    }) || null;
+  }
+  const displayName = (person && person.name) || profileName || 'Utilizador';
   nameEl.textContent = displayName;
   roleEl.textContent = currentProfile.role === 'admin' ? 'Admin RH' : 'Gestor de equipa';
   if (person && person.photo){
