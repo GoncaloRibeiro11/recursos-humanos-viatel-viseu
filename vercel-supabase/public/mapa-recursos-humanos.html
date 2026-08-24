@@ -92,6 +92,138 @@
   body.theme-dark .day-cell { background: #111827; border-color: #263244; }
   body.theme-dark .day-cell.weekend { background: #0b1220; }
   body.theme-dark .empty-state { color: var(--text-muted); }
+  body.theme-dark .stat-value,
+  body.theme-dark .dashboard-title,
+  body.theme-dark .dash-panel h3,
+  body.theme-dark #viewRH .rh-name,
+  body.theme-dark #viewRH .rh-readonly,
+  body.theme-dark #viewRH .rh-tenure,
+  body.theme-dark #viewRH .rh-table td,
+  body.theme-dark #viewAssid table.sheet td,
+  body.theme-dark #viewFerias .day-num,
+  body.theme-dark #viewFerias .week-day-num,
+  body.theme-dark #viewFerias .person-name,
+  body.theme-dark #viewFerias .week-vac-name {
+    color: var(--text);
+  }
+  body.theme-dark #viewRH .rh-wrap,
+  body.theme-dark #viewAssid .sheet-wrap,
+  body.theme-dark #viewFerias .sidebar,
+  body.theme-dark #viewAssid .toolbar {
+    background: #111827;
+    border-color: var(--border);
+  }
+  body.theme-dark #viewRH .rh-table tbody tr:nth-child(even) td,
+  body.theme-dark #viewAssid table.sheet tbody tr:nth-child(even) td {
+    background: rgba(255,255,255,.015);
+  }
+  body.theme-dark #viewRH .rh-table tbody tr:hover td,
+  body.theme-dark #viewAssid table.sheet tbody tr:hover td {
+    background: #162033;
+  }
+  body.theme-dark #viewRH tr.editing td { background: #172554; }
+  body.theme-dark #viewRH .rh-table tr.inactive td { opacity: .62; }
+  body.theme-dark #viewRH .rh-inactive-toggle-row td,
+  body.theme-dark #viewAssid td.sum-cell,
+  body.theme-dark #viewAssid .sum-th {
+    background: #162033;
+  }
+  body.theme-dark #viewRH .rh-inactive-toggle {
+    background: #0b1220;
+    border-color: #334155;
+    color: var(--text);
+  }
+  body.theme-dark #viewRH .rh-inactive-toggle:hover,
+  body.theme-dark #viewAssid .month-nav button:hover,
+  body.theme-dark #viewAssid .paint-btn:hover,
+  body.theme-dark #viewAssid .assid-clear-btn:hover,
+  body.theme-dark #viewFerias .person-item:hover,
+  body.theme-dark #viewFerias .person-item.selected,
+  body.theme-dark #viewFerias .ferias-week-nav button:hover,
+  body.theme-dark #viewFerias .day-cell:hover,
+  body.theme-dark #viewFerias .week-day-body:hover {
+    background: #1f2937;
+    color: var(--text);
+  }
+  body.theme-dark .dash-table th,
+  body.theme-dark .dash-table td { border-bottom-color: var(--border); }
+  body.theme-dark .dash-chip,
+  body.theme-dark .dash-metric-icon,
+  body.theme-dark .dash-bar-track,
+  body.theme-dark .dash-month-bar,
+  body.theme-dark .dash-movement-bar,
+  body.theme-dark .dash-stack,
+  body.theme-dark #viewFerias .ferias-view-toggle,
+  body.theme-dark #viewAssid .assid-period-toggle,
+  body.theme-dark #viewFerias .person-stat-bar-bg {
+    background: #0b1220;
+  }
+  body.theme-dark #viewFerias .month-header,
+  body.theme-dark #viewFerias .week-day-card.weekend,
+  body.theme-dark #viewAssid thead .col-name,
+  body.theme-dark #viewAssid .day-th.weekend,
+  body.theme-dark #viewAssid td.day-cell.weekend,
+  body.theme-dark #viewAssid td.day-cell.locked {
+    background: #162033;
+  }
+  body.theme-dark #viewAssid .day-th.holiday,
+  body.theme-dark #viewAssid td.day-cell.holiday {
+    background: #2b1d0f;
+  }
+  body.theme-dark #viewFerias .week-vac-person,
+  body.theme-dark #viewFerias .selected-person-badge,
+  body.theme-dark .photo-editor-stage,
+  body.theme-dark .photo-editor-tools {
+    background: #0b1220;
+    border-color: var(--border);
+  }
+  body.theme-dark #viewFerias .person-stat-days,
+  body.theme-dark #viewAssid .paint-btn span:last-child,
+  body.theme-dark #viewRH .work-anniversary-name {
+    color: var(--text) !important;
+  }
+  body.theme-dark #viewRH .work-anniversary-card {
+    color: var(--text);
+    background: linear-gradient(135deg, #111827 0%, #0f172a 52%, #082f49 100%);
+    border-color: #334155;
+    box-shadow: 0 12px 30px rgba(0,0,0,.22);
+  }
+  body.theme-dark #viewRH .work-anniversary-meta { color: #60a5fa; }
+  body.theme-dark #viewRH .work-anniversary-greeting { color: #cbd5e1; }
+  body.theme-dark #viewRH .work-anniversary-image-btn {
+    background: #052e1a;
+    border-color: #15803d;
+    color: #86efac;
+  }
+  body.theme-dark #viewRH .work-anniversary-image-btn:hover { background: #064e3b; }
+  body.theme-dark #viewRH .rh-card-btn,
+  body.theme-dark .photo-flip-btn {
+    background: #172554;
+    border-color: #1d4ed8;
+    color: #bfdbfe;
+  }
+  body.theme-dark #viewRH .rh-card-btn:hover,
+  body.theme-dark .photo-flip-btn:hover { background: #1e3a8a; }
+  body.theme-dark #viewRH .rh-access-btn,
+  body.theme-dark #viewRH .rh-edit-btn {
+    background: #052e1a;
+    border-color: #15803d;
+    color: #bbf7d0;
+  }
+  body.theme-dark #viewRH .rh-access-btn:hover,
+  body.theme-dark #viewRH .rh-edit-btn:hover { background: #064e3b; }
+  body.theme-dark #viewRH .rh-del,
+  body.theme-dark .btn.danger {
+    background: #3f1212;
+    border-color: #7f1d1d;
+    color: #fecaca;
+  }
+  body.theme-dark #viewRH .rh-del:hover,
+  body.theme-dark .btn.danger:hover { background: #7f1d1d; }
+  body.theme-dark .badge-inativo {
+    background: #1f2937;
+    color: #cbd5e1;
+  }
 
   header {
     background: var(--surface);
@@ -3323,10 +3455,10 @@ function renderFeriasSidebar(){
     item.style.color = p.color;
     const dot = document.createElement('span'); dot.style.flexShrink='0'; dot.style.display='inline-flex'; dot.innerHTML = avatarHtml(p, 26);
     const nameWrap = document.createElement('div'); nameWrap.style.flex='1'; nameWrap.style.overflow='hidden';
-    const name = document.createElement('div'); name.className='person-name'; name.style.color='#1a1a1a'; name.textContent=p.name; nameWrap.appendChild(name);
+    const name = document.createElement('div'); name.className='person-name'; name.style.color='var(--text)'; name.textContent=p.name; nameWrap.appendChild(name);
     if (p.role && ROLE_LABELS[p.role]){
       const rt = document.createElement('div');
-      rt.style.cssText='font-size:10px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px';
+      rt.style.cssText='font-size:10px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px';
       rt.textContent = ROLE_LABELS[p.role]; nameWrap.appendChild(rt);
     }
     const del = document.createElement('button'); del.className='person-delete'; del.innerHTML='×'; del.title='Remover';
@@ -3443,7 +3575,7 @@ function renderPaintModes(){
     const btn = document.createElement('button');
     btn.className = 'paint-btn' + (paintCode===s.code?' active':'');
     btn.style.color = s.raw;
-    btn.innerHTML = `<span class="paint-swatch" style="background:${s.color}"></span><span style="color:#333">${s.label}</span>`;
+    btn.innerHTML = `<span class="paint-swatch" style="background:${s.color}"></span><span style="color:var(--text)">${s.label}</span>`;
     btn.onclick = () => { paintCode = s.code; renderPaintModes(); };
     box.appendChild(btn);
   });
@@ -4024,7 +4156,7 @@ function renderMgmtModal(){
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0">
           <input class="mgmt-name-input" id="mgmt-name-${p.id}" value="${escHtml(p.name)}" onkeydown="if(event.key==='Enter') savePerson('${p.id}')" placeholder="Nome...">
-          <select class="mgmt-name-input" id="mgmt-role-${p.id}" style="font-size:12px;color:#555;padding:4px 8px">
+          <select class="mgmt-name-input" id="mgmt-role-${p.id}" style="font-size:12px;color:var(--text);padding:4px 8px">
             ${ROLES.map(r => `<option value="${r.value}" ${(p.role||'')===r.value?'selected':''}>${r.label}</option>`).join('')}
           </select>
         </div>
