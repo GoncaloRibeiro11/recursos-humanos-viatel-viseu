@@ -31,6 +31,14 @@
     --c-baixa: #8b5cf6;
     --c-ferias: #0ea5e9;
   }
+  body.theme-dark {
+    --bg: #0f172a;
+    --surface: #111827;
+    --border: #263244;
+    --text: #e5e7eb;
+    --text-muted: #9ca3af;
+    --accent: #3b82f6;
+  }
 
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -38,6 +46,52 @@
     color: var(--text);
     min-height: 100vh;
   }
+  body.theme-dark header { box-shadow: 0 1px 3px rgba(0,0,0,0.45); }
+  body.theme-dark .tabs { background: #1f2937; }
+  body.theme-dark .tab.active { box-shadow: none; }
+  body.theme-dark .btn:hover { background: #1f2937; }
+  body.theme-dark .btn-primary:hover { background: #2563eb; }
+  body.theme-dark input,
+  body.theme-dark select,
+  body.theme-dark textarea {
+    background: #0b1220 !important;
+    color: var(--text) !important;
+    border-color: var(--border) !important;
+  }
+  body.theme-dark #viewRH .instructions,
+  body.theme-dark #viewAssid .instructions,
+  body.theme-dark #viewDashboard .instructions {
+    background: #111827;
+    border-color: #263244;
+  }
+  body.theme-dark #viewRH .rh-table th,
+  body.theme-dark #viewAssid table.sheet th {
+    background: #162033;
+  }
+  body.theme-dark #viewRH .rh-table th,
+  body.theme-dark #viewRH .rh-table td,
+  body.theme-dark #viewAssid table.sheet th,
+  body.theme-dark #viewAssid table.sheet td {
+    border-color: #263244;
+  }
+  body.theme-dark .modal,
+  body.theme-dark .auth-card,
+  body.theme-dark .auth-menu,
+  body.theme-dark .auth-user,
+  body.theme-dark .stat-card,
+  body.theme-dark .dash-panel,
+  body.theme-dark .month-card,
+  body.theme-dark .week-day-card {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border);
+  }
+  body.theme-dark .auth-menu button:hover { background: #1f2937; }
+  body.theme-dark .auth-overlay,
+  body.theme-dark:not(.authenticated) { background: #0f172a; }
+  body.theme-dark .day-cell { background: #111827; border-color: #263244; }
+  body.theme-dark .day-cell.weekend { background: #0b1220; }
+  body.theme-dark .empty-state { color: var(--text-muted); }
 
   header {
     background: var(--surface);
@@ -963,6 +1017,43 @@
   }
   .auth-menu button:hover { background: #f3f6fb; }
   .auth-menu button.danger { color: #dc2626; }
+  .theme-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .theme-option {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 12px;
+    cursor: pointer;
+    display: grid;
+    gap: 8px;
+    text-align: left;
+  }
+  .theme-option.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(37,99,235,.14);
+  }
+  .theme-preview {
+    height: 56px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: 16px 1fr;
+  }
+  .theme-preview span { display: block; }
+  .theme-preview.light { background: #f5f5f7; }
+  .theme-preview.light span:first-child { background: #ffffff; border-bottom: 1px solid #e5e7eb; }
+  .theme-preview.light span:last-child { background: linear-gradient(90deg, #ffffff 0 44%, #eff6ff 44% 100%); }
+  .theme-preview.dark { background: #0f172a; border-color: #263244; }
+  .theme-preview.dark span:first-child { background: #111827; border-bottom: 1px solid #263244; }
+  .theme-preview.dark span:last-child { background: linear-gradient(90deg, #111827 0 44%, #1f2937 44% 100%); }
+  .theme-option-title { font-weight: 800; font-size: 13px; }
+  .theme-option-desc { font-size: 11px; color: var(--text-muted); }
   body.authenticated .auth-user { display: inline-flex; }
   body:not(.authenticated) {
     overflow: hidden;
@@ -1030,6 +1121,7 @@
           <div class="auth-menu-name" id="authMenuName">Utilizador</div>
           <div class="auth-menu-role" id="authMenuRole">RH</div>
         </div>
+        <button onclick="openPreferencesModal()" role="menuitem">Preferências</button>
         <button onclick="openPasswordModal()" role="menuitem">Alterar password</button>
         <button onclick="supabaseLogout()" class="danger" role="menuitem">Sair</button>
       </div>
@@ -1207,6 +1299,36 @@
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('passwordModal')">Cancelar</button>
       <button class="btn btn-primary" onclick="changeOwnPassword()">Guardar password</button>
+    </div>
+  </div>
+</div>
+
+<!-- PREFERENCES MODAL -->
+<div class="modal-overlay" id="preferencesModal">
+  <div class="modal" style="width:460px">
+    <h2>Preferências</h2>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:6px">
+      Ajusta a aparência do mapa nesta conta.
+    </div>
+    <div class="modal-body" style="margin-top:16px">
+      <div class="form-group">
+        <label>Tema</label>
+        <div class="theme-options">
+          <button class="theme-option" id="themeLightOption" onclick="setThemePreference('light')">
+            <span class="theme-preview light"><span></span><span></span></span>
+            <span class="theme-option-title">Branco</span>
+            <span class="theme-option-desc">Visual claro por defeito.</span>
+          </button>
+          <button class="theme-option" id="themeDarkOption" onclick="setThemePreference('dark')">
+            <span class="theme-preview dark"><span></span><span></span></span>
+            <span class="theme-option-title">Escuro</span>
+            <span class="theme-option-desc">Menos brilho no ecrã.</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeModal('preferencesModal')">Fechar</button>
     </div>
   </div>
 </div>
@@ -2441,12 +2563,41 @@ function countWorkingDaysForPersonInAssidPeriod(person){
 // ===================== STORAGE + MIGRATION =====================
 const STORAGE_KEY = 'mapa-coordenacao-2026';
 const BACKUP_KEY = 'mapa-coordenacao-2026-backup';
+const THEME_KEY = 'mapa-rh-theme';
 let serverSyncTimer = null;
 let supabaseClient = null;
 let supabaseReady = false;
 let currentProfile = null;
 let supabaseSaveTimer = null;
 let accessPersonId = null;
+let currentTheme = 'light';
+function preferredTheme(){
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'dark' || saved === 'light') return saved;
+  } catch(e){}
+  return 'light';
+}
+function applyTheme(theme){
+  currentTheme = theme === 'dark' ? 'dark' : 'light';
+  document.body.classList.toggle('theme-dark', currentTheme === 'dark');
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', currentTheme === 'dark' ? '#0f172a' : '#ffffff');
+  renderThemeOptions();
+}
+function renderThemeOptions(){
+  document.getElementById('themeLightOption')?.classList.toggle('active', currentTheme === 'light');
+  document.getElementById('themeDarkOption')?.classList.toggle('active', currentTheme === 'dark');
+}
+function setThemePreference(theme){
+  applyTheme(theme);
+  try { localStorage.setItem(THEME_KEY, currentTheme); } catch(e){}
+}
+function openPreferencesModal(){
+  closeProfileMenu();
+  renderThemeOptions();
+  document.getElementById('preferencesModal').classList.add('open');
+}
 function save(){
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
   if (supabaseReady) queueSupabaseSave();
@@ -4692,6 +4843,7 @@ function doPrintAssid(){
 
 // ===================== INIT =====================
 // App: Mapa de Recursos Humanos (Férias + Assiduidade integradas)
+applyTheme(preferredTheme());
 updateDeviceMode();
 try {
   window.matchMedia('(max-width: 760px)').addEventListener('change', updateDeviceMode);
