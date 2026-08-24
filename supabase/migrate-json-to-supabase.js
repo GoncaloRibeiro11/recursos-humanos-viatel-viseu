@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const { createClient } = require('@supabase/supabase-js');
 
 const url = process.env.SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -11,11 +10,44 @@ if (!url || !serviceKey) {
   process.exit(1);
 }
 
-const supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
 const state = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
 
 function isoOrNull(value) {
   return value || null;
+}
+
+async function rest(method, table, body) {
+  const endpoint = `${url.replace(/\/$/, '')}/rest/v1/${table}`;
+  const res = await fetch(endpoint, {
+    method,
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates'
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${method} ${table} falhou: ${res.status} ${text}`);
+  }
+}
+
+async function clearTable(table, keyColumn) {
+  const endpoint = `${url.replace(/\/$/, '')}/rest/v1/${table}?${keyColumn}=neq.__never__`;
+  const res = await fetch(endpoint, {
+    method: 'DELETE',
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`DELETE ${table} falhou: ${res.status} ${text}`);
+  }
 }
 
 async function main() {
@@ -54,18 +86,15 @@ async function main() {
 
   console.log(`A enviar ${persons.length} colaboradores, ${vacations.length} ferias e ${records.length} registos.`);
 
-  let result = await supabase.from('rh_persons').upsert(persons);
-  if (result.error) throw result.error;
+  await clearTable('rh_attendance_records', 'person_id');
+  await clearTable('rh_vacations', 'id');
+  await clearTable('rh_persons', 'id');
 
-  if (vacations.length) {
-    result = await supabase.from('rh_vacations').upsert(vacations);
-    if (result.error) throw result.error;
-  }
-
+  if (persons.length) await rest('POST', 'rh_persons', persons);
+  if (vacations.length) await rest('POST', 'rh_vacations', vacations);
   if (records.length) {
     for (let i = 0; i < records.length; i += 500) {
-      result = await supabase.from('rh_attendance_records').upsert(records.slice(i, i + 500));
-      if (result.error) throw result.error;
+      await rest('POST', 'rh_attendance_records', records.slice(i, i + 500));
     }
   }
 
