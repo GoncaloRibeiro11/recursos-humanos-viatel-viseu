@@ -971,6 +971,7 @@
         <span class="auth-user-name" id="authUserName">Utilizador</span>
         <span class="auth-user-role" id="authUserRole">RH</span>
       </span>
+      <button class="btn" onclick="openPasswordModal()">Password</button>
       <button class="btn" onclick="supabaseLogout()">Sair</button>
     </div>
     <button class="btn btn-primary admin-only" onclick="openManagePersons()">👥 Colaboradores</button>
@@ -1127,6 +1128,25 @@
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('accessModal')">Cancelar</button>
       <button class="btn btn-primary" onclick="createUserAccess()">Criar acesso</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHANGE PASSWORD MODAL -->
+<div class="modal-overlay" id="passwordModal">
+  <div class="modal" style="width:400px">
+    <h2>Alterar password</h2>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:6px">
+      Define uma nova password para a tua conta.
+    </div>
+    <div class="modal-body" style="margin-top:16px">
+      <div class="form-group"><label>Nova password</label><input type="password" id="newPassword" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></div>
+      <div class="form-group"><label>Confirmar password</label><input type="password" id="confirmPassword" placeholder="Repete a password" autocomplete="new-password"></div>
+      <div class="auth-error" id="passwordStatus"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('passwordModal')">Cancelar</button>
+      <button class="btn btn-primary" onclick="changeOwnPassword()">Guardar password</button>
     </div>
   </div>
 </div>
@@ -2651,6 +2671,43 @@ async function authAccessToken(){
   if (!supabaseClient) return '';
   const { data } = await supabaseClient.auth.getSession();
   return data && data.session ? data.session.access_token : '';
+}
+function openPasswordModal(){
+  if (!supabaseReady) return;
+  document.getElementById('newPassword').value = '';
+  document.getElementById('confirmPassword').value = '';
+  const status = document.getElementById('passwordStatus');
+  status.style.color = '#dc2626';
+  status.textContent = '';
+  document.getElementById('passwordModal').classList.add('open');
+}
+async function changeOwnPassword(){
+  if (!supabaseClient || !supabaseReady) return;
+  const status = document.getElementById('passwordStatus');
+  const password = document.getElementById('newPassword').value;
+  const confirm = document.getElementById('confirmPassword').value;
+  status.style.color = '#dc2626';
+  status.textContent = '';
+  if (!password || !confirm){
+    status.textContent = 'Preenche os dois campos.';
+    return;
+  }
+  if (password.length < 6){
+    status.textContent = 'A password deve ter pelo menos 6 caracteres.';
+    return;
+  }
+  if (password !== confirm){
+    status.textContent = 'As passwords não coincidem.';
+    return;
+  }
+  const { error } = await supabaseClient.auth.updateUser({ password });
+  if (error){
+    status.textContent = error.message || 'Não foi possível alterar a password.';
+    return;
+  }
+  status.style.color = '#15803d';
+  status.textContent = 'Password alterada com sucesso.';
+  setTimeout(() => closeModal('passwordModal'), 900);
 }
 async function loadSupabaseSession(){
   const { data: userData, error: userError } = await supabaseClient.auth.getUser();
