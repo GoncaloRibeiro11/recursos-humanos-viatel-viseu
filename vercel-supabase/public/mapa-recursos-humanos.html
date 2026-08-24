@@ -837,7 +837,7 @@
     display: none;
     align-items: center;
     justify-content: center;
-    background: rgba(15, 23, 42, .72);
+    background: #f3f6fb;
     padding: 18px;
   }
   .auth-overlay.open { display: flex; }
@@ -869,6 +869,19 @@
     color: var(--text-muted);
   }
   body.authenticated .auth-user { display: inline-flex; }
+  body:not(.authenticated) {
+    overflow: hidden;
+    background: #f3f6fb;
+  }
+  body:not(.authenticated) > header,
+  body:not(.authenticated) > .view,
+  body:not(.authenticated) > .modal-overlay,
+  body:not(.authenticated) > #printArea {
+    display: none !important;
+  }
+  body:not(.authenticated) > #authOverlay {
+    display: flex !important;
+  }
   body:not(.is-admin) .admin-only { display: none !important; }
   body:not(.is-admin) .person-delete { display: none !important; }
 </style>
