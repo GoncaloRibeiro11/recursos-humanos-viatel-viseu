@@ -864,6 +864,7 @@
   .auth-form input { height: 42px; border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 15px; }
   .auth-error { min-height: 18px; color: #dc2626; font-size: 12px; }
   .auth-user {
+    position: relative;
     display: none;
     align-items: center;
     gap: 10px;
@@ -874,6 +875,16 @@
     border-radius: 999px;
     background: #fff;
     max-width: 260px;
+  }
+  .auth-user-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    min-width: 0;
   }
   .auth-user-photo {
     width: 32px;
@@ -912,6 +923,46 @@
     color: var(--text-muted);
     font-size: 10px;
   }
+  .auth-menu-chevron {
+    color: var(--text-muted);
+    font-size: 12px;
+    transition: transform .15s ease;
+  }
+  .auth-user.open .auth-menu-chevron { transform: rotate(180deg); }
+  .auth-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 230px;
+    display: none;
+    z-index: 30;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 18px 45px rgba(15,23,42,.18);
+    padding: 8px;
+  }
+  .auth-user.open .auth-menu { display: block; }
+  .auth-menu-head {
+    padding: 8px 10px 10px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 6px;
+  }
+  .auth-menu-name { font-weight: 800; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .auth-menu-role { margin-top: 2px; font-size: 11px; color: var(--text-muted); }
+  .auth-menu button {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    border-radius: 7px;
+    padding: 9px 10px;
+    text-align: left;
+    cursor: pointer;
+    color: var(--text);
+    font-size: 13px;
+  }
+  .auth-menu button:hover { background: #f3f6fb; }
+  .auth-menu button.danger { color: #dc2626; }
   body.authenticated .auth-user { display: inline-flex; }
   body:not(.authenticated) {
     overflow: hidden;
@@ -965,14 +1016,23 @@
     <button class="tab" id="tab-ferias" onclick="switchTab('ferias')">🏖️ Férias</button>
   </div>
   <div class="header-actions">
-    <div class="auth-user">
-      <span class="auth-user-photo" id="authUserPhoto">RH</span>
-      <span class="auth-user-text">
-        <span class="auth-user-name" id="authUserName">Utilizador</span>
-        <span class="auth-user-role" id="authUserRole">RH</span>
-      </span>
-      <button class="btn" onclick="openPasswordModal()">Password</button>
-      <button class="btn" onclick="supabaseLogout()">Sair</button>
+    <div class="auth-user" id="authUserMenu">
+      <button class="auth-user-trigger" onclick="toggleProfileMenu(event)" aria-haspopup="menu" aria-expanded="false">
+        <span class="auth-user-photo" id="authUserPhoto">RH</span>
+        <span class="auth-user-text">
+          <span class="auth-user-name" id="authUserName">Utilizador</span>
+          <span class="auth-user-role" id="authUserRole">RH</span>
+        </span>
+        <span class="auth-menu-chevron">▾</span>
+      </button>
+      <div class="auth-menu" role="menu">
+        <div class="auth-menu-head">
+          <div class="auth-menu-name" id="authMenuName">Utilizador</div>
+          <div class="auth-menu-role" id="authMenuRole">RH</div>
+        </div>
+        <button onclick="openPasswordModal()" role="menuitem">Alterar password</button>
+        <button onclick="supabaseLogout()" class="danger" role="menuitem">Sair</button>
+      </div>
     </div>
     <button class="btn btn-primary admin-only" onclick="openManagePersons()">👥 Colaboradores</button>
     <button class="btn" id="btnVerFerias" onclick="openVacationsList()" style="display:none">📋 Ver férias</button>
@@ -2583,6 +2643,8 @@ function setAuthUi(loggedIn){
   const nameEl = document.getElementById('authUserName');
   const roleEl = document.getElementById('authUserRole');
   const photoEl = document.getElementById('authUserPhoto');
+  const menuNameEl = document.getElementById('authMenuName');
+  const menuRoleEl = document.getElementById('authMenuRole');
   if (!currentProfile || !nameEl || !roleEl || !photoEl) return;
   const profileName = currentProfile.display_name || '';
   let person = currentProfile.person_id ? state.persons.find(p => p.id === currentProfile.person_id) : null;
@@ -2594,8 +2656,11 @@ function setAuthUi(loggedIn){
     }) || null;
   }
   const displayName = (person && person.name) || profileName || 'Utilizador';
+  const roleLabel = currentProfile.role === 'admin' ? 'Admin RH' : 'Gestor de equipa';
   nameEl.textContent = displayName;
-  roleEl.textContent = currentProfile.role === 'admin' ? 'Admin RH' : 'Gestor de equipa';
+  roleEl.textContent = roleLabel;
+  if (menuNameEl) menuNameEl.textContent = displayName;
+  if (menuRoleEl) menuRoleEl.textContent = roleLabel;
   if (person && person.photo){
     photoEl.innerHTML = `<img src="${person.photo}" alt="">`;
     photoEl.style.background = '#2c9bd8';
@@ -2604,6 +2669,23 @@ function setAuthUi(loggedIn){
     photoEl.style.background = (person && person.color) || '#2c9bd8';
   }
 }
+function closeProfileMenu(){
+  const menu = document.getElementById('authUserMenu');
+  if (!menu) return;
+  menu.classList.remove('open');
+  menu.querySelector('.auth-user-trigger')?.setAttribute('aria-expanded', 'false');
+}
+function toggleProfileMenu(ev){
+  ev.preventDefault();
+  ev.stopPropagation();
+  const menu = document.getElementById('authUserMenu');
+  if (!menu) return;
+  const open = !menu.classList.contains('open');
+  menu.classList.toggle('open', open);
+  menu.querySelector('.auth-user-trigger')?.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+document.addEventListener('click', closeProfileMenu);
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape') closeProfileMenu(); });
 function showAuth(message){
   const overlay = document.getElementById('authOverlay');
   if (overlay) overlay.classList.add('open');
@@ -2674,6 +2756,7 @@ async function authAccessToken(){
 }
 function openPasswordModal(){
   if (!supabaseReady) return;
+  closeProfileMenu();
   document.getElementById('newPassword').value = '';
   document.getElementById('confirmPassword').value = '';
   const status = document.getElementById('passwordStatus');
