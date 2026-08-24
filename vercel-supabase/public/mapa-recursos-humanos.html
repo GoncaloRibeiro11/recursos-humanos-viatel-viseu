@@ -164,6 +164,8 @@
   #viewRH .rh-del:hover { background: #fee2e2; }
   #viewRH .rh-card-btn { padding: 5px 9px; border-radius: 6px; border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; font-size: 12px; cursor: pointer; white-space: nowrap; margin-right: 6px; }
   #viewRH .rh-card-btn:hover { background: #dbeafe; }
+  #viewRH .rh-access-btn { padding: 5px 9px; border-radius: 6px; border: 1px solid #bbf7d0; background: #f0fdf4; color: #15803d; font-size: 12px; cursor: pointer; white-space: nowrap; margin-right: 6px; }
+  #viewRH .rh-access-btn:hover { background: #dcfce7; }
   #viewRH .rh-edit-btn { padding: 5px 9px; border-radius: 6px; border: 1px solid #bbf7d0; background: #f0fdf4; color: #15803d; font-size: 12px; cursor: pointer; white-space: nowrap; margin-right: 6px; }
   #viewRH .rh-edit-btn:hover { background: #dcfce7; }
   #viewRH .rh-add { display: flex; gap: 8px; margin-top: 16px; align-items: center; flex-wrap: wrap; }
@@ -1059,6 +1061,27 @@
     <div style="font-size:12px;color:var(--text-muted);margin-top:6px">Partilhados entre Férias e Assiduidade.</div>
     <div class="mgmt-list" id="mgmtList"></div>
     <div class="modal-actions"><button class="btn" onclick="closeModal('mgmtModal')">Fechar</button></div>
+  </div>
+</div>
+
+<!-- ACCESS MODAL -->
+<div class="modal-overlay" id="accessModal">
+  <div class="modal" style="width:430px">
+    <h2>Criar acesso</h2>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:6px">
+      Cria login para este colaborador ver apenas a equipa dele.
+    </div>
+    <div class="modal-body" style="margin-top:16px">
+      <div class="form-group"><label>Colaborador</label><input type="text" id="accessPersonName" disabled></div>
+      <div class="form-group"><label>Email</label><input type="email" id="accessEmail" placeholder="email@exemplo.pt" autocomplete="off"></div>
+      <div class="form-group"><label>Password provisória</label><input type="password" id="accessPassword" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></div>
+      <div class="form-group"><label>Permissão</label><select id="accessRole"><option value="gestor">Gestor de equipa</option><option value="admin">Admin</option></select></div>
+      <div class="auth-error" id="accessStatus"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('accessModal')">Cancelar</button>
+      <button class="btn btn-primary" onclick="createUserAccess()">Criar acesso</button>
+    </div>
   </div>
 </div>
 
@@ -2297,6 +2320,7 @@ let supabaseClient = null;
 let supabaseReady = false;
 let currentProfile = null;
 let supabaseSaveTimer = null;
+let accessPersonId = null;
 function save(){
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
   if (supabaseReady) queueSupabaseSave();
@@ -2557,6 +2581,11 @@ async function supabaseLogout(){
   applyStateData({ persons: [], vacations: [], records: {} });
   renderAll();
   showAuth('');
+}
+async function authAccessToken(){
+  if (!supabaseClient) return '';
+  const { data } = await supabaseClient.auth.getSession();
+  return data && data.session ? data.session.access_token : '';
 }
 async function loadSupabaseSession(){
   const { data: userData, error: userError } = await supabaseClient.auth.getUser();
@@ -4029,7 +4058,7 @@ function renderRH(){
       const tempoClass = entrada ? 'rh-tenure' : 'rh-tenure muted';
       const photoAction = isEditing ? `onclick="pickPhoto('${p.id}')"` : '';
       const actionButtons = isAdminUser()
-        ? `<button class="rh-edit-btn" onclick="${isEditing?`rhFinishEdit('${p.id}')`:`rhEditPerson('${p.id}')`}">${isEditing?'Guardar':'Editar'}</button><button class="rh-card-btn" onclick="openIdCard('${p.id}')">Cartao</button>${p.photo?`<button class="photo-flip-btn" onclick="togglePhotoMirror('${p.id}')">Virar</button>`:''}<button class="rh-del" onclick="rhDeletePerson('${p.id}')">Remover</button>`
+        ? `<button class="rh-edit-btn" onclick="${isEditing?`rhFinishEdit('${p.id}')`:`rhEditPerson('${p.id}')`}">${isEditing?'Guardar':'Editar'}</button><button class="rh-card-btn" onclick="openIdCard('${p.id}')">Cartao</button><button class="rh-access-btn" onclick="openAccessModal('${p.id}')">Acesso</button>${p.photo?`<button class="photo-flip-btn" onclick="togglePhotoMirror('${p.id}')">Virar</button>`:''}<button class="rh-del" onclick="rhDeletePerson('${p.id}')">Remover</button>`
         : `<button class="rh-card-btn" onclick="openIdCard('${p.id}')">Cartao</button>`;
       body += `<tr class="${ativo?'':'inactive'} ${isEditing?'editing':''}" data-rh-row="1" data-name="${escHtml(normalizeFilterText(p.name))}" data-role="${escHtml(p.role||'')}" data-chefe="${escHtml(p.chefeId||'')}" data-empresa="${escHtml(normalizeFilterText(p.empresa||''))}" data-carga="${escHtml(p.carga||'')}" data-nascimento="${escHtml(nascimento)}" data-entrada="${escHtml(entrada)}" data-saida="${escHtml(saida)}" data-ativo="${ativo?'ativo':'inativo'}">
         <td data-label="Colaborador"><div class="rh-name"><button class="rh-photo-btn ${isEditing?'':'locked'}" ${photoAction} title="${isEditing?(p.photo?'Mudar foto':'Adicionar foto'):'Bloqueado. Clica em Editar.'}">${avatarHtml(p, 28)}</button><span>${escHtml(p.name)}${ativo?'':'<span class="badge-inativo">inativo</span>'}</span></div></td>
@@ -4147,6 +4176,57 @@ function rhDeletePerson(id){
   if (selectedPerson === id) selectedPerson = null;
   if (rhEditingId === id) rhEditingId = null;
   save(); renderAll();
+}
+function openAccessModal(id){
+  if (!requireAdminAction()) return;
+  const p = state.persons.find(pp => pp.id === id);
+  if (!p) return;
+  accessPersonId = id;
+  document.getElementById('accessPersonName').value = p.name || '';
+  document.getElementById('accessEmail').value = '';
+  document.getElementById('accessPassword').value = '';
+  document.getElementById('accessRole').value = 'gestor';
+  document.getElementById('accessStatus').textContent = '';
+  document.getElementById('accessModal').classList.add('open');
+}
+async function createUserAccess(){
+  if (!requireAdminAction()) return;
+  const p = state.persons.find(pp => pp.id === accessPersonId);
+  if (!p) return;
+  const status = document.getElementById('accessStatus');
+  const email = document.getElementById('accessEmail').value.trim();
+  const password = document.getElementById('accessPassword').value;
+  const role = document.getElementById('accessRole').value === 'admin' ? 'admin' : 'gestor';
+  status.style.color = '#dc2626';
+  status.textContent = '';
+  if (!email || !password){
+    status.textContent = 'Preenche email e password.';
+    return;
+  }
+  try {
+    const token = await authAccessToken();
+    const res = await fetch('/api/create-user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        email,
+        password,
+        role,
+        personId: p.id,
+        displayName: p.name
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Erro ao criar acesso.');
+    status.style.color = '#15803d';
+    status.textContent = 'Acesso criado. Já pode entrar com esse email.';
+    setTimeout(() => closeModal('accessModal'), 900);
+  } catch(e){
+    status.textContent = e.message || 'Erro ao criar acesso.';
+  }
 }
 
 // ===================== EXPORT / IMPORT =====================
