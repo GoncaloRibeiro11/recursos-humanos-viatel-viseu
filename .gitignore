@@ -16,6 +16,7 @@ vercel-supabase/.vercel/
 vercel-supabase/node_modules/
 vercel-supabase/.env
 vercel-supabase/.env.*
+vercel-supabase/.gitignore
 
 # Sistema
 Thumbs.db
