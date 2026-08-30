@@ -16,6 +16,7 @@ Esta pasta e uma versao separada da atual. A versao com password continua em `ve
 4. Nas Environment Variables do Vercel, adicionar:
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY` (apenas variável de servidor, necessária para `/api/create-user`)
 5. Criar utilizadores no Supabase Auth.
 6. Criar perfis na tabela `user_profiles`.
 
@@ -49,4 +50,4 @@ $env:SUPABASE_SERVICE_ROLE_KEY="..."
 node supabase/migrate-json-to-supabase.js mapa-coordenacao-2026.json
 ```
 
-Nunca colocar `SUPABASE_SERVICE_ROLE_KEY` no Vercel nem no browser. E so para a migracao local.
+Nunca colocar `SUPABASE_SERVICE_ROLE_KEY` no browser, HTML ou repositório. Na Vercel, deve existir apenas como variável de ambiente secreta das funções de servidor.

@@ -1,6 +1,8 @@
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://vfmncuejbfcwrzrqzqnr.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_QJM8W5vPsJOICxqw_FEUXA_suAywMLM';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const MAX_BODY_BYTES = 16 * 1024;
+const MIN_PASSWORD_LENGTH = 12;
 
 function send(res, status, payload) {
   res.statusCode = status;
@@ -10,7 +12,16 @@ function send(res, status, payload) {
 
 async function readJson(req) {
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) {
+      const error = new Error('Pedido demasiado grande.');
+      error.status = 413;
+      throw error;
+    }
+    chunks.push(chunk);
+  }
   const raw = Buffer.concat(chunks).toString('utf8');
   return raw ? JSON.parse(raw) : {};
 }
@@ -83,8 +94,8 @@ module.exports = async function handler(req, res) {
     if (!email || !password || !displayName || (role !== 'admin' && !personId)) {
       return send(res, 400, { error: 'Email, password, nome e colaborador sao obrigatorios.' });
     }
-    if (password.length < 6) {
-      return send(res, 400, { error: 'A password deve ter pelo menos 6 caracteres.' });
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      return send(res, 400, { error: `A password deve ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres.` });
     }
 
     const created = await supabaseFetch('/auth/v1/admin/users', {

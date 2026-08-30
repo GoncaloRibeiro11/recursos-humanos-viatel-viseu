@@ -1404,8 +1404,8 @@
     </div>
     <div class="modal-body" style="margin-top:16px">
       <div class="form-group"><label>Colaborador</label><input type="text" id="accessPersonName" disabled></div>
-      <div class="form-group"><label>Email</label><input type="email" id="accessEmail" placeholder="email@exemplo.pt" autocomplete="off"></div>
-      <div class="form-group"><label>Password provisória</label><input type="password" id="accessPassword" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></div>
+      <div class="form-group"><label>Email</label><input type="email" id="accessEmail" name="new-rh-account-email" placeholder="email@exemplo.pt" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+      <div class="form-group"><label>Password provisória</label><input type="password" id="accessPassword" name="new-rh-account-password" placeholder="Mínimo 12 caracteres" minlength="12" autocomplete="new-password" readonly onpointerdown="this.removeAttribute('readonly')" onkeydown="this.removeAttribute('readonly')"></div>
       <div class="form-group"><label>Permissão</label><select id="accessRole"><option value="gestor">Gestor de equipa</option><option value="admin">Admin</option></select></div>
       <div class="auth-error" id="accessStatus"></div>
     </div>
@@ -1424,7 +1424,7 @@
       Define uma nova password para a tua conta.
     </div>
     <div class="modal-body" style="margin-top:16px">
-      <div class="form-group"><label>Nova password</label><input type="password" id="newPassword" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></div>
+      <div class="form-group"><label>Nova password</label><input type="password" id="newPassword" placeholder="Mínimo 12 caracteres" minlength="12" autocomplete="new-password"></div>
       <div class="form-group"><label>Confirmar password</label><input type="password" id="confirmPassword" placeholder="Repete a password" autocomplete="new-password"></div>
       <div class="auth-error" id="passwordStatus"></div>
     </div>
@@ -1640,7 +1640,11 @@ function updateDeviceMode(){
   document.body.classList.toggle('is-mobile', !!mobile);
   document.body.classList.toggle('is-desktop', !mobile);
 }
-function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function safeImageUrl(value){
+  const url = String(value || '');
+  return /^(?:data:image\/(?:png|jpeg|webp);base64,|blob:|\/)/i.test(url) ? url : '';
+}
 function normalizeFilterText(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 function normalizePhone(value){ return String(value || '').replace(/\D/g, ''); }
 function formatPhone(value){
@@ -2731,7 +2735,7 @@ function openPreferencesModal(){
   document.getElementById('preferencesModal').classList.add('open');
 }
 function save(){
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
+  try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
   if (supabaseReady) queueSupabaseSave();
   else queueServerSync();
 }
@@ -2783,13 +2787,13 @@ function pushDataToServerManual(){
 function backupCurrentState(reason){
   try {
     if (stateHasData(state)){
-      localStorage.setItem(BACKUP_KEY, JSON.stringify({ reason: reason || '', savedAt: new Date().toISOString(), data: state }));
+      sessionStorage.setItem(BACKUP_KEY, JSON.stringify({ reason: reason || '', savedAt: new Date().toISOString(), data: state }));
     }
   } catch(e){}
 }
 function restoreLocalBackup(){
   try {
-    const raw = localStorage.getItem(BACKUP_KEY);
+    const raw = sessionStorage.getItem(BACKUP_KEY);
     if (!raw){ alert('Não existe backup local neste navegador.'); return; }
     const backup = JSON.parse(raw);
     if (!backup.data || !stateHasData(backup.data)){ alert('O backup local não tem dados válidos.'); return; }
@@ -2883,7 +2887,7 @@ function refreshDataFromServer(){
 }
 function load(){
   try {
-    const d = localStorage.getItem(STORAGE_KEY);
+    const d = sessionStorage.getItem(STORAGE_KEY);
     if (d){
       const p = JSON.parse(d);
       if (stateHasData(p)){ applyStateData(p); return; }
@@ -2945,7 +2949,11 @@ function setAuthUi(loggedIn){
   if (menuNameEl) menuNameEl.textContent = displayName;
   if (menuRoleEl) menuRoleEl.textContent = roleLabel;
   if (person && person.photo){
-    photoEl.innerHTML = `<img src="${person.photo}" alt="">`;
+    photoEl.replaceChildren();
+    const img = document.createElement('img');
+    img.src = safeImageUrl(person.photo);
+    img.alt = '';
+    photoEl.appendChild(img);
     photoEl.style.background = '#2c9bd8';
   } else {
     photoEl.textContent = initials(displayName);
@@ -3026,6 +3034,12 @@ async function supabaseLogin(){
 }
 async function supabaseLogout(){
   if (supabaseClient) await supabaseClient.auth.signOut();
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(BACKUP_KEY);
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(BACKUP_KEY);
+  } catch(e){}
   currentProfile = null;
   supabaseReady = false;
   applyStateData({ persons: [], vacations: [], records: {} });
@@ -3058,8 +3072,8 @@ async function changeOwnPassword(){
     status.textContent = 'Preenche os dois campos.';
     return;
   }
-  if (password.length < 6){
-    status.textContent = 'A password deve ter pelo menos 6 caracteres.';
+  if (password.length < 12){
+    status.textContent = 'A password deve ter pelo menos 12 caracteres.';
     return;
   }
   if (password !== confirm){
@@ -3131,7 +3145,7 @@ async function loadFromSupabase(){
     records[`${row.person_id}|${row.record_date}`] = row.code;
   });
   applyStateData({ persons, vacations, records });
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
+  try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
   setAuthUi(true);
 }
 function queueSupabaseSave(){
@@ -4673,7 +4687,9 @@ function openAccessModal(id){
   accessPersonId = id;
   document.getElementById('accessPersonName').value = p.name || '';
   document.getElementById('accessEmail').value = '';
-  document.getElementById('accessPassword').value = '';
+  const accessPassword = document.getElementById('accessPassword');
+  accessPassword.value = '';
+  accessPassword.setAttribute('readonly', '');
   document.getElementById('accessRole').value = 'gestor';
   document.getElementById('accessStatus').textContent = '';
   document.getElementById('accessModal').classList.add('open');
@@ -4690,6 +4706,10 @@ async function createUserAccess(){
   status.textContent = '';
   if (!email || !password){
     status.textContent = 'Preenche email e password.';
+    return;
+  }
+  if (password.length < 12){
+    status.textContent = 'A password deve ter pelo menos 12 caracteres.';
     return;
   }
   try {
