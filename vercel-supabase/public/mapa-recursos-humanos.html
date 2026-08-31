@@ -2705,6 +2705,8 @@ let supabaseClient = null;
 let supabaseReady = false;
 let currentProfile = null;
 let supabaseSaveTimer = null;
+let supabaseSaveRunning = false;
+let supabaseSavePending = false;
 let accessPersonId = null;
 let currentTheme = 'light';
 function preferredTheme(){
@@ -3155,6 +3157,24 @@ function queueSupabaseSave(){
 }
 async function saveToSupabase(){
   if (!supabaseClient || !isAdminUser()) return;
+  if (supabaseSaveRunning){
+    supabaseSavePending = true;
+    return;
+  }
+  supabaseSaveRunning = true;
+  try {
+    do {
+      supabaseSavePending = false;
+      await persistStateToSupabase();
+    } while (supabaseSavePending);
+  } catch (error){
+    console.error(error);
+    alert('Não foi possível guardar a última alteração no servidor. Atualiza a página e tenta novamente.');
+  } finally {
+    supabaseSaveRunning = false;
+  }
+}
+async function persistStateToSupabase(){
   const persons = state.persons.map(person => ({
     id: person.id,
     name: person.name || '',
@@ -3182,22 +3202,22 @@ async function saveToSupabase(){
     return { person_id: key.slice(0, separator), record_date: key.slice(separator + 1), code };
   });
   let result = await supabaseClient.from('rh_vacations').delete().neq('id', '__never__');
-  if (result.error) return console.error(result.error);
+  if (result.error) throw result.error;
   result = await supabaseClient.from('rh_attendance_records').delete().neq('person_id', '__never__');
-  if (result.error) return console.error(result.error);
+  if (result.error) throw result.error;
   result = await supabaseClient.from('rh_persons').delete().neq('id', '__never__');
-  if (result.error) return console.error(result.error);
+  if (result.error) throw result.error;
   if (persons.length){
     result = await supabaseClient.from('rh_persons').upsert(persons);
-    if (result.error) return console.error(result.error);
+    if (result.error) throw result.error;
   }
   if (vacations.length){
     result = await supabaseClient.from('rh_vacations').upsert(vacations);
-    if (result.error) return console.error(result.error);
+    if (result.error) throw result.error;
   }
   for (let i = 0; i < records.length; i += 500){
     result = await supabaseClient.from('rh_attendance_records').upsert(records.slice(i, i + 500));
-    if (result.error) return console.error(result.error);
+    if (result.error) throw result.error;
   }
 }
 
