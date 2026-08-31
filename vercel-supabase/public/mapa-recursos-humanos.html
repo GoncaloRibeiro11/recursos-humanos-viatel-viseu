@@ -1687,7 +1687,42 @@ function normalizePerson(p){
   person.photoCardZoom = Number(person.photoCardZoom || 0) || '';
   person.photoCardFocusX = Number(person.photoCardFocusX || 0) || '';
   person.photoCardFocusY = Number(person.photoCardFocusY || 0) || '';
+  person.rhMovements = Array.isArray(person.rhMovements) ? person.rhMovements.slice(-100) : [];
   return person;
+}
+const RH_MOVEMENT_LABELS = {
+  name:'Nome', role:'Função', chefeId:'Chefe de equipa', empresa:'Empresa/contrato',
+  carga:'Carga horária/contrato', ativo:'Estado', entrada:'Data de entrada',
+  saida:'Data de saída', telefone:'Telefone', agv:'N.º AGV', nascimento:'Data de nascimento'
+};
+function rhMovementValue(field, value){
+  if (value === undefined || value === null || value === '') return 'Sem informação';
+  if (field === 'role') return ROLE_LABELS[value] || value;
+  if (field === 'carga') return CARGA_LABELS[value] || value;
+  if (field === 'chefeId') return state.persons.find(p => p.id === value)?.name || 'Sem chefe';
+  if (field === 'ativo') return value ? 'Ativo' : 'Inativo';
+  if (field === 'entrada' || field === 'saida' || field === 'nascimento') return formatDatePt(normalizeDateValue(value)) || value;
+  return String(value);
+}
+function recordRhMovement(person, field, previousValue, nextValue, type){
+  if (!person || String(previousValue ?? '') === String(nextValue ?? '')) return;
+  if (!Array.isArray(person.rhMovements)) person.rhMovements = [];
+  const label = RH_MOVEMENT_LABELS[field] || field;
+  person.rhMovements.push({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+    type: type || `Alteração de ${label}`,
+    field,
+    from: previousValue ?? '',
+    to: nextValue ?? '',
+    date: todayIso(),
+    at: new Date().toISOString()
+  });
+  person.rhMovements = person.rhMovements.slice(-100);
+}
+function rhMovementDetail(movement){
+  const before = rhMovementValue(movement.field, movement.from);
+  const after = rhMovementValue(movement.field, movement.to);
+  return `${before} → ${after}`;
 }
 function todayIso(){
   const now = new Date();
@@ -3245,7 +3280,9 @@ function createCollaborator(name, opts = {}){
   const id = Date.now().toString();
   const color = opts.color || selectedColor || COLORS[state.persons.length % COLORS.length];
   const role = opts.role || '';
-  state.persons.push({ id, name, color, role, ativo:true, entrada:'', saida:'' });
+  const person = { id, name, color, role, ativo:true, entrada:'', saida:'', rhMovements:[] };
+  state.persons.push(person);
+  recordRhMovement(person, 'ativo', '', true, 'Criação de colaborador');
   selectedPerson = id;
   autoSelectNextColor();
   save(); renderAll();
@@ -4007,18 +4044,27 @@ function renderDashboard(){
     .filter(x => x.missing.length)
     .slice(0,8)
     .map(x => [dashPersonHtml(x.p), escHtml(x.missing.join(', '))]);
-  const recentPeopleRows = state.persons
-    .filter(p => normalizeDateValue(p.entrada) || normalizeDateValue(p.saida))
-    .map(p => {
-      const entrada = normalizeDateValue(p.entrada);
-      const saida = normalizeDateValue(p.saida);
-      const last = [entrada, saida].filter(Boolean).sort().pop();
-      const type = saida && saida === last ? 'Saída' : 'Entrada';
-      return { p, type, date:last };
-    })
-    .sort((a,b) => b.date.localeCompare(a.date))
-    .slice(0,8)
-    .map(x => [x.type, dashPersonHtml(x.p), formatDatePt(x.date)]);
+  const loggedMovements = state.persons.flatMap(person =>
+    (Array.isArray(person.rhMovements) ? person.rhMovements : []).map(movement => ({ person, movement }))
+  );
+  const legacyMovements = state.persons.flatMap(person => {
+    if (Array.isArray(person.rhMovements) && person.rhMovements.length) return [];
+    const rows = [];
+    const entrada = normalizeDateValue(person.entrada);
+    const saida = normalizeDateValue(person.saida);
+    if (entrada) rows.push({ person, movement:{ type:'Entrada', field:'entrada', from:'', to:entrada, date:entrada, at:entrada } });
+    if (saida) rows.push({ person, movement:{ type:'Saída', field:'saida', from:'', to:saida, date:saida, at:saida } });
+    return rows;
+  });
+  const recentPeopleRows = [...loggedMovements, ...legacyMovements]
+    .sort((a,b) => String(b.movement.at || b.movement.date || '').localeCompare(String(a.movement.at || a.movement.date || '')))
+    .slice(0,12)
+    .map(({ person, movement }) => [
+      escHtml(movement.type || 'Alteração RH'),
+      dashPersonHtml(person),
+      escHtml(rhMovementDetail(movement)),
+      formatDatePt(movement.date || String(movement.at || '').slice(0,10))
+    ]);
 
   const noVacationRows = noVacation.slice(0,8).map(p => [dashPersonHtml(p), escHtml(ROLE_LABELS[p.role] || '—')]);
   const topPeopleItems = abs.topPeople.map(x => ({
@@ -4080,7 +4126,7 @@ function renderDashboard(){
       <div class="dash-panel"><h3>Ausências por tipo</h3>${dashStack(statusParts)}</div>
       <div class="dash-panel"><h3>Colaboradores por chefe de equipa</h3>${dashBars(teamItems, 'Sem colaboradores ativos.', 'var(--c-presente)')}</div>
       <div class="dash-panel"><h3>Dados RH em falta</h3>${dashTable(['Colaborador', 'Campos'], missingRows, 'Todos os colaboradores ativos têm os dados principais preenchidos.')}</div>
-      <div class="dash-panel"><h3>Movimentos RH recentes</h3>${dashTable(['Tipo', 'Colaborador', 'Data'], recentPeopleRows, 'Sem entradas ou saídas registadas.')}</div>
+      <div class="dash-panel dash-panel-wide"><h3>Movimentos RH recentes</h3>${dashTable(['Tipo', 'Colaborador', 'Alteração', 'Data'], recentPeopleRows, 'Sem movimentos RH registados.')}</div>
       <div class="dash-panel"><h3>Dias com mais pessoas ausentes</h3>${dashBars(topDayItems, 'Ainda não há ausências registadas.', 'var(--c-baixa)')}</div>
       <div class="dash-panel"><h3>Top 5 colaboradores com mais ausências</h3>${dashBars(topPeopleItems, 'Ainda não há ausências registadas.')}</div>
       <div class="dash-panel"><h3>Colaboradores sem férias marcadas</h3>${dashTable(['Colaborador', 'Função'], noVacationRows, 'Todos os colaboradores ativos têm férias marcadas.')}</div>
@@ -4126,6 +4172,7 @@ function renderBolsaOutcomeModal(due){
 function applyBolsaOutcome(personId, outcome){
   const person = state.persons.find(p => p.id === personId);
   if (!person) return;
+  const previousCarga = person.carga || '';
   if (outcome === '20h'){
     person.carga = '20h';
   } else if (outcome === 'recibo_verde'){
@@ -4135,6 +4182,7 @@ function applyBolsaOutcome(personId, outcome){
     openExitDateModal(personId);
     return;
   }
+  recordRhMovement(person, 'carga', previousCarga, person.carga, 'Alteração de carga/contrato');
   bolsaOutcomeDismissed = false;
   save();
   const due = bolsaFormacaoDuePersons();
@@ -4223,7 +4271,10 @@ function savePerson(id){
   const p = state.persons.find(pp => pp.id===id); if (!p) return;
   const newName = document.getElementById(`mgmt-name-${id}`).value.trim();
   if (!newName){ alert('O nome não pode estar vazio.'); return; }
-  p.name = newName; p.role = document.getElementById(`mgmt-role-${id}`).value;
+  const newRole = document.getElementById(`mgmt-role-${id}`).value;
+  recordRhMovement(p, 'name', p.name, newName);
+  recordRhMovement(p, 'role', p.role || '', newRole);
+  p.name = newName; p.role = newRole;
   save(); renderAll();
   const btn = document.querySelector(`#mgmt-row-${id} .mgmt-save-btn`);
   if (btn){ btn.textContent='✓ Guardado!'; setTimeout(()=>btn.textContent='✓ Guardar', 1200); }
@@ -4482,6 +4533,8 @@ function confirmExitDate(){
     if (input) input.focus();
     return;
   }
+  recordRhMovement(person, 'ativo', person.ativo !== false, false, 'Saída/Inativação');
+  recordRhMovement(person, 'saida', person.saida || '', saida, 'Data de saída');
   person.ativo = false;
   person.saida = saida;
   pendingExitPersonId = null;
@@ -4657,10 +4710,15 @@ function rhUpdate(id, field, value){
   if (!requireAdminAction()) return;
   const p = state.persons.find(pp => pp.id === id);
   if (!p) return;
+  const previousValue = p[field];
+  let movementType = '';
   if (field === 'ativo') {
     if (!!value){
+      const previousExit = p.saida || '';
       p.ativo = true;
       p.saida = '';
+      movementType = 'Reativação';
+      recordRhMovement(p, 'saida', previousExit, '', 'Remoção da data de saída');
     } else {
       openExitDateModal(id);
       renderRH();
@@ -4672,6 +4730,7 @@ function rhUpdate(id, field, value){
   else if (field === 'agv') p.agv = value.trim();
   else if (field === 'entrada' || field === 'saida' || field === 'nascimento') p[field] = normalizeDateValue(value);
   else p[field] = value;
+  recordRhMovement(p, field, previousValue, p[field], movementType);
   save();
   renderAll();
 }
