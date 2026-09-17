@@ -3062,12 +3062,28 @@ async function supabaseLogin(){
     if (err) err.textContent = 'Preenche email e password.';
     return;
   }
-  const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-  if (error){
-    if (err) err.textContent = 'Login inválido.';
-    return;
+  try {
+    const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error){
+      const message = String(error.message || '').toLowerCase();
+      if (message.includes('invalid login credentials')) {
+        if (err) err.textContent = 'Email ou password incorretos.';
+      } else if (message.includes('email not confirmed')) {
+        if (err) err.textContent = 'Este email ainda não foi confirmado.';
+      } else if (message.includes('rate limit') || error.status === 429) {
+        if (err) err.textContent = 'Demasiadas tentativas. Aguarda um pouco e tenta novamente.';
+      } else if (message.includes('failed to fetch') || message.includes('network')) {
+        if (err) err.textContent = 'O serviço RH está temporariamente indisponível. Confirma se o projeto Supabase está ativo.';
+      } else {
+        if (err) err.textContent = error.message || 'Não foi possível entrar.';
+      }
+      return;
+    }
+    await loadSupabaseSession();
+  } catch (error) {
+    console.error('Falha ao entrar no Supabase:', error);
+    if (err) err.textContent = 'O serviço RH está temporariamente indisponível. Confirma se o projeto Supabase está ativo.';
   }
-  await loadSupabaseSession();
 }
 async function supabaseLogout(){
   if (supabaseClient) await supabaseClient.auth.signOut();
