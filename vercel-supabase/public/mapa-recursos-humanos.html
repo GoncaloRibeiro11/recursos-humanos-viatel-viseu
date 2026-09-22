@@ -343,6 +343,7 @@
   #viewRH .rh-readonly.muted { color: var(--text-muted); font-weight: 500; }
   #viewRH tr.editing td { background: #f8fbff; }
   #viewRH .rh-select:focus, #viewRH .rh-input:focus { border-color: var(--accent); }
+  #viewRH .rh-name-input { min-width: 150px; }
   #viewRH .rh-input[type="date"] { min-width: 136px; }
   #viewRH .rh-tenure { display: inline-block; min-width: 96px; font-size: 12px; font-weight: 600; white-space: nowrap; }
   #viewRH .rh-tenure.muted { color: var(--text-muted); font-weight: 500; }
@@ -4653,7 +4654,7 @@ function renderRH(){
         ? `<button class="rh-edit-btn" onclick="${isEditing?`rhFinishEdit('${p.id}')`:`rhEditPerson('${p.id}')`}">${isEditing?'Guardar':'Editar'}</button><button class="rh-card-btn" onclick="openIdCard('${p.id}')">Cartao</button><button class="rh-access-btn" onclick="openAccessModal('${p.id}')">Acesso</button>${p.photo?`<button class="photo-flip-btn" onclick="togglePhotoMirror('${p.id}')">Virar</button>`:''}<button class="rh-del" onclick="rhDeletePerson('${p.id}')">Remover</button>`
         : `<button class="rh-card-btn" onclick="openIdCard('${p.id}')">Cartao</button>`;
       body += `<tr class="${ativo?'':'inactive'} ${isEditing?'editing':''}" data-rh-row="1" data-name="${escHtml(normalizeFilterText(p.name))}" data-role="${escHtml(p.role||'')}" data-chefe="${escHtml(p.chefeId||'')}" data-empresa="${escHtml(normalizeFilterText(p.empresa||''))}" data-carga="${escHtml(p.carga||'')}" data-nascimento="${escHtml(nascimento)}" data-entrada="${escHtml(entrada)}" data-saida="${escHtml(saida)}" data-ativo="${ativo?'ativo':'inativo'}">
-        <td data-label="Colaborador"><div class="rh-name"><button class="rh-photo-btn ${isEditing?'':'locked'}" ${photoAction} title="${isEditing?(p.photo?'Mudar foto':'Adicionar foto'):'Bloqueado. Clica em Editar.'}">${avatarHtml(p, 28)}</button><span>${escHtml(p.name)}${ativo?'':'<span class="badge-inativo">inativo</span>'}</span></div></td>
+        <td data-label="Colaborador"><div class="rh-name"><button class="rh-photo-btn ${isEditing?'':'locked'}" ${photoAction} title="${isEditing?(p.photo?'Mudar foto':'Adicionar foto'):'Bloqueado. Clica em Editar.'}">${avatarHtml(p, 28)}</button>${isEditing ? `<input class="rh-input rh-name-input" value="${escHtml(p.name)}" placeholder="Nome do colaborador..." onchange="rhUpdateName('${p.id}',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">` : `<span>${escHtml(p.name)}</span>`}${ativo?'':'<span class="badge-inativo">inativo</span>'}</div></td>
         <td data-label="Função">${isEditing ? `<select class="rh-select" onchange="rhUpdate('${p.id}','role',this.value)">${roleOpts}</select>` : rhRead(ROLE_LABELS[p.role])}</td>
         <td data-label="Chefe">${isEditing ? `<select class="rh-select" onchange="rhUpdate('${p.id}','chefeId',this.value)">${chefeOpts}</select>` : rhRead(chefe ? chefe.name : '')}</td>
         <td data-label="Empresa">${isEditing ? `<input class="rh-input" list="empresaList" value="${escHtml(p.empresa||'')}" placeholder="Empresa..." onchange="rhUpdate('${p.id}','empresa',this.value)">` : rhRead(p.empresa)}</td>
@@ -4721,6 +4722,18 @@ function applyRHFilters(){
   });
   if (inactiveToggle) inactiveToggle.style.display = rhFilters.ativo === 'ativo' ? 'none' : '';
   if (noResults) noResults.style.display = rows.length && visible === 0 && hiddenInactiveMatches === 0 ? '' : 'none';
+}
+function rhUpdateName(id, input){
+  if (!requireAdminAction()) return;
+  const p = state.persons.find(pp => pp.id === id);
+  if (!p) return;
+  const name = input.value.trim();
+  if (!name){
+    input.value = p.name || '';
+    input.focus();
+    return;
+  }
+  rhUpdate(id, 'name', name);
 }
 function rhUpdate(id, field, value){
   if (!requireAdminAction()) return;
