@@ -1,7 +1,8 @@
 {
   "private": true,
   "scripts": {
-    "build": "node scripts/build-photo-background.mjs"
+    "build": "node scripts/build-photo-background.mjs",
+    "test": "node --test scripts/test-rh-sync.mjs"
   },
   "dependencies": {
     "@imgly/background-removal": "1.7.0",

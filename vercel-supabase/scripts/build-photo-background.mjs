@@ -77,3 +77,9 @@ await build({
   logLevel: 'info'
 });
 await copyFile(new URL('../public/mapa-recursos-humanos.html', import.meta.url), new URL('../public/mapa-coordenacao-2026.html', import.meta.url));
+await build({
+  absWorkingDir:fileURLToPath(new URL('../',import.meta.url)),
+  entryPoints:['src/rh-sync.mjs'],
+  outfile:'public/rh-sync.js',
+  bundle:true, minify:true, format:'iife', globalName:'RhSync', platform:'browser', target:['chrome100','safari16']
+});

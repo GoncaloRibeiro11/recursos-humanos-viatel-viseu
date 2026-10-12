@@ -1205,6 +1205,7 @@
   body:not(.is-admin) .person-delete { display: none !important; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="rh-sync.js"></script>
 </head>
 <body>
 
@@ -1240,6 +1241,7 @@
     <button class="tab" id="tab-ferias" onclick="switchTab('ferias')">🏖️ Férias</button>
   </div>
   <div class="header-actions">
+    <span id="syncStatus" class="admin-only" role="status" aria-live="polite" style="font-size:11px;color:var(--text-muted);max-width:150px"></span>
     <div class="auth-user" id="authUserMenu">
       <button class="auth-user-trigger" onclick="toggleProfileMenu(event)" aria-haspopup="menu" aria-expanded="false">
         <span class="auth-user-photo" id="authUserPhoto">RH</span>
@@ -2697,6 +2699,7 @@ async function persistPersonPhoto(person, updates){
     if (result.error) throw result.error;
   }
   Object.assign(person, updates);
+  rhSync?.acceptPersonFields(person.id,updates);
   try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
 }
 const processingPhotos = new Set();
@@ -2860,9 +2863,9 @@ let serverSyncTimer = null;
 let supabaseClient = null;
 let supabaseReady = false;
 let currentProfile = null;
-let supabaseSaveTimer = null;
-let supabaseSaveRunning = false;
-let supabaseSavePending = false;
+let rhSync = null;
+let currentUserId = '';
+let supabaseProjectId = '';
 let accessPersonId = null;
 let currentTheme = 'light';
 function preferredTheme(){
@@ -2892,11 +2895,40 @@ function openPreferencesModal(){
   renderThemeOptions();
   document.getElementById('preferencesModal').classList.add('open');
 }
-function save(){
+function save(recordKeys){
   try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
-  if (supabaseReady) queueSupabaseSave();
-  else queueServerSync();
+  if (rhSync && isAdminUser()) rhSync.track(state,recordKeys);
 }
+function updateSyncStatus(status){
+  const element = document.getElementById('syncStatus');
+  if (!element) return;
+  if (!status.pending){
+    element.textContent = 'Guardado';
+    element.style.color = '#15803d';
+    element.title = 'Todas as alterações foram confirmadas pelo servidor.';
+  } else {
+    element.textContent = !status.durable ? 'Por guardar. Mantém aberto.'
+      : status.error ? 'Guardado neste PC. A reenviar.' : 'A guardar...';
+    element.style.color = status.error || !status.durable ? '#b45309' : 'var(--text-muted)';
+    element.title = `${status.pending} alteração(ões) a aguardar confirmação do servidor.${status.error ? ' ' + (status.error.message || '') : ''}`;
+  }
+}
+window.addEventListener('online', () => { if (rhSync) void rhSync.flush(); });
+window.addEventListener('storage', event => {
+  if (rhSync && event.key?.startsWith(rhSync.prefix)){
+    rhSync.readJournal();
+    rhSync.status();
+    void rhSync.flush();
+  }
+});
+window.addEventListener('beforeunload', event => {
+  if (!rhSync) return;
+  rhSync.readJournal();
+  if (!rhSync.pending.size) return;
+  void rhSync.flush();
+  event.preventDefault();
+  event.returnValue = '';
+});
 function isAdminUser(){ return !!currentProfile && currentProfile.role === 'admin'; }
 function requireAdminAction(){
   if (isAdminUser()) return true;
@@ -3158,7 +3190,13 @@ async function initSupabaseApp(){
       showAuth('Não foi possível carregar o cliente Supabase. Confirma a ligação à internet.');
       return;
     }
-    supabaseClient = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+    supabaseProjectId = new URL(cfg.supabaseUrl).hostname;
+    supabaseClient = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
+      global:{ fetch:(input, options = {}) => {
+        const keepalive = typeof options.body === 'string' && new Blob([options.body]).size < 60000;
+        return fetch(input,{ ...options, keepalive });
+      } }
+    });
     const { data: sessionData } = await supabaseClient.auth.getSession();
     if (!sessionData.session) {
       showAuth('');
@@ -3207,6 +3245,7 @@ async function supabaseLogin(){
   }
 }
 async function supabaseLogout(){
+  if (rhSync){ await rhSync.flush(); rhSync.stop(); rhSync = null; }
   if (supabaseClient) await supabaseClient.auth.signOut();
   try {
     sessionStorage.removeItem(STORAGE_KEY);
@@ -3215,6 +3254,7 @@ async function supabaseLogout(){
     localStorage.removeItem(BACKUP_KEY);
   } catch(e){}
   currentProfile = null;
+  currentUserId = '';
   supabaseReady = false;
   applyStateData({ persons: [], vacations: [], records: {} });
   renderAll();
@@ -3279,6 +3319,7 @@ async function loadSupabaseSession(){
     return;
   }
   currentProfile = profile;
+  currentUserId = userData.user.id;
   supabaseReady = true;
   await loadFromSupabase();
   hideAuth();
@@ -3286,14 +3327,21 @@ async function loadSupabaseSession(){
   try { switchTab('rh'); } catch(e){ renderAll(); }
 }
 async function loadFromSupabase(){
+  if (isAdminUser()){
+    try {
+      const backupKey = `rh-attendance-before-autosave-v1:${supabaseProjectId}:${currentUserId}`;
+      const previous = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || 'null');
+      if (previous?.records && Object.keys(previous.records).length && !localStorage.getItem(backupKey)){
+        localStorage.setItem(backupKey,JSON.stringify({ savedAt:new Date().toISOString(), records:previous.records }));
+      }
+    } catch(error){ console.warn('Não foi possível preservar a cópia anterior da assiduidade.',error); }
+  }
   const [personsRes, vacationsRes, recordsRes] = await Promise.all([
-    supabaseClient.from('rh_persons').select('*').order('name', { ascending: true }),
-    supabaseClient.from('rh_vacations').select('*'),
-    supabaseClient.from('rh_attendance_records').select('*')
+    RhSync.fetchAllRows(supabaseClient,'rh_persons',['id']),
+    RhSync.fetchAllRows(supabaseClient,'rh_vacations',['id']),
+    RhSync.fetchAllRows(supabaseClient,'rh_attendance_records',['person_id','record_date'])
   ]);
-  const errors = [personsRes.error, vacationsRes.error, recordsRes.error].filter(Boolean);
-  if (errors.length) throw errors[0];
-  const persons = (personsRes.data || []).map(row => normalizePerson({
+  const persons = personsRes.map(row => normalizePerson({
     ...(row.data || {}),
     id: row.id,
     name: row.name,
@@ -3306,7 +3354,7 @@ async function loadFromSupabase(){
     saida: row.saida || (row.data && row.data.saida) || '',
     nascimento: row.nascimento || (row.data && row.data.nascimento) || ''
   }));
-  const vacations = (vacationsRes.data || []).map(row => ({
+  const vacations = vacationsRes.map(row => ({
     ...(row.data || {}),
     id: row.id,
     personId: row.person_id,
@@ -3315,82 +3363,19 @@ async function loadFromSupabase(){
     note: row.note || (row.data && row.data.note) || ''
   }));
   const records = {};
-  (recordsRes.data || []).forEach(row => {
+  recordsRes.forEach(row => {
     records[`${row.person_id}|${row.record_date}`] = row.code;
   });
-  applyStateData({ persons, vacations, records });
+  rhSync?.stop();
+  rhSync = isAdminUser() ? new RhSync.RhSync({
+    client:supabaseClient, storage:localStorage, userId:currentUserId,
+    projectId:supabaseProjectId, onStatus:updateSyncStatus
+  }) : null;
+  const serverState = { persons, vacations, records };
+  applyStateData(rhSync ? rhSync.overlay(serverState) : serverState);
+  if (rhSync){ rhSync.observe(state); void rhSync.flush(); }
   try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
   setAuthUi(true);
-}
-function queueSupabaseSave(){
-  if (!isAdminUser()) return;
-  clearTimeout(supabaseSaveTimer);
-  supabaseSaveTimer = setTimeout(saveToSupabase, 800);
-}
-async function saveToSupabase(){
-  if (!supabaseClient || !isAdminUser()) return;
-  if (supabaseSaveRunning){
-    supabaseSavePending = true;
-    return;
-  }
-  supabaseSaveRunning = true;
-  try {
-    do {
-      supabaseSavePending = false;
-      await persistStateToSupabase();
-    } while (supabaseSavePending);
-  } catch (error){
-    console.error(error);
-    alert('Não foi possível guardar a última alteração no servidor. Atualiza a página e tenta novamente.');
-  } finally {
-    supabaseSaveRunning = false;
-  }
-}
-async function persistStateToSupabase(){
-  const persons = state.persons.map(person => ({
-    id: person.id,
-    name: person.name || '',
-    role_code: person.role || null,
-    chefe_id: person.chefeId || null,
-    empresa: person.empresa || null,
-    carga: person.carga || null,
-    ativo: person.ativo !== false,
-    entrada: normalizeDateValue(person.entrada) || null,
-    saida: normalizeDateValue(person.saida) || null,
-    nascimento: normalizeDateValue(person.nascimento) || null,
-    data: person
-  }));
-  const vacations = state.vacations.map(vacation => ({
-    id: vacation.id,
-    person_id: vacation.personId,
-    start_date: vacation.start,
-    end_date: vacation.end,
-    note: vacation.note || null,
-    color: vacation.color || null,
-    data: vacation
-  }));
-  const records = Object.entries(state.records || {}).map(([key, code]) => {
-    const separator = key.indexOf('|');
-    return { person_id: key.slice(0, separator), record_date: key.slice(separator + 1), code };
-  });
-  let result = await supabaseClient.from('rh_vacations').delete().neq('id', '__never__');
-  if (result.error) throw result.error;
-  result = await supabaseClient.from('rh_attendance_records').delete().neq('person_id', '__never__');
-  if (result.error) throw result.error;
-  result = await supabaseClient.from('rh_persons').delete().neq('id', '__never__');
-  if (result.error) throw result.error;
-  if (persons.length){
-    result = await supabaseClient.from('rh_persons').upsert(persons);
-    if (result.error) throw result.error;
-  }
-  if (vacations.length){
-    result = await supabaseClient.from('rh_vacations').upsert(vacations);
-    if (result.error) throw result.error;
-  }
-  for (let i = 0; i < records.length; i += 500){
-    result = await supabaseClient.from('rh_attendance_records').upsert(records.slice(i, i + 500));
-    if (result.error) throw result.error;
-  }
 }
 
 // ===================== TABS =====================
@@ -3760,7 +3745,7 @@ function cellClick(pid, dateStr){
   const k = recKey(pid, dateStr);
   if (state.records[k] === paintCode) delete state.records[k];
   else state.records[k] = paintCode;
-  save(); renderSheet(); renderAssidStats();
+  save([k]); renderSheet(); renderAssidStats();
 }
 function changeMonth(delta){ currentMonth = Math.max(0, Math.min(11, currentMonth+delta)); renderSheet(); renderAssidStats(); }
 function setAssidPeriodMode(mode){
