@@ -7,8 +7,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const root = path.resolve(__dirname, '../public');
 const originalHtml = fs.readFileSync(path.join(root, 'mapa-recursos-humanos.html'), 'utf8');
 const html = originalHtml.replace(/^initSupabaseApp\(\);\r?$/m, 'window.photoTestReady = true;');
+const configuration = JSON.parse(fs.readFileSync(path.join(root, '../vercel.json'), 'utf8'));
+const securityHeaders = configuration.headers.find(rule => rule.source === '/(.*)').headers;
 
 const server = http.createServer((req, res) => {
+  for (const header of securityHeaders) res.setHeader(header.key, header.value);
   const file = new URL(req.url, 'http://localhost').pathname.slice(1);
   if (file === 'test.html') {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -28,6 +31,12 @@ const server = http.createServer((req, res) => {
   const browser = await chromium.launch({ headless: true, channel:'chrome' });
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.addInitScript(() => {
+      window.photoCspViolations = [];
+      document.addEventListener('securitypolicyviolation', event => {
+        window.photoCspViolations.push({ directive:event.effectiveDirective, resource:event.blockedURI });
+      });
+    });
     page.on('pageerror', error => console.log('PAGE ERROR:', error.message));
     page.on('console', message => { if (message.type() === 'error') console.log('BROWSER:', message.text()); });
     await page.route('**/supabase-js**', route => route.abort());
@@ -96,23 +105,28 @@ const server = http.createServer((req, res) => {
     await page.screenshot({ path: path.join(root, '../../../../recovery/photo-card-mobile.png') });
     console.log(JSON.stringify({ regression }, null, 2));
 
-    page.on('console', message => { if (message.type() === 'error') console.log('BROWSER:', message.text()); });
     const inference = await page.evaluate(async () => {
       const input = await (await fetch('maria-peixoto-foto-cartao.jpg')).blob();
       const start = performance.now();
-      const output = await removeImageBackground(input);
-      const image = await loadImageFromFile(output);
+      let fallbackUsed = false;
+      removePersonBackgroundWithSelfie = async () => { fallbackUsed = true; throw new Error('Primary engine failed in test'); };
       const person = state.persons[0];
       person.photoOriginal = resizePhotoDataUrl(await loadImageFromFile(input), 'image/jpeg');
-      person.photoCutout = cropPhotoCutout(image);
-      person.photo = await composeBlueAvatarFromImage(image, true);
+      const previousCutout = person.photoCutout;
+      currentIdCardPersonId = person.id;
+      await reprocessPersonPhoto(person.id);
+      const status = document.getElementById('photoProcessStatus').textContent;
+      const image = await loadImageFromUrl(person.photoCutout);
       person.name = 'Foto de teste';
-      setPhotoProcessStatus('Fundo removido.');
       await drawIdCardCanvas(person);
-      return { format:output.type, transparent:hasPhotoTransparency(image), ms:Math.round(performance.now()-start), width:image.width, height:image.height };
+      return { format:'image/png', transparent:hasPhotoTransparency(image), changedCutout:person.photoCutout !== previousCutout, fallbackUsed, ms:Math.round(performance.now()-start), width:image.width, height:image.height, status, cspViolations:window.photoCspViolations };
     });
     assert.equal(inference.format, 'image/png');
     assert.equal(inference.transparent, true);
+    assert.equal(inference.changedCutout, true);
+    assert.equal(inference.fallbackUsed, false);
+    assert.equal(inference.status, 'Fundo removido. Foto guardada.');
+    assert.deepEqual(inference.cspViolations, []);
     console.log(JSON.stringify({ inference }, null, 2));
     await page.setViewportSize({ width:1280, height:900 });
     await page.screenshot({ path:path.join(root, '../../../../recovery/photo-card-inference.png') });

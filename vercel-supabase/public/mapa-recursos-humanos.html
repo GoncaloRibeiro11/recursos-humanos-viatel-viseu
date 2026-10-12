@@ -2639,7 +2639,7 @@ async function buildPersonPhoto(file, opts = {}){
   const photoOriginal = resizePhotoDataUrl(original, hasPhotoTransparency(original) ? 'image/png' : 'image/jpeg');
   let cutout = original;
   if (!hasPhotoTransparency(original)){
-    const prepared = await (await fetch(photoOriginal)).blob();
+    const prepared = savedPhotoToBlob(photoOriginal);
     try {
       cutout = await loadImageFromFile(await removeImageBackground(prepared));
       if (!hasPhotoTransparency(cutout)) throw new Error('O recorte não produziu transparência.');
@@ -2680,6 +2680,13 @@ function setPhotoProcessStatus(message){
   const status = document.getElementById('photoProcessStatus');
   if (status) status.textContent = message;
 }
+function savedPhotoToBlob(url){
+  const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/.exec(url);
+  if (!match) throw new Error('Formato da foto guardada inválido.');
+  const decoded = atob(match[2]);
+  const bytes = Uint8Array.from(decoded, char => char.charCodeAt(0));
+  return new Blob([bytes], { type:match[1] });
+}
 async function persistPersonPhoto(person, updates){
   if (supabaseClient && supabaseReady){
     const current = await supabaseClient.from('rh_persons').select('data').eq('id', person.id).single();
@@ -2700,11 +2707,14 @@ async function setPhotoFromFile(file, id){
   const button = document.getElementById('idCardRemoveBackground');
   if (button) button.disabled = true;
   setPhotoProcessStatus('A remover o fundo da foto...');
+  let phase = 'recorte';
   try {
     const photos = await buildPersonPhoto(file);
     const person = state.persons.find(p => p.id === id);
     if (!person) return;
+    phase = 'gravação';
     await persistPersonPhoto(person, { ...photos, photoFacingRight: false });
+    phase = 'pré-visualização';
     renderAll();
     if (document.getElementById('mgmtModal').classList.contains('open')) renderMgmtModal();
     if (currentIdCardPersonId === id && document.getElementById('idCardModal').classList.contains('open')){
@@ -2714,7 +2724,10 @@ async function setPhotoFromFile(file, id){
     setPhotoProcessStatus('Fundo removido. Foto guardada.');
   } catch(error){
     console.error('Não foi possível guardar o recorte:', error);
-    const message = 'Não foi possível remover ou guardar o fundo. A foto anterior foi mantida. Tenta novamente com internet.';
+    const detail = error.message || error.code || 'Erro desconhecido.';
+    const message = phase === 'pré-visualização'
+      ? `A foto foi guardada, mas não foi possível atualizar o cartão. Fecha e volta a abrir o cartão.\n\n${detail}`
+      : `${phase === 'gravação' ? 'Não foi possível guardar a foto.' : 'Não foi possível remover o fundo.'} A foto anterior foi mantida.\n\n${detail}`;
     setPhotoProcessStatus(message);
     alert(message);
   } finally {
@@ -2728,9 +2741,16 @@ async function reprocessPersonPhoto(id){
   const person = state.persons.find(p => p.id === id);
   if (!person || !person.photo) return;
   try {
-    const response = await fetch(person.photoOriginal || person.photo);
-    if (!response.ok) throw new Error('Foto indisponível.');
-    await setPhotoFromFile(await response.blob(), id);
+    const source = person.photoOriginal || person.photo;
+    let file;
+    if (source.startsWith('data:')){
+      file = savedPhotoToBlob(source);
+    } else {
+      const response = await fetch(source);
+      if (!response.ok) throw new Error('Foto indisponível.');
+      file = await response.blob();
+    }
+    await setPhotoFromFile(file, id);
   } catch(error){
     setPhotoProcessStatus('Não foi possível ler a foto guardada.');
   }

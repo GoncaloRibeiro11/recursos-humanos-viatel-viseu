@@ -1,9 +1,14 @@
 {
   "private": true,
-  "scripts": { "build": "node scripts/build-photo-background.mjs" },
+  "scripts": {
+    "build": "node scripts/build-photo-background.mjs"
+  },
   "dependencies": {
     "@imgly/background-removal": "1.7.0",
     "onnxruntime-web": "1.21.0"
   },
-  "devDependencies": { "esbuild": "0.25.5" }
+  "devDependencies": {
+    "acorn": "8.14.1",
+    "esbuild": "0.25.5"
+  }
 }
