@@ -1477,10 +1477,12 @@
     </div>
     <div class="id-card-photo-tools" id="idCardPhotoTools" style="display:none">
       <span>Foto no cartão:</span>
+      <button class="btn" id="idCardRemoveBackground" onclick="reprocessPersonPhoto(currentIdCardPersonId)">Remover fundo</button>
       <label>Zoom <input type="range" id="idCardPhotoZoom" min="100" max="160" value="114" oninput="adjustIdCardPhoto('zoom', this.value)"></label>
       <label>Altura <input type="range" id="idCardPhotoY" min="20" max="70" value="40" oninput="adjustIdCardPhoto('focusY', this.value)"></label>
       <button class="btn" onclick="resetIdCardPhoto()">Repor foto</button>
     </div>
+    <div id="photoProcessStatus" role="status" aria-live="polite" style="font-size:12px;color:var(--text-muted);margin-top:8px"></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('idCardModal')">Fechar</button>
       <button class="btn" onclick="downloadIdCardBack()">Descarregar verso</button>
@@ -2024,29 +2026,21 @@ function setupPhotoEditorEvents(){
 }
 async function savePhotoEditor(){
   if (!photoEditor.canvas || !photoEditor.personId) return;
-  const size = 320;
-  const finalCanvas = document.createElement('canvas');
-  finalCanvas.width = size;
-  finalCanvas.height = size;
-  const ctx = finalCanvas.getContext('2d');
-  const center = size / 2;
-  const radius = size * 0.44;
-  ctx.fillStyle = '#2c9bd8';
-  ctx.fillRect(0, 0, size, size);
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(center, center, radius, 0, Math.PI * 2);
-  ctx.clip();
-  ctx.drawImage(photoEditor.canvas, center - radius, center - radius, radius * 2, radius * 2);
-  ctx.restore();
   const p = state.persons.find(pp => pp.id === photoEditor.personId);
   if (p){
-    p.photo = finalCanvas.toDataURL('image/png');
-    delete p.photoFacingRight;
-    save();
-    closeModal('photoEditorModal');
-    renderAll();
-    if (document.getElementById('mgmtModal').classList.contains('open')) renderMgmtModal();
+    try {
+      const cutout = await canvasToLoadedImage(photoEditor.canvas);
+      await persistPersonPhoto(p, {
+        photo: await composeBlueAvatarFromImage(cutout, true),
+        photoCutout: cropPhotoCutout(cutout),
+        photoBackgroundRemoved: hasPhotoTransparency(cutout),
+        photoFacingRight: false
+      });
+      closeModal('photoEditorModal');
+      renderAll();
+      if (document.getElementById('mgmtModal').classList.contains('open')) renderMgmtModal();
+      if (currentIdCardPersonId === p.id) await drawIdCardCanvas(p);
+    } catch(error){ alert('Não foi possível guardar a foto.'); }
   }
 }
 function loadImageFromUrl(url){
@@ -2291,13 +2285,29 @@ async function drawIdCardCanvas(person){
   ctx.save();
   canvasRoundRect(ctx, 601, 29, 201, 309, 19);
   ctx.clip();
-  if (person.photo){
+  if (person.photoCutout || person.photo){
     try {
-      const photo = await loadImageFromUrl(person.photo);
+      const photo = await loadImageFromUrl(person.photoCutout || person.photo);
       const photoFocusX = person.photoCardFocusX || 0.5;
       const photoFocusY = person.photoCardFocusY || 0.4;
       const photoZoom = person.photoCardZoom || 1.14;
-      drawImageCover(ctx, photo, 601, 29, 201, 309, photoFocusX, photoFocusY, photoZoom, !!person.photoMirror);
+      if (person.photoCutout){
+        const scale = Math.min(201 / photo.width, 301 / photo.height) * photoZoom;
+        const dw = photo.width * scale, dh = photo.height * scale;
+        const dx = 601 + (201 - dw) * photoFocusX;
+        const dy = 33 + Math.max(0, 301 - dh) * photoFocusY;
+        if (person.photoMirror){
+          ctx.save();
+          ctx.translate(dx + dw, dy);
+          ctx.scale(-1, 1);
+          ctx.drawImage(photo, 0, 0, dw, dh);
+          ctx.restore();
+        } else {
+          ctx.drawImage(photo, dx, dy, dw, dh);
+        }
+      } else {
+        drawImageCover(ctx, photo, 601, 29, 201, 309, photoFocusX, photoFocusY, photoZoom, !!person.photoMirror);
+      }
     } catch(e){
       drawCenteredText(ctx, initials(person.name || ''), 701, 184, 150, '700 54px Segoe UI, Arial', '#ffffff');
     }
@@ -2385,6 +2395,11 @@ function syncIdCardPhotoControls(person){
   tools.style.display = person && person.photo ? '' : 'none';
   zoom.value = Math.round((person.photoCardZoom || 1.14) * 100);
   focusY.value = Math.round((person.photoCardFocusY || 0.4) * 100);
+  const removeButton = document.getElementById('idCardRemoveBackground');
+  if (removeButton){
+    removeButton.style.display = isAdminUser() ? '' : 'none';
+    removeButton.disabled = processingPhotos.has(person.id);
+  }
 }
 function adjustIdCardPhoto(field, value){
   const person = state.persons.find(p => p.id === currentIdCardPersonId);
@@ -2505,12 +2520,13 @@ async function composeBlueAvatarFromImage(img, hasTransparentSubject = false, op
   return canvas.toDataURL('image/png');
 }
 async function removeImageBackground(file){
-  const mod = await import('https://esm.sh/@imgly/background-removal@1.7.0?bundle&deps=onnxruntime-web@1.21.0');
-  const removeBackground = mod.default || mod.removeBackground;
-  if (!removeBackground) throw new Error('Background removal unavailable');
-  return removeBackground(file, {
-    model: 'isnet_fp16',
-    output: { format: 'image/png', type: 'foreground' },
+  const { default: removeBackground } = await import('./photo-background-removal.js');
+  return removeBackground(file, (key, current, total) => {
+    if (key.startsWith('fetch:') && total > 0){
+      setPhotoProcessStatus(`A preparar o recorte: ${Math.round(current / total * 100)}%`);
+    } else {
+      setPhotoProcessStatus('A remover o fundo da foto...');
+    }
   });
 }
 function loadExternalScript(src, globalName){
@@ -2593,53 +2609,131 @@ async function removePersonBackgroundWithSelfie(file){
     setTimeout(() => finish(null, new Error('Selfie segmentation timeout')), 12000);
   });
 }
-async function buildPhotoDataUrl(file, opts = {}){
-  try {
-    const blob = await removeImageBackground(file);
-    const url = URL.createObjectURL(blob);
+function hasPhotoTransparency(img){
+  const canvas = document.createElement('canvas');
+  canvas.width = 96;
+  canvas.height = 96;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, 96, 96);
+  const pixels = ctx.getImageData(0, 0, 96, 96).data;
+  let transparent = 0, visible = 0;
+  for (let i = 3; i < pixels.length; i += 4){
+    if (pixels[i] < 32) transparent++;
+    if (pixels[i] > 192) visible++;
+  }
+  return transparent > 96 && visible > 96;
+}
+function resizePhotoDataUrl(img, format = 'image/png', maxSide = 1200){
+  const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(img.width * scale));
+  canvas.height = Math.max(1, Math.round(img.height * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL(format, 0.92);
+}
+async function buildPersonPhoto(file, opts = {}){
+  const original = await loadImageFromFile(file);
+  const photoOriginal = resizePhotoDataUrl(original, hasPhotoTransparency(original) ? 'image/png' : 'image/jpeg');
+  let cutout = original;
+  if (!hasPhotoTransparency(original)){
+    const prepared = await (await fetch(photoOriginal)).blob();
     try {
-      const img = await loadImageFromUrl(url);
-      return await composeBlueAvatarFromImage(img, true, opts);
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-  } catch(e){
-    console.warn('Remoção automática principal indisponível, a tentar segmentação de pessoa.', e);
-    try {
-      const cutoutCanvas = await removePersonBackgroundWithSelfie(file);
-      const cutoutImg = await canvasToLoadedImage(cutoutCanvas);
-      return await composeBlueAvatarFromImage(cutoutImg, true, opts);
-    } catch(e2){
-      console.warn('Segmentação de pessoa indisponível, a usar recorte simples.', e2);
-    }
-    const url = URL.createObjectURL(file);
-    try {
-      const img = await loadImageFromUrl(url);
-      return await composeBlueAvatarFromImage(img, false, opts);
-    } finally {
-      URL.revokeObjectURL(url);
+      cutout = await loadImageFromFile(await removeImageBackground(prepared));
+      if (!hasPhotoTransparency(cutout)) throw new Error('O recorte não produziu transparência.');
+    } catch (error){
+      console.warn('Falha no recorte principal da foto:', error);
+      setPhotoProcessStatus('A tentar o recorte de retrato...');
+      const canvas = await removePersonBackgroundWithSelfie(prepared);
+      cutout = await canvasToLoadedImage(canvas);
+      if (!hasPhotoTransparency(cutout)) throw new Error('Não foi possível remover o fundo da foto.');
     }
   }
+  return {
+    photo: await composeBlueAvatarFromImage(cutout, true, opts),
+    photoCutout: cropPhotoCutout(cutout),
+    photoOriginal,
+    photoBackgroundRemoved: true
+  };
 }
-function setPhotoFromFile(file, id){
-  if (!requireAdminAction()) return;
-  if (!file) return;
+function cropPhotoCutout(img){
+  const source = document.createElement('canvas');
+  source.width = img.width;
+  source.height = img.height;
+  const ctx = source.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  const bounds = getAlphaBounds(ctx, source.width, source.height);
+  if (!bounds) throw new Error('A foto recortada ficou vazia.');
+  const pad = Math.max(4, Math.round(Math.max(bounds.w, bounds.h) * 0.025));
+  const x = Math.max(0, bounds.x - pad), y = Math.max(0, bounds.y - pad);
+  const w = Math.min(source.width - x, bounds.w + pad * 2);
+  const h = Math.min(source.height - y, bounds.h + pad * 2);
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext('2d').drawImage(source, x, y, w, h, 0, 0, w, h);
+  return canvas.toDataURL('image/png');
+}
+function setPhotoProcessStatus(message){
+  const status = document.getElementById('photoProcessStatus');
+  if (status) status.textContent = message;
+}
+async function persistPersonPhoto(person, updates){
+  if (supabaseClient && supabaseReady){
+    const current = await supabaseClient.from('rh_persons').select('data').eq('id', person.id).single();
+    if (current.error) throw current.error;
+    const result = await supabaseClient.from('rh_persons').update({
+      data: { ...(current.data.data || {}), ...updates }
+    }).eq('id', person.id);
+    if (result.error) throw result.error;
+  }
+  Object.assign(person, updates);
+  try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
+}
+const processingPhotos = new Set();
+async function setPhotoFromFile(file, id){
+  if (!requireAdminAction() || !file || processingPhotos.has(id)) return;
+  processingPhotos.add(id);
   document.body.style.cursor = 'progress';
-  const photoOpts = { mirror: false };
-  buildPhotoDataUrl(file, photoOpts).then(dataUrl => {
-    const p = state.persons.find(pp => pp.id === id);
-    if (p){
-      p.photo = dataUrl;
-      delete p.photoFacingRight;
-      save();
-      renderAll();
-      if (document.getElementById('mgmtModal').classList.contains('open')) renderMgmtModal();
+  const button = document.getElementById('idCardRemoveBackground');
+  if (button) button.disabled = true;
+  setPhotoProcessStatus('A remover o fundo da foto...');
+  try {
+    const photos = await buildPersonPhoto(file);
+    const person = state.persons.find(p => p.id === id);
+    if (!person) return;
+    await persistPersonPhoto(person, { ...photos, photoFacingRight: false });
+    renderAll();
+    if (document.getElementById('mgmtModal').classList.contains('open')) renderMgmtModal();
+    if (currentIdCardPersonId === id && document.getElementById('idCardModal').classList.contains('open')){
+      syncIdCardPhotoControls(person);
+      await drawIdCardCanvas(person);
     }
-  }).catch(() => {
-    alert('Não foi possível ler a imagem.');
-  }).finally(() => {
-    document.body.style.cursor = '';
-  });
+    setPhotoProcessStatus('Fundo removido. Foto guardada.');
+  } catch(error){
+    console.error('Não foi possível guardar o recorte:', error);
+    const message = 'Não foi possível remover ou guardar o fundo. A foto anterior foi mantida. Tenta novamente com internet.';
+    setPhotoProcessStatus(message);
+    alert(message);
+  } finally {
+    processingPhotos.delete(id);
+    if (!processingPhotos.size) document.body.style.cursor = '';
+    if (button) button.disabled = false;
+  }
+}
+async function reprocessPersonPhoto(id){
+  if (!requireAdminAction()) return;
+  const person = state.persons.find(p => p.id === id);
+  if (!person || !person.photo) return;
+  try {
+    const response = await fetch(person.photoOriginal || person.photo);
+    if (!response.ok) throw new Error('Foto indisponível.');
+    await setPhotoFromFile(await response.blob(), id);
+  } catch(error){
+    setPhotoProcessStatus('Não foi possível ler a foto guardada.');
+  }
 }
 function pickPhoto(id){
   if (!requireAdminAction()) return;
@@ -2648,10 +2742,16 @@ function pickPhoto(id){
   input.onchange = e => setPhotoFromFile(e.target.files[0], id);
   input.click();
 }
-function removePhoto(id){
+async function removePhoto(id){
   if (!requireAdminAction()) return;
   const p = state.persons.find(pp => pp.id === id);
-  if (p){ delete p.photo; delete p.photoFacingRight; save(); renderAll(); if (document.getElementById('mgmtModal').classList.contains('open')) renderMgmtModal(); }
+  if (p){
+    try {
+      await persistPersonPhoto(p, { photo:'', photoCutout:'', photoOriginal:'', photoBackgroundRemoved:false, photoFacingRight:false });
+      renderAll();
+      if (document.getElementById('mgmtModal').classList.contains('open')) renderMgmtModal();
+    } catch(error){ alert('Não foi possível remover a foto.'); }
+  }
 }
 function togglePhotoMirror(id){
   if (!requireAdminAction()) return;
