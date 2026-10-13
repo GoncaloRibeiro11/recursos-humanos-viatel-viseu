@@ -738,6 +738,17 @@
   }
   .id-card-photo-tools label { display: flex; align-items: center; gap: 6px; }
   .id-card-photo-tools input[type="range"] { width: 120px; }
+  .hall-photo-modal { width: 460px; max-width: calc(100vw - 24px); border-radius: 8px; overflow-y: auto; }
+  .hall-photo-meta { margin-top: 6px; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+  #hallPhotoCanvas { display: block; width: 100%; max-width: 340px; height: auto; aspect-ratio: 1; margin: 16px auto; flex-shrink: 0; }
+  #hallPhotoCanvas[hidden] { display: none; }
+  .hall-photo-tools { display: grid; gap: 10px; }
+  .hall-photo-tools label { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 12px; font-size: 12px; color: var(--text-muted); }
+  .hall-photo-tools input { width: 100%; min-width: 0; }
+  .hall-photo-modal .modal-actions { flex-wrap: wrap; flex-shrink: 0; }
+  .hall-photo-status { min-height: 18px; margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+  .hall-photo-status.error { color: #dc2626; }
+  .hall-photo-modal button:disabled, .hall-photo-action:disabled { opacity: .45; cursor: not-allowed; }
   #idCardCanvas,
   #idCardBackCanvas {
     width: 830px; max-width: 100%; height: auto; border-radius: 8px;
@@ -852,6 +863,14 @@
     #printArea { display: block !important; }
   }
   #printArea { display: none; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #111; padding: 20px; }
+  #hallPhotoPrintSheet { display: none; }
+  @media print {
+    body.hall-photo-print { margin: 0 !important; padding: 0 !important; background: #fff !important; min-width: 0 !important; }
+    body.hall-photo-print > * { display: none !important; }
+    body.hall-photo-print #printArea { display: none !important; }
+    body.hall-photo-print #hallPhotoPrintSheet { display: block !important; width: 100mm; height: 100mm; margin: 0; padding: 0; }
+    #hallPhotoPrintSheet img { display: block; width: 100mm; height: 100mm; max-width: none; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  }
   .print-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
   .print-subtitle { font-size: 12px; color: #666; margin-bottom: 20px; }
   .print-legend {
@@ -1487,8 +1506,29 @@
     <div id="photoProcessStatus" role="status" aria-live="polite" style="font-size:12px;color:var(--text-muted);margin-top:8px"></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('idCardModal')">Fechar</button>
+      <button class="btn" id="idCardHallPhoto" hidden onclick="openHallPhoto(currentIdCardPersonId)">Foto 10 × 10</button>
       <button class="btn" onclick="downloadIdCardBack()">Descarregar verso</button>
       <button class="btn btn-primary" onclick="downloadIdCard()">Descarregar frente</button>
+    </div>
+  </div>
+</div>
+
+<!-- HALL OF FAME PHOTO -->
+<div class="modal-overlay" id="hallPhotoModal">
+  <div class="modal hall-photo-modal" role="dialog" aria-modal="true" aria-labelledby="hallPhotoTitle">
+    <h2 id="hallPhotoTitle">Hall of Fame</h2>
+    <div class="hall-photo-meta" id="hallPhotoName"></div>
+    <div class="hall-photo-meta">10 × 10 cm · JPG · 300 ppp</div>
+    <canvas id="hallPhotoCanvas" width="1181" height="1181" hidden></canvas>
+    <div class="hall-photo-tools">
+      <label for="hallPhotoZoom">Zoom <input type="range" id="hallPhotoZoom" min="100" max="150" value="100" disabled oninput="drawHallPhoto()"></label>
+      <label for="hallPhotoHeight">Altura <input type="range" id="hallPhotoHeight" min="-15" max="15" value="0" disabled oninput="drawHallPhoto()"></label>
+    </div>
+    <div class="hall-photo-status" id="hallPhotoStatus" role="status" aria-live="polite"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('hallPhotoModal')">Fechar</button>
+      <button class="btn" id="hallPhotoPrint" disabled onclick="printHallPhoto()">Imprimir 10 × 10</button>
+      <button class="btn btn-primary" id="hallPhotoDownload" disabled onclick="downloadHallPhoto()">Descarregar JPG</button>
     </div>
   </div>
 </div>
@@ -1573,6 +1613,7 @@
 </div>
 
 <div id="printArea"></div>
+<div id="hallPhotoPrintSheet"><img alt=""></div>
 
 <script>
 // ===================== CONFIG =====================
@@ -1637,6 +1678,7 @@ let pendingExitPersonId = null;
 let bolsaOutcomeDismissed = false;
 let photoEditor = { personId:null, sourceCanvas:null, canvas:null, ctx:null, drawing:false, mode:'wand', brush:28, tolerance:48 };
 let currentIdCardPersonId = null;
+let hallPhoto = { personId:null, image:null, ready:false, version:0 };
 let photosFacingRightMigrationRunning = false;
 
 // ===================== HELPERS =====================
@@ -2390,6 +2432,9 @@ function openIdCard(id){
   });
 }
 function syncIdCardPhotoControls(person){
+  const hallButton = document.getElementById('idCardHallPhoto');
+  hallButton.hidden = person.role !== 'vendedor';
+  hallButton.disabled = !(person.photoCutout || person.photo);
   const tools = document.getElementById('idCardPhotoTools');
   const zoom = document.getElementById('idCardPhotoZoom');
   const focusY = document.getElementById('idCardPhotoY');
@@ -2439,6 +2484,135 @@ function downloadIdCardBack(){
   a.download = idCardFileName((person.name || 'colaborador') + '-verso');
   a.click();
 }
+function hallPhotoAction(person, className){
+  if (person.role !== 'vendedor') return '';
+  const available = !!(person.photoCutout || person.photo);
+  return `<button class="${className} hall-photo-action" onclick="openHallPhoto('${person.id}')" ${available?'':'disabled'} title="${available?'Foto para o Hall of Fame':'Sem foto'}">Foto 10 × 10</button>`;
+}
+function setHallPhotoStatus(message, error = false){
+  const status = document.getElementById('hallPhotoStatus');
+  status.textContent = message;
+  status.classList.toggle('error', error);
+}
+function setHallPhotoReady(ready){
+  hallPhoto.ready = ready;
+  ['hallPhotoZoom','hallPhotoHeight','hallPhotoPrint','hallPhotoDownload'].forEach(id => {
+    document.getElementById(id).disabled = !ready;
+  });
+  document.getElementById('hallPhotoCanvas').hidden = !ready;
+}
+async function openHallPhoto(id){
+  const person = state.persons.find(p => p.id === id);
+  if (!person || person.role !== 'vendedor' || !(person.photoCutout || person.photo)) return;
+  const version = hallPhoto.version + 1;
+  hallPhoto = { personId:id, image:null, ready:false, version };
+  document.getElementById('hallPhotoName').textContent = person.name;
+  document.getElementById('hallPhotoZoom').value = 100;
+  document.getElementById('hallPhotoHeight').value = 0;
+  setHallPhotoReady(false);
+  setHallPhotoStatus('A preparar foto…');
+  document.getElementById('hallPhotoModal').classList.add('open');
+  try {
+    const image = await loadImageFromUrl(person.photoCutout || person.photo);
+    if (hallPhoto.version !== version) return;
+    hallPhoto.image = image;
+    drawHallPhoto();
+    setHallPhotoReady(true);
+    setHallPhotoStatus('');
+  } catch(error){
+    if (hallPhoto.version === version) setHallPhotoStatus('Não foi possível carregar a foto. Tenta abrir novamente.', true);
+  }
+}
+function drawHallPhoto(){
+  const person = state.persons.find(p => p.id === hallPhoto.personId);
+  if (!person || !hallPhoto.image) return;
+  const canvas = document.getElementById('hallPhotoCanvas');
+  const ctx = canvas.getContext('2d');
+  const size = canvas.width;
+  const zoom = Number(document.getElementById('hallPhotoZoom').value) / 100;
+  const offset = Number(document.getElementById('hallPhotoHeight').value) / 100;
+  ctx.fillStyle = '#2c9bd8';
+  ctx.fillRect(0, 0, size, size);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  const image = hallPhoto.image;
+  if (person.photoCutout){
+    const scale = Math.min(size * .9 / image.width, size * .96 / image.height) * zoom;
+    const width = image.width * scale, height = image.height * scale;
+    const x = (size - width) / 2;
+    const y = Math.max(size * .02, (size - height) / 2) + offset * size;
+    ctx.save();
+    if (person.photoMirror){ ctx.translate(x + width, y); ctx.scale(-1, 1); }
+    else ctx.translate(x, y);
+    ctx.drawImage(image, 0, 0, width, height);
+    ctx.restore();
+  } else {
+    drawImageCover(ctx, image, 0, 0, size, size, .5, Math.max(0, Math.min(1, .5 - offset)), zoom, !!person.photoMirror);
+  }
+}
+async function hallPhotoJpeg(){
+  const blob = await canvasToBlob(document.getElementById('hallPhotoCanvas'), 'image/jpeg', .98);
+  if (!blob) throw new Error('Falha ao gerar imagem');
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  if (bytes[0] !== 255 || bytes[1] !== 216) throw new Error('Formato de imagem inválido');
+  const view = new DataView(bytes.buffer);
+  // Canvas exports at 96 dpi. Set JFIF density so photo labs read the intended size.
+  for (let offset = 2; offset + 4 <= bytes.length;){
+    if (bytes[offset] !== 255 || bytes[offset + 1] === 218 || bytes[offset + 1] === 217) break;
+    const length = view.getUint16(offset + 2);
+    if (length < 2 || offset + 2 + length > bytes.length) break;
+    if (bytes[offset + 1] === 224 && length >= 16 && bytes.slice(offset + 4, offset + 9).every((value, index) => value === [74,70,73,70,0][index])){
+      bytes[offset + 11] = 1;
+      view.setUint16(offset + 12, 300);
+      view.setUint16(offset + 14, 300);
+      return new Blob([bytes], { type:'image/jpeg' });
+    }
+    offset += 2 + length;
+  }
+  const jfif = new Uint8Array([255,224,0,16,74,70,73,70,0,1,1,1,1,44,1,44,0,0]);
+  return new Blob([bytes.slice(0,2), jfif, bytes.slice(2)], { type:'image/jpeg' });
+}
+async function downloadHallPhoto(){
+  const person = state.persons.find(p => p.id === hallPhoto.personId);
+  if (!person || !hallPhoto.ready) return;
+  try {
+    const blob = await hallPhotoJpeg();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'hall-of-fame-' + normalizeFilterText(person.name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-10x10cm.jpg';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    setHallPhotoStatus('');
+  } catch(error){ setHallPhotoStatus('Não foi possível descarregar a foto. Tenta novamente.', true); }
+}
+function clearHallPhotoPrint(){
+  document.body.classList.remove('hall-photo-print');
+  document.getElementById('hallPhotoPageSize')?.remove();
+}
+async function prepareHallPhotoPrint(){
+  if (!hallPhoto.ready) return false;
+  const image = document.querySelector('#hallPhotoPrintSheet img');
+  image.src = document.getElementById('hallPhotoCanvas').toDataURL('image/jpeg', .98);
+  await image.decode();
+  clearHallPhotoPrint();
+  const style = document.createElement('style');
+  style.id = 'hallPhotoPageSize';
+  style.textContent = '@page { size: 100mm 100mm; margin: 0; }';
+  document.head.appendChild(style);
+  document.body.classList.add('hall-photo-print');
+  return true;
+}
+async function printHallPhoto(){
+  try {
+    if (await prepareHallPhotoPrint()) window.print();
+  } catch(error){
+    clearHallPhotoPrint();
+    setHallPhotoStatus('Não foi possível preparar a impressão. Tenta novamente.', true);
+  }
+}
+window.addEventListener('afterprint', clearHallPhotoPrint);
+
 function getAlphaBounds(ctx, width, height){
   const data = ctx.getImageData(0, 0, width, height).data;
   let minX = width, minY = height, maxX = -1, maxY = -1;
@@ -4333,6 +4507,7 @@ function renderAll(){
 // ===================== MODALS =====================
 function closeModal(id){
   document.getElementById(id).classList.remove('open');
+  if (id === 'hallPhotoModal'){ hallPhoto.version++; hallPhoto.personId = null; hallPhoto.image = null; setHallPhotoReady(false); }
   if (id === 'vacModal'){ editingVacId = null; document.getElementById('vacModalTitle').textContent = '➕ Adicionar Férias'; }
   if (id === 'bolsaOutcomeModal') bolsaOutcomeDismissed = true;
 }
@@ -4365,6 +4540,7 @@ function renderMgmtModal(){
           </select>
         </div>
         <button class="mgmt-save-btn" onclick="openIdCard('${p.id}')">Cartão</button>
+        ${hallPhotoAction(p, 'mgmt-save-btn')}
         <button class="mgmt-save-btn" onclick="savePerson('${p.id}')">✓ Guardar</button>
         <button class="mgmt-del-btn" onclick="mgmtDeletePerson('${p.id}')">✕ Remover</button>
       </div>`).join('');
@@ -4771,7 +4947,7 @@ function renderRH(){
         <td data-label="Saída">${saidaField}</td>
         <td data-label="Tempo"><span class="${tempoClass}">${escHtml(tempoCasa)}</span></td>
         <td data-label="Ativo">${isEditing ? `<div class="ativo-cell"><label class="switch"><input type="checkbox" ${ativo?'checked':''} onchange="rhUpdate('${p.id}','ativo',this.checked)"><span class="slider"></span></label><span class="ativo-txt">${ativo?'Ativo':'Inativo'}</span></div>` : rhRead(ativo ? 'Ativo' : 'Inativo')}</td>
-        <td data-label="Ações">${actionButtons}</td>
+        <td data-label="Ações">${actionButtons}${hallPhotoAction(p, 'rh-card-btn')}</td>
       </tr>`;
     });
     body += `<tr id="rhNoResults" style="display:none"><td colspan="13"><div class="empty-state">Sem resultados para os filtros atuais.</div></td></tr>`;
