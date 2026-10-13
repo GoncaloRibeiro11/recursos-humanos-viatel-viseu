@@ -77,10 +77,11 @@ const server = http.createServer((req, res) => {
     const pixels = await page.evaluate(() => {
       const canvas = document.getElementById('hallPhotoCanvas');
       const ctx = canvas.getContext('2d');
-      return { size:[canvas.width, canvas.height], background:Array.from(ctx.getImageData(0,0,1,1).data), left:Array.from(ctx.getImageData(300,600,1,1).data), right:Array.from(ctx.getImageData(800,600,1,1).data) };
+      return { size:[canvas.width, canvas.height], corners:[[0,0],[1180,0],[0,1180],[1180,1180],[20,590]].map(([x,y]) => Array.from(ctx.getImageData(x,y,1,1).data)), circle:Array.from(ctx.getImageData(70,590,1,1).data), left:Array.from(ctx.getImageData(300,600,1,1).data), right:Array.from(ctx.getImageData(800,600,1,1).data) };
     });
     assert.deepEqual(pixels.size, [1181,1181]);
-    assert.deepEqual(pixels.background, [44,155,216,255]);
+    pixels.corners.forEach(pixel => assert.deepEqual(pixel, [255,255,255,255]));
+    assert.deepEqual(pixels.circle, [44,155,216,255]);
     assert.equal(pixels.left[0] < 100, true);
     assert.equal(pixels.right[0] > 150 && pixels.right[1] < 100, true);
     await page.screenshot({ path:path.join(output, 'hall-photo-desktop.png') });
@@ -104,6 +105,7 @@ const server = http.createServer((req, res) => {
     assert.notEqual(await page.evaluate(() => document.getElementById('hallPhotoCanvas').toDataURL()), beforeZoom);
     await page.locator('#hallPhotoHeight').fill('5');
     await page.locator('#hallPhotoHeight').dispatchEvent('input');
+    assert.deepEqual(await page.evaluate(() => Array.from(document.getElementById('hallPhotoCanvas').getContext('2d').getImageData(20,590,1,1).data)), [255,255,255,255]);
     const downloadEvent = page.waitForEvent('download');
     await page.locator('#hallPhotoDownload').click();
     const download = await downloadEvent;
@@ -153,6 +155,7 @@ const server = http.createServer((req, res) => {
     await page.evaluate(() => closeModal('idCardModal'));
     await page.evaluate(() => openHallPhoto('legacy'));
     await page.waitForFunction(() => !document.getElementById('hallPhotoDownload').disabled);
+    assert.deepEqual(await page.evaluate(() => Array.from(document.getElementById('hallPhotoCanvas').getContext('2d').getImageData(0,0,1,1).data)), [255,255,255,255]);
     await page.evaluate(() => closeModal('hallPhotoModal'));
     await page.evaluate(() => openHallPhoto('broken'));
     await page.waitForFunction(() => document.getElementById('hallPhotoStatus').classList.contains('error'));
@@ -161,7 +164,7 @@ const server = http.createServer((req, res) => {
     assert.equal(await page.evaluate(() => JSON.stringify(window.testState) === window.testInitialState), true);
     assert.equal(writes, 0);
     assert.deepEqual(errors, []);
-    console.log(JSON.stringify({ jpegPixels:decoded, jpegDpi:300, printedCentimetres:10, printPages:1, mirrorPreserved:true, mobile:'passed', legacyPhoto:'passed', missingPhoto:'disabled', invalidPhoto:'handled', stateUnchanged:true, serverWrites:writes, pageErrors:errors }, null, 2));
+    console.log(JSON.stringify({ jpegPixels:decoded, jpegDpi:300, printedCentimetres:10, printPages:1, blueCircle:true, whiteOutside:true, mirrorPreserved:true, mobile:'passed', legacyPhoto:'passed', missingPhoto:'disabled', invalidPhoto:'handled', stateUnchanged:true, serverWrites:writes, pageErrors:errors }, null, 2));
   } finally {
     await browser.close();
     await new Promise(resolve => server.close(resolve));
