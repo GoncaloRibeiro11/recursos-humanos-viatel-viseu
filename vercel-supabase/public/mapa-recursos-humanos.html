@@ -3646,8 +3646,53 @@ function changeFeriasWeek(delta){
 }
 
 // ===================== FÉRIAS: VACATIONS =====================
-function getVacationsForDay(dateStr){ return state.vacations.filter(v => v.start <= dateStr && v.end >= dateStr); }
-function isOnVacation(pid, dateStr){ return state.vacations.some(v => v.personId === pid && v.start <= dateStr && v.end >= dateStr); }
+function getVacationPeriods(){
+  const people = new Map(state.persons.map(person => [person.id, person]));
+  const days = [];
+  for (const [key, code] of Object.entries(state.records)){
+    if (code !== 'FE') continue;
+    const [personId, dateStr] = key.split('|');
+    if (!dateStr || normalizeDateValue(dateStr) !== dateStr || !people.has(personId)) continue;
+    if (!isWorkingDay(dateStr) || !isPersonDateActive(people.get(personId), dateStr)) continue;
+    if (state.vacations.some(v => v.personId === personId && v.start <= dateStr && v.end >= dateStr)) continue;
+    days.push({ personId, dateStr });
+  }
+  days.sort((a,b) => a.personId.localeCompare(b.personId) || a.dateStr.localeCompare(b.dateStr));
+  const attendance = [];
+  for (const { personId, dateStr } of days){
+    const previous = attendance[attendance.length - 1];
+    if (previous && previous.personId === personId && nextVacationWorkday(previous.end) === dateStr){
+      previous.end = dateStr;
+    } else {
+      attendance.push({ id:`assid:${personId}:${dateStr}`, personId, start:dateStr, end:dateStr, note:'', attendance:true });
+    }
+  }
+  // Attendance remains the source of these days; no duplicate database rows are created.
+  return [...state.vacations, ...attendance];
+}
+function nextVacationWorkday(dateStr){
+  const date = dateFromIso(dateStr);
+  let next;
+  do {
+    date.setDate(date.getDate() + 1);
+    next = isoDate(date.getFullYear(), date.getMonth() + 1, date.getDate());
+  } while (!isWorkingDay(next));
+  return next;
+}
+function getVacationsForDay(dateStr, periods = getVacationPeriods()){
+  const people = new Map();
+  periods.filter(v => v.start <= dateStr && v.end >= dateStr).forEach(v => people.set(v.personId, v));
+  return [...people.values()];
+}
+function isOnVacation(pid, dateStr){
+  return getRec(pid, dateStr) === 'FE' || state.vacations.some(v => v.personId === pid && v.start <= dateStr && v.end >= dateStr);
+}
+function clearAttendanceVacation(period){
+  for (const [key, code] of Object.entries(state.records)){
+    const [personId, dateStr] = key.split('|');
+    if (code === 'FE' && personId === period.personId && dateStr >= period.start && dateStr <= period.end) delete state.records[key];
+  }
+}
 
 function openVacEditor(dateStr){
   if (!requireAdminAction()) return;
@@ -3667,7 +3712,7 @@ function openVacEditor(dateStr){
 }
 function editVacation(id){
   if (!requireAdminAction()) return;
-  const v = state.vacations.find(vv => vv.id === id); if (!v) return;
+  const v = getVacationPeriods().find(vv => vv.id === id); if (!v) return;
   editingVacId = id;
   const sel = document.getElementById('vacPerson');
   sel.innerHTML = state.persons.map(p => {
@@ -3689,8 +3734,14 @@ function saveVacation(){
   if (!start || !end || !personId) return;
   if (start > end){ alert('A data de início deve ser antes do fim.'); return; }
   if (editingVacId){
-    const v = state.vacations.find(vv => vv.id === editingVacId);
-    if (v){ v.personId=personId; v.start=start; v.end=end; v.note=note; }
+    const previous = getVacationPeriods().find(v => v.id === editingVacId);
+    if (!previous) return;
+    clearAttendanceVacation(previous);
+    if (previous.attendance){
+      state.vacations.push({ id:crypto.randomUUID(), personId, start, end, note });
+    } else {
+      Object.assign(previous, { personId, start, end, note });
+    }
     editingVacId = null;
   } else {
     state.vacations.push({ id: Date.now().toString(), personId, start, end, note });
@@ -3699,7 +3750,14 @@ function saveVacation(){
   document.getElementById('vacModalTitle').textContent = '➕ Adicionar Férias';
   save(); closeModal('vacModal'); renderAll();
 }
-function deleteVacation(id){ if (!requireAdminAction()) return; state.vacations = state.vacations.filter(v => v.id !== id); save(); renderAll(); }
+function deleteVacation(id){
+  if (!requireAdminAction()) return;
+  const period = getVacationPeriods().find(v => v.id === id);
+  if (!period) return;
+  clearAttendanceVacation(period);
+  state.vacations = state.vacations.filter(v => v.id !== id);
+  save(); renderAll();
+}
 
 // ===================== FÉRIAS: RENDER =====================
 function renderCalendar(){
@@ -3718,6 +3776,7 @@ function renderCalendar(){
   }
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const periods = getVacationPeriods();
 
   for (let m=0; m<12; m++){
     const card = document.createElement('div'); card.className='month-card';
@@ -3746,7 +3805,7 @@ function renderCalendar(){
         cell.appendChild(dot);
       }
       if (working){
-        const vacHere = getVacationsForDay(dateStr).filter(v => isActive(v.personId));
+        const vacHere = getVacationsForDay(dateStr, periods).filter(v => isActive(v.personId));
         if (vacHere.length > 0){
           const bc = document.createElement('div'); bc.className='vacation-bar-container';
           vacHere.slice(0,3).forEach(v => {
@@ -3771,6 +3830,7 @@ function renderCalendar(){
 }
 function renderWeekCalendar(grid){
   const dates = weekDatesFrom(ensureFeriasWeekStart());
+  const periods = getVacationPeriods();
   const label = document.getElementById('feriasWeekLabel');
   if (label && dates.length){
     label.textContent = `${formatDatePt(dates[0])} a ${formatDatePt(dates[dates.length - 1])}`;
@@ -3796,7 +3856,7 @@ function renderWeekCalendar(grid){
     if (!working){
       body.innerHTML = `<div class="week-locked">${isHoliday ? escHtml(HOLIDAY_NAMES[ds] || 'Feriado') : 'Fim de semana'}</div>`;
     } else {
-      const vacHere = getVacationsForDay(ds)
+      const vacHere = getVacationsForDay(ds, periods)
         .filter(v => isActive(v.personId))
         .map(v => ({ v, person: state.persons.find(p => p.id === v.personId) }))
         .filter(x => x.person)
@@ -3867,14 +3927,14 @@ function renderColorPicker(){
 function renderFeriasStats(){
   const bar = document.getElementById('feriasStats');
   const aps = activePersons();
-  const vacs = state.vacations.filter(v => isActive(v.personId));
+  const vacs = getVacationPeriods().filter(v => isActive(v.personId));
   const totalDays = vacs.reduce((s,v) => s + countWorkingDays(v.start, v.end), 0);
   const cards = `
     <div class="stat-card"><div class="stat-value">${aps.length}</div><div class="stat-label">Colaboradores ativos</div></div>
     <div class="stat-card"><div class="stat-value">${vacs.length}</div><div class="stat-label">Períodos marcados</div></div>
     <div class="stat-card"><div class="stat-value">${totalDays}</div><div class="stat-label">Dias úteis totais</div></div>`;
   if (aps.length === 0){ bar.innerHTML = cards; return; }
-  const personDays = aps.map(p => ({ p, days: state.vacations.filter(v=>v.personId===p.id).reduce((s,v)=>s+countWorkingDays(v.start,v.end),0) })).filter(x => x.days>0);
+  const personDays = aps.map(p => ({ p, days: vacs.filter(v=>v.personId===p.id).reduce((s,v)=>s+countWorkingDays(v.start,v.end),0) })).filter(x => x.days>0);
   const maxDays = Math.max(...personDays.map(x=>x.days), 1);
   const breakdown = personDays.length === 0 ? '' : `
     <div class="stat-card" style="flex:1;min-width:260px">
@@ -3894,10 +3954,11 @@ function renderFeriasStats(){
 
 function openVacationsList(){
   const container = document.getElementById('vacationsList');
-  if (state.vacations.length === 0){
+  const periods = getVacationPeriods();
+  if (periods.length === 0){
     container.innerHTML = '<div class="empty-state">Nenhuma férias marcada ainda.</div>';
   } else {
-    const sorted = [...state.vacations].sort((a,b) => a.start.localeCompare(b.start));
+    const sorted = periods.sort((a,b) => a.start.localeCompare(b.start));
     const fmt = ds => { const [y,m,d]=ds.split('-'); return `${d}/${m}/${y}`; };
     container.innerHTML = '<div class="vacations-list">' + sorted.map(v => {
       const p = state.persons.find(pp => pp.id===v.personId); if (!p || p.ativo===false) return '';
@@ -4152,11 +4213,11 @@ function vacationOverlapsYear(v){
   return v && v.start <= `${YEAR}-12-31` && v.end >= `${YEAR}-01-01`;
 }
 function hasVacationMarkedInYear(personId){
-  return state.vacations.some(v => v.personId === personId && vacationOverlapsYear(v));
+  return getVacationPeriods().some(v => v.personId === personId && vacationOverlapsYear(v));
 }
 function vacationMonthTotals(activeIds){
   const months = Array(12).fill(0);
-  state.vacations.forEach(v => {
+  getVacationPeriods().forEach(v => {
     if (!activeIds.has(v.personId) || !vacationOverlapsYear(v)) return;
     forEachWorkingDate(v.start, v.end, ds => { months[Number(ds.slice(5,7))-1]++; });
   });
@@ -5245,7 +5306,7 @@ function formatPrintDate(dateStr){
 function buildMonthVacationSummary(mi){
   const first = dateStrOf(mi, 1);
   const last = dateStrOf(mi, new Date(YEAR, mi + 1, 0).getDate());
-  const rows = state.vacations
+  const rows = getVacationPeriods()
     .filter(v => isActive(v.personId) && v.start <= last && v.end >= first)
     .map(v => {
       const p = state.persons.find(pp => pp.id === v.personId);
