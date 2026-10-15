@@ -457,11 +457,47 @@
   .dash-movement-bar { width: 10px; min-height: 2px; border-radius: 6px 6px 0 0; background: #eef0f3; }
   .dash-movement-entry { background: var(--c-presente); }
   .dash-movement-exit { background: var(--c-finjust); }
+  body.theme-dark .dash-movement-entry { background: var(--c-presente); }
+  body.theme-dark .dash-movement-exit { background: var(--c-finjust); }
+  .dash-movement-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .dash-movement-heading h3 { margin:0; }
+  .dash-movement-filter { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-muted); min-width:0; }
+  .dash-movement-filter select { max-width:220px; min-width:0; padding:6px 8px; border:1px solid var(--border); border-radius:6px; color:var(--text); background:var(--surface); }
+  .dash-movement-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin:16px 0 8px; padding-bottom:14px; border-bottom:1px solid var(--border); }
+  .dash-movement-summary dt { font-size:11px; color:var(--text-muted); margin-bottom:4px; }
+  .dash-movement-summary dd { font-size:24px; font-weight:700; margin:0; font-variant-numeric:tabular-nums; }
+  .movement-entry, .movement-balance.positive { color:#15803d; }
+  .movement-exit, .movement-balance.negative { color:#dc2626; }
+  body.theme-dark .movement-entry, body.theme-dark .movement-balance.positive { color:#4ade80; }
+  body.theme-dark .movement-exit, body.theme-dark .movement-balance.negative { color:#f87171; }
+  .movement-balance.neutral { color:var(--text-muted); }
+  .dash-movement-chart { overflow-x:auto; overscroll-behavior-x:contain; }
+  #dashAnnualMovements { min-width:0; }
+  .dash-movement-chart .dash-movement-months { min-width:420px; }
+  .dash-movement-team-title { margin:20px 0 8px; font-size:12px; font-weight:600; }
+  .dash-movement-team-table { width:100%; table-layout:fixed; font-variant-numeric:tabular-nums; }
+  .dash-movement-team-table th:first-child { width:44%; }
+  .dash-movement-team-table th, .dash-movement-team-table td { padding:8px 4px; }
+  .dash-movement-team-table th:not(:first-child), .dash-movement-team-table td:not(:first-child) { text-align:right; }
+  .dash-movement-team-table .dash-person { white-space:normal; max-width:100%; }
+  .dash-movement-team-table .dash-person-name { overflow-wrap:anywhere; white-space:normal; }
+  .dash-movement-team-table tr.is-selected { background:var(--surface-alt,#f5f5f7); }
+  body.theme-dark .dash-movement-team-table tr.is-selected { background:#1f2937; }
+  @media (max-width:480px) {
+    .dash-movement-filter { width:100%; }
+    .dash-movement-filter select { max-width:none; flex:1; }
+    .dash-movement-summary { gap:8px; }
+    .dash-movement-summary dd { font-size:22px; }
+    .dash-movement-team-table th { text-transform:none; letter-spacing:0; }
+  }
   .dash-stack { display: flex; height: 16px; border-radius: 999px; overflow: hidden; background: #eef0f3; margin: 8px 0 12px; }
   .dash-stack-part { min-width: 2px; }
   .dash-legend-mini { display: flex; flex-wrap: wrap; gap: 8px 12px; font-size: 11px; color: var(--text-muted); }
   .dash-legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
-  @media (max-width: 900px) { .dash-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) {
+    .dash-grid { grid-template-columns: minmax(0, 1fr); }
+    .dash-panel-wide { grid-column: span 1; }
+  }
 
   /* ===================== FÉRIAS VIEW ===================== */
   #viewFerias .layout { display: flex; gap: 0; min-height: calc(100vh - 110px); }
@@ -953,7 +989,7 @@
     .dash-hero { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .dash-metric { padding: 12px; min-height: 88px; }
     .dash-metric-value { font-size: 24px; }
-    .dash-grid { grid-template-columns: 1fr; gap: 10px; }
+    .dash-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
     .dash-panel-wide { grid-column: span 1; }
     .dash-panel { padding: 12px; min-height: 0; }
     .dash-bar-row { grid-template-columns: minmax(78px, 1fr) minmax(90px, 1.5fr) 30px; gap: 8px; }
@@ -1225,6 +1261,7 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="rh-sync.js"></script>
+<script src="rh-movements.js"></script>
 </head>
 <body>
 
@@ -1678,6 +1715,7 @@ let pendingExitPersonId = null;
 let bolsaOutcomeDismissed = false;
 let photoEditor = { personId:null, sourceCanvas:null, canvas:null, ctx:null, drawing:false, mode:'wand', brush:28, tolerance:48 };
 let currentIdCardPersonId = null;
+let dashboardMovementTeam = null;
 let hallPhoto = { personId:null, image:null, ready:false, version:0 };
 let photosFacingRightMigrationRunning = false;
 
@@ -4291,11 +4329,34 @@ function dashMovementMonths(entriesByMonth, exitsByMonth){
   const max = Math.max(...entriesByMonth, ...exitsByMonth, 1);
   const total = entriesByMonth.reduce((sum, n) => sum + n, 0) + exitsByMonth.reduce((sum, n) => sum + n, 0);
   if (!total) return '<div class="dash-empty">Sem entradas ou saídas registadas.</div>';
-  return `<div class="dash-movement-months">${MONTH_NAMES.map((name, i) => {
+  return `<div class="dash-movement-chart"><div class="dash-movement-months">${MONTH_NAMES.map((name, i) => {
     const entryPct = Math.round((entriesByMonth[i] / max) * 100);
     const exitPct = Math.round((exitsByMonth[i] / max) * 100);
     return `<div class="dash-movement-month" title="${name}: ${entriesByMonth[i]} entradas · ${exitsByMonth[i]} saídas"><div class="dash-movement-values"><span class="dash-movement-value entry">${entriesByMonth[i]}</span><span class="dash-movement-value exit">${exitsByMonth[i]}</span></div><div class="dash-movement-bars"><div class="dash-movement-bar dash-movement-entry" style="height:${entryPct}%"></div><div class="dash-movement-bar dash-movement-exit" style="height:${exitPct}%"></div></div><div class="dash-month-label">${name.slice(0,3)}</div></div>`;
-  }).join('')}</div><div class="dash-legend-mini"><span><span class="dash-legend-dot" style="background:var(--c-presente)"></span>Entradas: <strong>${entriesByMonth.reduce((s,n)=>s+n,0)}</strong></span><span><span class="dash-legend-dot" style="background:var(--c-finjust)"></span>Saídas: <strong>${exitsByMonth.reduce((s,n)=>s+n,0)}</strong></span></div>`;
+  }).join('')}</div></div><div class="dash-legend-mini"><span><span class="dash-legend-dot" style="background:var(--c-presente)"></span>Entradas: <strong>${entriesByMonth.reduce((s,n)=>s+n,0)}</strong></span><span><span class="dash-legend-dot" style="background:var(--c-finjust)"></span>Saídas: <strong>${exitsByMonth.reduce((s,n)=>s+n,0)}</strong></span></div>`;
+}
+function movementBalance(value){ return value > 0 ? '+' + value : String(value); }
+function movementBalanceClass(value){ return value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral'; }
+function setDashboardMovementTeam(value){ dashboardMovementTeam=value==='*'?null:value; renderDashboard(); }
+function dashAnnualMovements(){
+  const people = state.persons.map(person => ({...person,entrada:normalizeDateValue(person.entrada),saida:normalizeDateValue(person.saida)}));
+  const totals = RhMovements.annualMovements(people,YEAR);
+  const teams = totals.teams.map(team => {
+    const manager = state.persons.find(person => person.id === team.id);
+    return {...team,manager,label:manager?.name || (team.id?'Gestor não identificado':'Sem equipa')};
+  }).sort((a,b) => a.label.localeCompare(b.label,'pt'));
+  if (dashboardMovementTeam !== null && !teams.some(team => team.id === dashboardMovementTeam)) dashboardMovementTeam=null;
+  const selected = dashboardMovementTeam === null ? totals : teams.find(team => team.id === dashboardMovementTeam);
+  const options = '<option value="*">Todas as equipas</option>' + teams.map(team => `<option value="${escHtml(team.id)}" ${team.id===dashboardMovementTeam?'selected':''}>${escHtml(team.label)}</option>`).join('');
+  const rows = teams.map(team => `<tr data-movement-team="${escHtml(team.id)}" class="${team.id===dashboardMovementTeam?'is-selected':''}">
+    <td>${team.manager?dashPersonHtml(team.manager,24):escHtml(team.label)}</td><td class="movement-entry">${team.entries}</td><td class="movement-exit">${team.exits}</td><td class="movement-balance ${movementBalanceClass(team.balance)}"><strong>${movementBalance(team.balance)}</strong></td></tr>`).join('');
+  return `<section class="dash-panel dash-panel-wide" id="dashAnnualMovements">
+    <div class="dash-movement-heading"><h3>Entradas e saídas por mês</h3><label class="dash-movement-filter" for="dashboardMovementTeam">Equipa <select id="dashboardMovementTeam" onchange="setDashboardMovementTeam(this.value)">${options}</select></label></div>
+    <dl class="dash-movement-summary"><div><dt>Entradas ${YEAR}</dt><dd class="movement-entry" data-movement-total="entries">${selected.entries}</dd></div><div><dt>Saídas ${YEAR}</dt><dd class="movement-exit" data-movement-total="exits">${selected.exits}</dd></div><div><dt>Saldo anual ${YEAR}</dt><dd class="movement-balance ${movementBalanceClass(selected.balance)}" data-movement-total="balance">${movementBalance(selected.balance)}</dd></div></dl>
+    ${dashMovementMonths(selected.entriesByMonth,selected.exitsByMonth)}
+    <h4 class="dash-movement-team-title">Saldo anual por equipa · ${YEAR}</h4>
+    ${rows?`<table class="dash-table dash-movement-team-table"><thead><tr><th>Equipa</th><th>Entradas</th><th>Saídas</th><th>Saldo</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="dash-empty">Sem equipas registadas.</div>'}
+  </section>`;
 }
 function dashStack(parts){
   const total = parts.reduce((sum, p) => sum + p.value, 0);
@@ -4375,10 +4436,6 @@ function renderDashboard(){
   const exits = state.persons
     .filter(p => normalizeDateValue(p.saida).startsWith(`${YEAR}-`))
     .sort((a,b) => normalizeDateValue(a.saida).localeCompare(normalizeDateValue(b.saida)));
-  const entriesByMonth = Array(12).fill(0);
-  const exitsByMonth = Array(12).fill(0);
-  entries.forEach(p => entriesByMonth[Number(normalizeDateValue(p.entrada).slice(5,7)) - 1]++);
-  exits.forEach(p => exitsByMonth[Number(normalizeDateValue(p.saida).slice(5,7)) - 1]++);
 
   const teamCounts = {};
   active.forEach(p => {
@@ -4497,7 +4554,7 @@ function renderDashboard(){
       <div class="dash-panel"><h3>Top 5 colaboradores com mais ausências</h3>${dashBars(topPeopleItems, 'Ainda não há ausências registadas.')}</div>
       <div class="dash-panel"><h3>Colaboradores sem férias marcadas</h3>${dashTable(['Colaborador', 'Função'], noVacationRows, 'Todos os colaboradores ativos têm férias marcadas.')}</div>
       <div class="dash-panel"><h3>Alertas de faltas injustificadas</h3>${dashTable(['Colaborador', 'FI', 'Última'], fiRows, 'Sem faltas injustificadas registadas.')}</div>
-      <div class="dash-panel dash-panel-wide"><h3>Entradas e saídas por mês</h3>${dashMovementMonths(entriesByMonth, exitsByMonth)}</div>
+      ${dashAnnualMovements()}
     </div>`;
 }
 

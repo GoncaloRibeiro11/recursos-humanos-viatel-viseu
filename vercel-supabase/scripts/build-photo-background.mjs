@@ -83,3 +83,8 @@ await build({
   outfile:'public/rh-sync.js',
   bundle:true, minify:true, format:'iife', globalName:'RhSync', platform:'browser', target:['chrome100','safari16']
 });
+await build({
+  absWorkingDir:fileURLToPath(new URL('../',import.meta.url)),
+  entryPoints:['src/rh-movements.mjs'], outfile:'public/rh-movements.js',
+  bundle:true, minify:true, format:'iife', globalName:'RhMovements', platform:'browser', target:['chrome100','safari16']
+});
