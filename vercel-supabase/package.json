@@ -2,7 +2,8 @@
   "private": true,
   "scripts": {
     "build": "node scripts/build-photo-background.mjs",
-    "test": "node --test scripts/test-rh-sync.mjs scripts/test-rh-movements.mjs"
+    "prepare:team-history": "node scripts/build-team-history-install.mjs",
+    "test": "node --test scripts/test-rh-sync.mjs scripts/test-rh-movements.mjs scripts/test-rh-team-history.mjs"
   },
   "dependencies": {
     "@imgly/background-removal": "1.7.0",

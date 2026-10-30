@@ -784,6 +784,41 @@
   .hall-photo-modal .modal-actions { flex-wrap: wrap; flex-shrink: 0; }
   .hall-photo-status { min-height: 18px; margin-top: 10px; font-size: 12px; color: var(--text-muted); }
   .hall-photo-status.error { color: #dc2626; }
+  .team-draft-modal { width: 680px; max-width: calc(100vw - 24px); overflow-y: auto; border-radius: 8px; }
+  .team-draft-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-top: 16px; }
+  .team-draft-fields select, .team-draft-fields input { width: 100%; min-width: 0; }
+  .team-draft-fields .wide { grid-column: 1 / -1; }
+  .team-draft-preview { margin-top: 16px; overflow-x: auto; flex-shrink: 0; }
+  .team-draft-status { font-size: 12px; color: var(--text-muted); margin-top: 12px; min-height: 18px; }
+  .team-draft-status.error { color: #dc2626; }
+  .team-draft-modal .modal-actions { flex-wrap: wrap; flex-shrink: 0; }
+  @media (max-width: 480px) { .team-draft-fields { grid-template-columns: minmax(0,1fr); } }
+  .team-changes-modal { width:820px; max-width:calc(100vw - 24px); border-radius:8px; overflow-y:auto; }
+  .team-change-tabs { display:flex; gap:4px; border-bottom:1px solid var(--border); margin:16px 0; flex-wrap:wrap; }
+  .team-change-tabs button { border:0; background:transparent; color:var(--text-muted); padding:10px 12px; cursor:pointer; border-bottom:2px solid transparent; }
+  .team-change-tabs button[aria-selected="true"] { color:var(--accent); border-bottom-color:var(--accent); }
+  .team-change-row { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr) 32px; gap:10px; align-items:center; padding:12px 0; border-bottom:1px solid var(--border); }
+  .team-change-row .form-group { margin:0; min-width:0; }
+  .team-change-row input,.team-change-row select { min-width:0; width:100%; }
+  .team-change-row .dash-person { white-space:normal; }
+  .team-change-before { font-size:11px; color:var(--text-muted); margin-top:4px; overflow-wrap:anywhere; }
+  .team-change-remove { width:32px; height:32px; padding:0; font-size:20px; }
+  .team-change-add { display:flex; gap:8px; align-items:center; margin:12px 0; }
+  .team-change-add select { min-width:0; flex:1; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text); }
+  .team-change-confirm { display:flex; align-items:flex-start; gap:8px; margin-top:16px; font-size:12px; line-height:1.5; }
+  .team-change-confirm input { margin-top:3px; flex-shrink:0; }
+  .team-change-log { padding:12px 0; border-bottom:1px solid var(--border); font-size:12px; line-height:1.6; overflow-wrap:anywhere; }
+  .team-change-log header { position:static; display:flex; padding:0; box-shadow:none; background:transparent; height:auto; gap:8px; justify-content:space-between; flex-wrap:wrap; }
+  .team-change-log ul { margin:8px 0 8px 18px; }
+  #teamChangesForm fieldset { border:0; min-width:0; }
+  #teamChangesStatus { flex-shrink:0; }
+  @media (max-width:600px) {
+    .team-change-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr) 32px; gap:8px; }
+    .team-change-identity { grid-column:1 / -1; }
+    .team-change-add { flex-wrap:wrap; }
+    .team-change-add select { flex-basis:100%; }
+    .team-changes-modal { padding:16px; }
+  }
   .hall-photo-modal button:disabled, .hall-photo-action:disabled { opacity: .45; cursor: not-allowed; }
   #idCardCanvas,
   #idCardBackCanvas {
@@ -1262,6 +1297,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="rh-sync.js"></script>
 <script src="rh-movements.js"></script>
+<script src="rh-team-history.js"></script>
 </head>
 <body>
 
@@ -1314,6 +1350,7 @@
         </div>
         <button onclick="openPreferencesModal()" role="menuitem">Preferências</button>
         <button onclick="openPasswordModal()" role="menuitem">Alterar password</button>
+        <button class="admin-only" onclick="openTeamChanges()" role="menuitem">Funções e equipas</button>
         <button onclick="supabaseLogout()" class="danger" role="menuitem">Sair</button>
       </div>
     </div>
@@ -1524,6 +1561,51 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="teamChangesModal">
+  <div class="modal team-changes-modal" role="dialog" aria-modal="true" aria-labelledby="teamChangesTitle">
+    <h2 id="teamChangesTitle">Funções e equipas</h2>
+    <div class="team-change-tabs" role="tablist" aria-label="Alterações de equipa">
+      <button type="button" role="tab" id="teamChangesTab-new" aria-controls="teamChangesForm" aria-selected="true" onclick="teamChangesTab('new')">Nova alteração</button>
+      <button type="button" role="tab" id="teamChangesTab-pending" aria-controls="teamChangesPending" aria-selected="false" onclick="teamChangesTab('pending')">Agendadas</button>
+      <button type="button" role="tab" id="teamChangesTab-history" aria-controls="teamChangesHistory" aria-selected="false" onclick="teamChangesTab('history')">Histórico</button>
+    </div>
+    <form id="teamChangesForm" role="tabpanel" aria-labelledby="teamChangesTab-new" onsubmit="event.preventDefault();submitTeamChanges()">
+      <fieldset id="teamChangesFields">
+        <div class="form-group"><label for="teamChangesDate">Data de efeito</label><input id="teamChangesDate" type="date" required onchange="teamChangesPreview()"></div>
+        <div id="teamChangesRows"></div>
+        <div class="team-change-add"><select id="teamChangesPerson" aria-label="Colaborador a adicionar"></select><button type="button" class="btn" onclick="addTeamChangeRow()">Adicionar colaborador</button></div>
+        <div class="team-draft-preview" id="teamChangesPreview"></div>
+        <label class="team-change-confirm"><input id="teamChangesConfirm" type="checkbox" onchange="teamChangesPreview(false)"><span>Confirmo os colaboradores, as alterações e a data de efeito.</span></label>
+      </fieldset>
+      <div class="modal-actions"><button type="submit" class="btn btn-primary" id="teamChangesSubmit" disabled>Confirmar alteração</button></div>
+    </form>
+    <div id="teamChangesPending" role="tabpanel" aria-labelledby="teamChangesTab-pending" hidden></div>
+    <div id="teamChangesHistory" role="tabpanel" aria-labelledby="teamChangesTab-history" hidden></div>
+    <div class="team-draft-status" id="teamChangesStatus" role="status" aria-live="polite"></div>
+    <div class="modal-actions"><button type="button" class="btn" onclick="closeModal('teamChangesModal')">Fechar</button></div>
+  </div>
+</div>
+<!-- Legacy draft import remains non-mutating. -->
+<div class="modal-overlay" id="teamDraftModal">
+  <div class="modal team-draft-modal" role="dialog" aria-modal="true" aria-labelledby="teamDraftTitle">
+    <h2 id="teamDraftTitle">Preparar transição de equipa</h2>
+    <div class="team-draft-fields">
+      <div class="form-group"><label for="teamDraftLeader">Novo gestor</label><select id="teamDraftLeader" onchange="teamDraftCandidates(true);teamDraftPreview()"></select></div>
+      <div class="form-group"><label for="teamDraftSource">Equipa de origem</label><select id="teamDraftSource" onchange="teamDraftCandidates();teamDraftPreview()"></select></div>
+      <div class="form-group wide"><label for="teamDraftMembers">Gestores comerciais</label><select id="teamDraftMembers" multiple size="4" onchange="teamDraftPreview()"></select></div>
+      <div class="form-group"><label for="teamDraftDate">Data de início</label><input id="teamDraftDate" type="date" onchange="teamDraftPreview()"></div>
+    </div>
+    <div class="team-draft-status" id="teamDraftStatus" role="status" aria-live="polite">Rascunho · data por confirmar</div>
+    <div class="team-draft-preview" id="teamDraftPreview"></div>
+    <input id="teamDraftFile" type="file" accept=".json,application/json" hidden onchange="importTeamDraft(this)">
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('teamDraftModal')">Fechar</button>
+      <button class="btn" onclick="document.getElementById('teamDraftFile').click()">Abrir rascunho</button>
+      <button class="btn btn-primary" id="teamDraftExport" disabled onclick="exportTeamDraft()">Guardar rascunho</button>
+    </div>
+  </div>
+</div>
+
 <!-- ID CARD MODAL -->
 <div class="modal-overlay" id="idCardModal">
   <div class="modal id-card-modal">
@@ -1716,6 +1798,16 @@ let bolsaOutcomeDismissed = false;
 let photoEditor = { personId:null, sourceCanvas:null, canvas:null, ctx:null, drawing:false, mode:'wand', brush:28, tolerance:48 };
 let currentIdCardPersonId = null;
 let dashboardMovementTeam = null;
+let teamHistoryEnabled = false;
+let teamHistoryRows = [];
+let teamPastPersons = [];
+let preparedTeamDraft = null;
+let teamChangesVersion = 0;
+let teamChangePlans = [];
+let teamChangeRows = [];
+let teamChangePayload = null;
+let teamChangeRequestId = null;
+let teamChangeBusy = false;
 let hallPhoto = { personId:null, image:null, ready:false, version:0 };
 let photosFacingRightMigrationRunning = false;
 
@@ -1746,7 +1838,11 @@ function whatsappPhone(value){
   return digits;
 }
 function initials(name){ const p = name.trim().split(/\s+/); return p.length===1 ? p[0].slice(0,2).toUpperCase() : (p[0][0]+p[p.length-1][0]).toUpperCase(); }
-function isActive(pid){ const p = state.persons.find(pp => pp.id === pid); return !!p && p.ativo !== false; }
+function reportPerson(id){ return state.persons.find(person => person.id === id) || teamPastPersons.find(person => person.id === id); }
+function reportPersonOnDate(id, date){ const person=reportPerson(id); return person && teamHistoryEnabled ? RhTeams.assignmentAt(person,date,teamHistoryRows,true) : person; }
+function reportPersons(){ return [...state.persons, ...teamPastPersons]; }
+function vacationPersons(){ return reportPersons().filter(person => person.ativo !== false); }
+function isActive(pid){ const p = reportPerson(pid); return !!p && p.ativo !== false; }
 function activePersons(){ return state.persons.filter(p => p.ativo !== false); }
 function isoDate(y, m, d){
   const dt = new Date(y, m - 1, d);
@@ -2637,6 +2733,217 @@ function clearHallPhotoPrint(){
   document.body.classList.remove('hall-photo-print');
   document.getElementById('hallPhotoPageSize')?.remove();
 }
+function lisbonToday(){
+  const parts = new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Lisbon',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const part = type => parts.find(part => part.type === type).value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+function teamChangesStatus(message,error=false){
+  const status=document.getElementById('teamChangesStatus'); status.textContent=message; status.classList.toggle('error',error);
+}
+function openTeamChanges(personId='', preset={}){
+  if (!requireAdminAction() || teamChangeBusy) return;
+  closeProfileMenu(); closeModal('mgmtModal');
+  teamChangeRows=[]; teamChangeRequestId=null; teamChangePayload=null;
+  document.getElementById('teamChangesDate').value=lisbonToday();
+  document.getElementById('teamChangesConfirm').checked=false;
+  if (personId){
+    const person=state.persons.find(person=>person.id===personId);
+    if (person) teamChangeRows.push({personId,toRole:preset.role || person.role || '',toChefeId:preset.chefeId ?? person.chefeId ?? ''});
+  }
+  renderTeamChangesRows(); renderTeamChangeLogs(); teamChangesTab('new');
+  document.getElementById('teamChangesModal').classList.add('open');
+}
+function teamChangesTab(tab){
+  if (teamChangeBusy) return;
+  for (const [key,id] of [['new','teamChangesForm'],['pending','teamChangesPending'],['history','teamChangesHistory']]){
+    document.getElementById(id).hidden=key!==tab;
+    document.getElementById('teamChangesTab-'+key).setAttribute('aria-selected',String(key===tab));
+  }
+}
+function addTeamChangeRow(){
+  const id=document.getElementById('teamChangesPerson').value;
+  const person=state.persons.find(person=>person.id===id);
+  if (!person || teamChangeBusy || teamChangeRows.some(row=>row.personId===id)) return;
+  teamChangeRows.push({personId:id,toRole:person.role || '',toChefeId:person.chefeId || ''});
+  renderTeamChangesRows();
+}
+function updateTeamChangeRow(index,field,value){
+  if (teamChangeBusy) return;
+  teamChangeRows[index][field]=value;
+  if (field==='toRole' && ['chefe_equipa','capitao','coordenador'].includes(value)) teamChangeRows[index].toChefeId=teamChangeRows[index].personId;
+  renderTeamChangesRows();
+}
+function removeTeamChangeRow(index){ if (!teamChangeBusy){ teamChangeRows.splice(index,1); renderTeamChangesRows(); } }
+function renderTeamChangesRows(){
+  const people=activePersons();
+  const managers=people.filter(person=>['chefe_equipa','coordenador','capitao'].includes(teamChangeRows.find(row=>row.personId===person.id)?.toRole || person.role));
+  const name=id=>state.persons.find(person=>person.id===id)?.name || 'Sem equipa';
+  document.getElementById('teamChangesRows').innerHTML=teamChangeRows.map((row,index)=>{
+    const person=state.persons.find(person=>person.id===row.personId);
+    return `<div class="team-change-row" data-team-change-person="${escHtml(row.personId)}"><div class="team-change-identity">${dashPersonHtml(person,28)}<div class="team-change-before">${escHtml(ROLE_LABELS[person.role] || 'Sem função')} · ${escHtml(name(person.chefeId))}</div></div>
+      <div class="form-group"><label for="teamChangeRole-${index}">Nova função</label><select id="teamChangeRole-${index}" onchange="updateTeamChangeRow(${index},'toRole',this.value)">${ROLES.map(role=>`<option value="${role.value}" ${role.value===row.toRole?'selected':''}>${role.label}</option>`).join('')}</select></div>
+      <div class="form-group"><label for="teamChangeManager-${index}">Nova equipa</label><select id="teamChangeManager-${index}" onchange="updateTeamChangeRow(${index},'toChefeId',this.value)"><option value="">Sem equipa</option>${managers.map(person=>`<option value="${escHtml(person.id)}" ${person.id===row.toChefeId?'selected':''}>${escHtml(person.name)}</option>`).join('')}</select></div>
+      <button type="button" class="btn team-change-remove" aria-label="Retirar ${escHtml(person.name)} da alteração" title="Retirar da alteração" onclick="removeTeamChangeRow(${index})">×</button></div>`;
+  }).join('');
+  document.getElementById('teamChangesPerson').innerHTML='<option value="">Selecionar colaborador…</option>'+people.filter(person=>!teamChangeRows.some(row=>row.personId===person.id)).map(person=>`<option value="${escHtml(person.id)}">${escHtml(person.name)}</option>`).join('');
+  teamChangesPreview();
+}
+function teamChangesPreview(reset=true){
+  if (teamChangeBusy) return;
+  if (reset){ teamChangeRequestId=null; document.getElementById('teamChangesConfirm').checked=false; }
+  teamChangePayload=null;
+  const button=document.getElementById('teamChangesSubmit'); button.disabled=true;
+  document.getElementById('teamChangesPreview').replaceChildren();
+  if (teamChangesVersion<2){ teamChangesStatus('Gestão de alterações indisponível: falta concluir a instalação do histórico.',true); return; }
+  teamChangesStatus('');
+  if (!teamChangeRows.length) return;
+  try {
+    teamChangeRequestId ||= crypto.randomUUID();
+    const date=document.getElementById('teamChangesDate').value;
+    teamChangePayload=RhTeams.prepareChanges(state.persons,date,teamChangeRows,teamChangeRequestId);
+    const name=id=>state.persons.find(person=>person.id===id)?.name || 'Sem equipa';
+    document.getElementById('teamChangesPreview').innerHTML=dashTable(['Colaborador','Nova função / equipa','Efeito'],teamChangePayload.p_changes.map(change=>[
+      escHtml(name(change.personId)),escHtml(`${ROLE_LABELS[change.toRole]} · ${name(change.toChefeId)}`),escHtml(formatDatePt(date))
+    ]),'');
+    button.textContent=date>lisbonToday()?'Agendar alteração':'Aplicar alteração';
+    button.disabled=!document.getElementById('teamChangesConfirm').checked;
+  } catch(error){ teamChangesStatus(error.message,true); }
+}
+function renderTeamChangeLogs(){
+  const statusLabels={pending:'Agendada',applied:'Aplicada',cancelled:'Cancelada',failed:'Requer revisão'};
+  const pendingCount=teamChangePlans.filter(plan=>['pending','failed'].includes(plan.status)).length;
+  document.getElementById('teamChangesTab-pending').textContent=pendingCount?`Agendadas (${pendingCount})`:'Agendadas';
+  for (const [id,statuses] of [['teamChangesPending',['pending','failed']],['teamChangesHistory',['applied','cancelled']]]){
+    const plans=teamChangePlans.filter(plan=>statuses.includes(plan.status)).sort((a,b)=>b.effective_date.localeCompare(a.effective_date));
+    document.getElementById(id).innerHTML=plans.length?plans.map(plan=>`<section class="team-change-log"><header><strong>${escHtml(formatDatePt(plan.effective_date))}</strong><span>${statusLabels[plan.status]}</span></header><ul>${plan.changes.map(change=>{
+      const person=reportPerson(change.personId),manager=reportPerson(change.toChefeId);
+      return `<li>${escHtml(person?.name || change.personId)}: ${escHtml(ROLE_LABELS[change.toRole] || change.toRole)} · ${escHtml(manager?.name || 'Sem equipa')}</li>`;
+    }).join('')}</ul>${plan.error?`<p class="team-draft-status error">${escHtml(plan.error)}</p>`:''}${['pending','failed'].includes(plan.status)?`<button type="button" class="btn danger" onclick="cancelTeamChange('${plan.request_id}')">Cancelar alteração</button>`:''}</section>`).join(''):'<div class="dash-empty">Sem alterações.</div>';
+  }
+}
+async function waitForTeamChangeSaves(){
+  if (!supabaseReady || !supabaseClient) throw new Error('Sessão indisponível. Entra novamente.');
+  if (rhSync){
+    await rhSync.flush();
+    if (rhSync.readJournal().length) throw new Error('Ainda existem dados por guardar. Aguarda por Guardado antes de confirmar.');
+  }
+}
+async function submitTeamChanges(){
+  if (!requireAdminAction() || teamChangeBusy || !teamChangePayload || !document.getElementById('teamChangesConfirm').checked) return;
+  teamChangeBusy=true;
+  document.getElementById('teamChangesFields').disabled=true;
+  document.getElementById('teamChangesSubmit').disabled=true;
+  teamChangesStatus('A guardar a alteração…');
+  try {
+    await waitForTeamChangeSaves();
+    const {data,error}=await supabaseClient.rpc('rh_submit_team_change',teamChangePayload);
+    if (error) throw error;
+    if (!['pending','applied'].includes(data?.status)) throw new Error('Este pedido já foi encerrado. Abre uma nova alteração.');
+    await loadFromSupabase(); renderAll(); renderTeamChangeLogs();
+    teamChangeRows=[]; teamChangePayload=null; teamChangeRequestId=null;
+    teamChangeBusy=false; renderTeamChangesRows(); teamChangesTab(data.status==='pending'?'pending':'history');
+    teamChangesStatus(data.status==='pending'?'Alteração agendada e guardada no servidor.':'Alteração aplicada. Histórico preservado.');
+  } catch(error){
+    teamChangesStatus((error.message || 'Não foi possível confirmar.')+' Podes tentar novamente; o mesmo pedido não é aplicado duas vezes.',true);
+  } finally {
+    teamChangeBusy=false; document.getElementById('teamChangesFields').disabled=false;
+    document.getElementById('teamChangesSubmit').disabled=!teamChangePayload || !document.getElementById('teamChangesConfirm').checked;
+  }
+}
+async function cancelTeamChange(requestId){
+  if (!requireAdminAction() || teamChangeBusy || !confirm('Cancelar esta alteração? A equipa atual e o histórico ficam inalterados.')) return;
+  teamChangeBusy=true;
+  try {
+    await waitForTeamChangeSaves();
+    const {error}=await supabaseClient.rpc('rh_cancel_team_change',{p_request_id:requestId});
+    if (error) throw error;
+    await loadFromSupabase(); renderAll(); renderTeamChangeLogs(); teamChangesStatus('Alteração cancelada.');
+  } catch(error){ teamChangesStatus(error.message || 'Não foi possível cancelar.',true); }
+  finally { teamChangeBusy=false; }
+}
+function openTeamDraft(){
+  if (!requireAdminAction()) return;
+  closeProfileMenu();
+  const people = activePersons();
+  const sellers = people.filter(person => person.role === 'vendedor');
+  const option = person => `<option value="${escHtml(person.id)}">${escHtml(person.name)}</option>`;
+  document.getElementById('teamDraftLeader').innerHTML = '<option value="">Selecionar…</option>' + sellers.map(option).join('');
+  document.getElementById('teamDraftSource').innerHTML = '<option value="">Selecionar…</option>' + people.filter(person => ['chefe_equipa','coordenador','capitao'].includes(person.role)).map(option).join('');
+  document.getElementById('teamDraftMembers').innerHTML = sellers.map(option).join('');
+  document.getElementById('teamDraftDate').value = '';
+  document.getElementById('teamDraftFile').value = '';
+  preparedTeamDraft = null;
+  teamDraftPreview();
+  document.getElementById('teamDraftModal').classList.add('open');
+}
+function teamDraftPlan(){
+  const name = id => state.persons.find(person => person.id === id)?.name || '';
+  return {
+    status:'draft',automaticActivation:false,
+    leaderName:name(document.getElementById('teamDraftLeader').value),
+    sourceManagerName:name(document.getElementById('teamDraftSource').value),
+    memberNames:Array.from(document.getElementById('teamDraftMembers').selectedOptions).map(option => name(option.value)),
+    effectiveDate:document.getElementById('teamDraftDate').value || null
+  };
+}
+function teamDraftCandidates(fromLeader = false){
+  const leader = state.persons.find(person => person.id === document.getElementById('teamDraftLeader').value);
+  const source = document.getElementById('teamDraftSource');
+  if (fromLeader && leader) source.value = leader.chefeId || '';
+  const select = document.getElementById('teamDraftMembers');
+  const chosen = new Set(Array.from(select.selectedOptions).map(option => option.value));
+  select.innerHTML = activePersons().filter(person => person.role === 'vendedor' && person.id !== leader?.id && (!source.value || person.chefeId === source.value))
+    .map(person => `<option value="${escHtml(person.id)}" ${chosen.has(person.id)?'selected':''}>${escHtml(person.name)}</option>`).join('');
+}
+function teamDraftPreview(){
+  if (!isAdminUser()) return;
+  const status = document.getElementById('teamDraftStatus');
+  const preview = document.getElementById('teamDraftPreview');
+  preparedTeamDraft = null;
+  document.getElementById('teamDraftExport').disabled = true;
+  status.classList.remove('error');
+  const plan = teamDraftPlan();
+  if (!plan.leaderName || !plan.sourceManagerName || !plan.memberNames.length){
+    status.textContent = 'Rascunho · data por confirmar'; preview.replaceChildren(); return;
+  }
+  try {
+    preparedTeamDraft = RhTeams.prepareDraft(state.persons,plan);
+    status.textContent = plan.effectiveDate ? `Rascunho · início previsto ${formatDatePt(plan.effectiveDate)} · não agendado` : 'Rascunho · data por confirmar · não agendado';
+    const manager = state.persons.find(person => person.name === plan.leaderName);
+    preview.innerHTML = dashTable(['Colaborador','Situação atual','Preparação'],preparedTeamDraft.changes.map(change => [
+      escHtml(change.name), escHtml(`${ROLE_LABELS[change.fromRole] || change.fromRole} · ${plan.sourceManagerName}`),
+      escHtml(`${ROLE_LABELS[change.toRole] || change.toRole} · ${manager.name}`)
+    ]),'');
+    document.getElementById('teamDraftExport').disabled = false;
+  } catch(error){ status.textContent = error.message; status.classList.add('error'); preview.replaceChildren(); }
+}
+async function importTeamDraft(input){
+  if (!requireAdminAction()) return;
+  const file = input.files?.[0];
+  if (!file) return;
+  try {
+    if (file.size > 65536) throw new Error('Ficheiro de preparação demasiado grande.');
+    const plan = JSON.parse(await file.text());
+    const draft = RhTeams.prepareDraft(state.persons,plan);
+    const leader = draft.changes[0];
+    document.getElementById('teamDraftLeader').value = leader.personId;
+    document.getElementById('teamDraftSource').value = leader.fromChefeId;
+    teamDraftCandidates();
+    const members = new Set(draft.changes.slice(1).map(change => change.personId));
+    Array.from(document.getElementById('teamDraftMembers').options).forEach(option => { option.selected=members.has(option.value); });
+    document.getElementById('teamDraftDate').value = draft.effectiveDate || '';
+    teamDraftPreview();
+  } catch(error){
+    const status = document.getElementById('teamDraftStatus'); status.textContent = error.message; status.classList.add('error');
+  } finally { input.value = ''; }
+}
+function exportTeamDraft(){
+  if (!requireAdminAction() || !preparedTeamDraft) return;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(teamDraftPlan(),null,2)],{type:'application/json'}));
+  const link = document.createElement('a'); link.href=url; link.download='transicao-equipa-rascunho.json'; link.click();
+  setTimeout(() => URL.revokeObjectURL(url),60000);
+}
 async function prepareHallPhotoPrint(){
   if (!hallPhoto.ready) return false;
   const image = document.querySelector('#hallPhotoPrintSheet img');
@@ -3073,7 +3380,7 @@ function countWorkingDaysInAssidPeriod(){
   return assidPeriodDates().filter(ds => isWorkingDay(ds)).length;
 }
 function countWorkingDaysForPersonInAssidPeriod(person){
-  return assidPeriodDates().filter(ds => isWorkingDay(ds) && isPersonDateActive(person, ds)).length;
+  return assidPeriodDates().filter(ds => isWorkingDay(ds) && isPersonDateActive(person, ds) && assidPersonMatchesDay(person,ds)).length;
 }
 
 // ===================== STORAGE + MIGRATION =====================
@@ -3476,6 +3783,7 @@ async function supabaseLogout(){
   } catch(e){}
   currentProfile = null;
   currentUserId = '';
+    teamHistoryEnabled = false; teamHistoryRows = []; teamPastPersons = []; preparedTeamDraft = null;
   supabaseReady = false;
   applyStateData({ persons: [], vacations: [], records: {} });
   renderAll();
@@ -3548,6 +3856,7 @@ async function loadSupabaseSession(){
   try { switchTab('rh'); } catch(e){ renderAll(); }
 }
 async function loadFromSupabase(){
+  await loadTeamHistory();
   if (isAdminUser()){
     try {
       const backupKey = `rh-attendance-before-autosave-v1:${supabaseProjectId}:${currentUserId}`;
@@ -3559,7 +3868,7 @@ async function loadFromSupabase(){
   }
   const [personsRes, vacationsRes, recordsRes] = await Promise.all([
     RhSync.fetchAllRows(supabaseClient,'rh_persons',['id']),
-    RhSync.fetchAllRows(supabaseClient,'rh_vacations',['id']),
+    teamHistoryEnabled && !isAdminUser() ? fetchVisibleVacations() : RhSync.fetchAllRows(supabaseClient,'rh_vacations',['id']),
     RhSync.fetchAllRows(supabaseClient,'rh_attendance_records',['person_id','record_date'])
   ]);
   const persons = personsRes.map(row => normalizePerson({
@@ -3594,9 +3903,43 @@ async function loadFromSupabase(){
   }) : null;
   const serverState = { persons, vacations, records };
   applyStateData(rhSync ? rhSync.overlay(serverState) : serverState);
+  teamPastPersons = teamHistoryEnabled ? RhTeams.historicalPeople(state.persons,teamHistoryRows).map(normalizePerson) : [];
   if (rhSync){ rhSync.observe(state); void rhSync.flush(); }
   try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){}
   setAuthUi(true);
+}
+async function loadTeamHistory(){
+  teamHistoryEnabled = false; teamHistoryRows = []; teamPastPersons = []; teamChangesVersion=0; teamChangePlans=[];
+  if (typeof supabaseClient.rpc !== 'function') return;
+  const version = await supabaseClient.rpc('rh_team_history_version');
+  if (version.error){
+    if (['PGRST202','42883'].includes(version.error.code)) return;
+    throw version.error;
+  }
+  if (![1,2].includes(version.data)) throw new Error('Versao de historico incompativel.');
+  teamChangesVersion=version.data;
+  if (teamChangesVersion>=2 && isAdminUser()){
+    const due=await supabaseClient.rpc('rh_process_due_team_changes');
+    if (due.error) throw due.error;
+    teamChangePlans=await RhSync.fetchAllRows(supabaseClient,'rh_team_change_plans',['request_id']);
+  }
+  teamHistoryRows = await RhSync.fetchAllRows(supabaseClient,'rh_assignment_history',['person_id','valid_from']);
+  teamHistoryEnabled = true;
+}
+async function fetchVisibleVacations(){
+  const rows = [];
+  while (true){
+    const result = await supabaseClient.rpc('rh_visible_vacations',{}, { count:'exact' }).order('id').range(rows.length,rows.length+499);
+    if (result.error) throw result.error;
+    const page = result.data || [];
+    rows.push(...page);
+    if (result.count != null && rows.length >= result.count) return rows;
+    if (!page.length){
+      if (result.count != null && rows.length < result.count) throw new Error('Carregamento incompleto das ferias.');
+      return rows;
+    }
+    if (result.count == null && page.length < 500) return rows;
+  }
 }
 
 // ===================== TABS =====================
@@ -3685,7 +4028,7 @@ function changeFeriasWeek(delta){
 
 // ===================== FÉRIAS: VACATIONS =====================
 function getVacationPeriods(){
-  const people = new Map(state.persons.map(person => [person.id, person]));
+  const people = new Map(reportPersons().map(person => [person.id, person]));
   const days = [];
   for (const [key, code] of Object.entries(state.records)){
     if (code !== 'FE') continue;
@@ -3847,7 +4190,7 @@ function renderCalendar(){
         if (vacHere.length > 0){
           const bc = document.createElement('div'); bc.className='vacation-bar-container';
           vacHere.slice(0,3).forEach(v => {
-            const person = state.persons.find(p => p.id===v.personId); if (!person) return;
+            const person = reportPersonOnDate(v.personId,dateStr); if (!person) return;
             const bar = document.createElement('div'); bar.className='vacation-bar';
             bar.style.background=person.color; bar.textContent=initials(person.name); bc.appendChild(bar);
           });
@@ -3856,7 +4199,7 @@ function renderCalendar(){
             bar.style.background='#aaa'; bar.textContent=`+${vacHere.length-3}`; bc.appendChild(bar);
           }
           cell.appendChild(bc);
-          cell.title = vacHere.map(v => { const p=state.persons.find(pp=>pp.id===v.personId); return p?p.name:''; }).filter(Boolean).join(', ');
+          cell.title = vacHere.map(v => reportPersonOnDate(v.personId,dateStr)?.name || '').filter(Boolean).join(', ');
         }
       }
       cell.onclick = () => openVacEditor(dateStr);
@@ -3896,7 +4239,7 @@ function renderWeekCalendar(grid){
     } else {
       const vacHere = getVacationsForDay(ds, periods)
         .filter(v => isActive(v.personId))
-        .map(v => ({ v, person: state.persons.find(p => p.id === v.personId) }))
+        .map(v => ({ v, person: reportPersonOnDate(v.personId,ds) }))
         .filter(x => x.person)
         .sort((a,b) => a.person.name.localeCompare(b.person.name));
       if (!vacHere.length){
@@ -3918,7 +4261,7 @@ function renderWeekCalendar(grid){
 function renderFeriasSidebar(){
   const list = document.getElementById('personList');
   list.innerHTML = '';
-  const aps = activePersons();
+  const aps = vacationPersons();
   if (aps.length === 0){
     list.innerHTML = '<div class="empty-state">Nenhum colaborador ativo.<br>Adiciona no separador RH.</div>';
     return;
@@ -3942,7 +4285,7 @@ function renderFeriasSidebar(){
     list.appendChild(item);
   });
   if (selectedPerson){
-    const p = state.persons.find(pp => pp.id===selectedPerson);
+    const p = reportPerson(selectedPerson);
     if (p){
       const badge = document.createElement('div'); badge.className='selected-person-badge';
       badge.innerHTML = `${avatarHtml(p, 18)} A marcar: <strong>${escHtml(p.name)}</strong>`;
@@ -3964,7 +4307,7 @@ function renderColorPicker(){
 }
 function renderFeriasStats(){
   const bar = document.getElementById('feriasStats');
-  const aps = activePersons();
+  const aps = vacationPersons();
   const vacs = getVacationPeriods().filter(v => isActive(v.personId));
   const totalDays = vacs.reduce((s,v) => s + countWorkingDays(v.start, v.end), 0);
   const cards = `
@@ -3999,7 +4342,7 @@ function openVacationsList(){
     const sorted = periods.sort((a,b) => a.start.localeCompare(b.start));
     const fmt = ds => { const [y,m,d]=ds.split('-'); return `${d}/${m}/${y}`; };
     container.innerHTML = '<div class="vacations-list">' + sorted.map(v => {
-      const p = state.persons.find(pp => pp.id===v.personId); if (!p || p.ativo===false) return '';
+      const p = reportPersonOnDate(v.personId,v.start); if (!p || p.ativo===false) return '';
       const days = countWorkingDays(v.start, v.end);
       const adminActions = isAdminUser()
         ? `<button class="vac-delete" style="color:#888" onclick="editVacation('${v.id}'); closeModal('listModal');" title="Editar">✏️</button>
@@ -4024,15 +4367,17 @@ function cellClick(pid, dateStr){
   if (!isWorkingDay(dateStr)) return;
   const person = state.persons.find(p => p.id === pid);
   if (!isPersonDateActive(person, dateStr)) return;
+  if (!assidPersonMatchesDay(person,dateStr)) return;
   const k = recKey(pid, dateStr);
   if (state.records[k] === paintCode) delete state.records[k];
   else state.records[k] = paintCode;
   save([k]); renderSheet(); renderAssidStats();
 }
-function changeMonth(delta){ currentMonth = Math.max(0, Math.min(11, currentMonth+delta)); renderSheet(); renderAssidStats(); }
+function changeMonth(delta){ currentMonth = Math.max(0, Math.min(11, currentMonth+delta)); renderAssidFilters(); renderSheet(); renderAssidStats(); }
 function setAssidPeriodMode(mode){
   assidPeriodMode = mode === 'month' ? 'month' : 'payroll';
   renderAssidPeriodButtons();
+  renderAssidFilters();
   renderSheet();
   renderAssidStats();
 }
@@ -4063,28 +4408,45 @@ function assidFilterValues(field){
 function assidMultiSelected(select){
   return Array.from(select.selectedOptions).map(opt => opt.value).filter(Boolean);
 }
-function filteredAssidPersons(){
+function assidPersonMatchesDay(person, dateStr){
+  const assignment = teamHistoryEnabled ? RhTeams.assignmentAt(person,dateStr,teamHistoryRows,true) : person;
+  if (!assignment) return false;
+  if (teamHistoryEnabled && !RhTeams.belongsOnDate(person,dateStr,teamHistoryRows,currentProfile,true)) return false;
   const name = normalizeFilterText(assidFilters.name);
   const roles = assidFilterValues('role');
   const chefes = assidFilterValues('chefe');
   const empresas = assidFilterValues('empresa').map(normalizeFilterText);
   const cargas = assidFilterValues('carga');
-  return activePersons().filter(p =>
-    (!name || normalizeFilterText(p.name).includes(name)) &&
-    (!roles.length || roles.includes(p.role)) &&
-    (!chefes.length || chefes.includes(p.chefeId)) &&
-    (!empresas.length || empresas.includes(normalizeFilterText(p.empresa))) &&
-    (!cargas.length || cargas.includes(p.carga))
-  );
+  return (!name || normalizeFilterText(person.name).includes(name)) &&
+    (!roles.length || roles.includes(assignment.role)) &&
+    (!chefes.length || chefes.includes(assignment.chefeId)) &&
+    (!empresas.length || empresas.includes(normalizeFilterText(person.empresa))) &&
+    (!cargas.length || cargas.includes(person.carga));
+}
+function filteredAssidPersons(){
+  const dates = assidPeriodDates();
+  if (!teamHistoryEnabled) return activePersons().filter(person => assidPersonMatchesDay(person,dates[0] || todayIso()));
+  return vacationPersons().filter(person => dates.some(date => isWorkingDay(date) && isPersonDateActive(person,date) && assidPersonMatchesDay(person,date)));
+}
+function assidRolesInPeriod(person){
+  if (!teamHistoryEnabled) return ROLE_LABELS[person.role] || '';
+  const roles = new Set();
+  assidPeriodDates().filter(date => isPersonDateActive(person,date) && assidPersonMatchesDay(person,date)).forEach(date => {
+    const assignment = RhTeams.assignmentAt(person,date,teamHistoryRows,true);
+    if (assignment?.role) roles.add(ROLE_LABELS[assignment.role] || assignment.role);
+  });
+  return [...roles].join(' / ');
 }
 function renderAssidFilters(){
   const box = document.getElementById('assidFilters');
   if (!box) return;
-  const active = activePersons();
-  const roles = [...new Set(active.map(p => p.role).filter(Boolean))]
+  const active = vacationPersons();
+  const dates = assidPeriodDates();
+  const assignments = teamHistoryEnabled ? active.flatMap(person => dates.filter(date => RhTeams.belongsOnDate(person,date,teamHistoryRows,currentProfile,true)).map(date => RhTeams.assignmentAt(person,date,teamHistoryRows,true)).filter(Boolean)) : active;
+  const roles = [...new Set(assignments.map(p => p.role).filter(Boolean))]
     .sort((a,b) => (ROLE_LABELS[a] || a).localeCompare(ROLE_LABELS[b] || b));
-  const chefeIds = [...new Set(active.map(p => p.chefeId).filter(Boolean))];
-  const chefes = chefeIds.map(id => state.persons.find(p => p.id === id)).filter(Boolean)
+  const chefeIds = [...new Set([...assignments.map(p => p.chefeId), ...assidFilterValues('chefe')].filter(Boolean))];
+  const chefes = chefeIds.map(id => reportPerson(id) || { id, name:teamHistoryRows.find(row => row.chefe_id === id)?.chefe_name || id }).filter(Boolean)
     .sort((a,b) => a.name.localeCompare(b.name));
   const empresas = [...new Set(active.map(p => (p.empresa || '').trim()).filter(Boolean))]
     .sort((a,b) => a.localeCompare(b));
@@ -4144,7 +4506,7 @@ function renderSheet(){
     body += `<tr><td class="col-name">—</td><td colspan="${dates.length+6}"><div class="empty-state">Nenhum colaborador encontrado com os filtros atuais.</div></td></tr>`;
   } else {
     apsSheet.forEach(p => {
-      const roleStr = p.role && ROLE_LABELS[p.role] ? ROLE_LABELS[p.role] : '';
+      const roleStr = assidRolesInPeriod(p);
       body += `<tr><td class="col-name"><div class="name-cell">
         ${avatarHtml(p, 24)}
         <div class="name-text"><span>${escHtml(p.name)}</span>${roleStr?`<span class="name-role">${roleStr}</span>`:''}</div></div></td>`;
@@ -4157,6 +4519,10 @@ function renderSheet(){
         const hol = HOLIDAYS_2026.has(ds);
         if (we){ body += `<td class="day-cell weekend"></td>`; continue; }
         if (hol){ body += `<td class="day-cell holiday" title="Feriado: ${escHtml(HOLIDAY_NAMES[ds]||'Feriado')}">F</td>`; continue; }
+        if (!assidPersonMatchesDay(p,ds)){
+          body += '<td class="day-cell locked" title="Fora da equipa ou dos filtros nesta data">–</td>';
+          continue;
+        }
         if (!isPersonDateActive(p, ds)){
           const reason = personDateLockReason(p, ds);
           body += `<td class="day-cell locked" title="${escHtml(formatDatePt(ds) + ' · ' + reason)}">–</td>`;
@@ -4198,7 +4564,7 @@ function renderAssidStats(){
   const apsStat = filteredAssidPersons();
   apsStat.forEach(p => {
     for (const ds of dates){
-      if (!isWorkingDay(ds) || !isPersonDateActive(p, ds)) continue;
+      if (!isWorkingDay(ds) || !isPersonDateActive(p, ds) || !assidPersonMatchesDay(p,ds)) continue;
       const c=getRec(p.id, ds);
       if (c==='P') tP++; else if (c==='FE') tFE++; else if (c==='FJ') tFJ++; else if (c==='FI') tFI++; else if (c==='B') tB++;
       else if (!c && isOnVacation(p.id, ds)) tFE++;
@@ -4339,10 +4705,10 @@ function movementBalance(value){ return value > 0 ? '+' + value : String(value);
 function movementBalanceClass(value){ return value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral'; }
 function setDashboardMovementTeam(value){ dashboardMovementTeam=value==='*'?null:value; renderDashboard(); }
 function dashAnnualMovements(){
-  const people = state.persons.map(person => ({...person,entrada:normalizeDateValue(person.entrada),saida:normalizeDateValue(person.saida)}));
-  const totals = RhMovements.annualMovements(people,YEAR);
+  const people = reportPersons().map(person => ({...person,entrada:normalizeDateValue(person.entrada),saida:normalizeDateValue(person.saida)}));
+  const totals = RhMovements.annualMovements(people,YEAR,(person,date)=>teamHistoryEnabled?RhTeams.assignmentAt(person,date,teamHistoryRows,true)?.chefeId:person.chefeId || '');
   const teams = totals.teams.map(team => {
-    const manager = state.persons.find(person => person.id === team.id);
+    const manager = reportPerson(team.id);
     return {...team,manager,label:manager?.name || (team.id?'Gestor não identificado':'Sem equipa')};
   }).sort((a,b) => a.label.localeCompare(b.label,'pt'));
   if (dashboardMovementTeam !== null && !teams.some(team => team.id === dashboardMovementTeam)) dashboardMovementTeam=null;
@@ -4424,11 +4790,12 @@ function renderDashboard(){
   const box = document.getElementById('dashboard');
   if (!box) return;
   const active = activePersons();
-  const activeIds = new Set(active.map(p => p.id));
+  const historicalActive = vacationPersons();
+  const activeIds = new Set(historicalActive.map(p => p.id));
   const months = vacationMonthTotals(activeIds);
   const maxVacationDays = Math.max(...months);
   const bestMonthIdx = months.findIndex(v => v === maxVacationDays);
-  const abs = absenceSummary(active);
+  const abs = absenceSummary(historicalActive);
   const noVacation = active.filter(p => !hasVacationMarkedInYear(p.id)).sort((a,b) => a.name.localeCompare(b.name));
   const entries = state.persons
     .filter(p => normalizeDateValue(p.entrada).startsWith(`${YEAR}-`))
@@ -4633,6 +5000,7 @@ function renderAll(){
 
 // ===================== MODALS =====================
 function closeModal(id){
+  if (id==='teamChangesModal' && teamChangeBusy) return;
   document.getElementById(id).classList.remove('open');
   if (id === 'hallPhotoModal'){ hallPhoto.version++; hallPhoto.personId = null; hallPhoto.image = null; setHallPhotoReady(false); }
   if (id === 'vacModal'){ editingVacId = null; document.getElementById('vacModalTitle').textContent = '➕ Adicionar Férias'; }
@@ -4698,9 +5066,9 @@ function savePerson(id){
   if (!newName){ alert('O nome não pode estar vazio.'); return; }
   const newRole = document.getElementById(`mgmt-role-${id}`).value;
   recordRhMovement(p, 'name', p.name, newName);
-  recordRhMovement(p, 'role', p.role || '', newRole);
-  p.name = newName; p.role = newRole;
+  p.name = newName;
   save(); renderAll();
+  if (newRole !== (p.role || '')){ openTeamChanges(id,{role:newRole}); return; }
   const btn = document.querySelector(`#mgmt-row-${id} .mgmt-save-btn`);
   if (btn){ btn.textContent='✓ Guardado!'; setTimeout(()=>btn.textContent='✓ Guardar', 1200); }
 }
@@ -4980,6 +5348,7 @@ function renderRH(){
   const inativos = total - ativos;
   const nEmpresas = empresas.length;
   document.getElementById('rhStats').innerHTML = `
+    ${isAdminUser() && teamChangePlans.some(plan=>plan.status==='failed')?'<button class="btn danger" style="margin-bottom:12px" onclick="openTeamChanges();teamChangesTab(\'pending\')">Alteração de equipa requer revisão</button>':''}
     <div class="rh-summary-row">
       <div class="rh-summary-cards">
         <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Colaboradores</div></div>
@@ -5147,6 +5516,10 @@ function rhUpdate(id, field, value){
   if (!requireAdminAction()) return;
   const p = state.persons.find(pp => pp.id === id);
   if (!p) return;
+  if (field==='role' || field==='chefeId'){
+    if ((p[field] || '') !== value) openTeamChanges(id,{[field]:value});
+    renderRH(); return;
+  }
   const previousValue = p[field];
   let movementType = '';
   if (field === 'ativo') {
@@ -5331,7 +5704,7 @@ function renderPrintSelectors(){
   }
 }
 function buildFeriasLegend(){
-  return `<div class="print-legend">${activePersons().map(p => {
+  return `<div class="print-legend">${vacationPersons().map(p => {
     const r = p.role && ROLE_LABELS[p.role] ? ` — ${ROLE_LABELS[p.role]}` : '';
     return `<div class="print-legend-item"><div class="print-legend-dot" style="background:${p.color}"></div><span>${escHtml(p.name)}${r}</span></div>`;
   }).join('')}</div>`;
@@ -5348,7 +5721,7 @@ function buildMonthTable(mi){
     const isHol = HOLIDAYS_2026.has(dateStr);
     const working = isWorkingDay(dateStr);
     const vacsHere = working ? getVacationsForDay(dateStr).filter(v => isActive(v.personId)) : [];
-    html += `<td class="${isWeekend?'weekend':''}${isHol?' holiday':''}" style="${isHol?'color:#f97316':''}"><span class="print-day-num">${d}${isHol?'🔸':''}</span><div class="print-day-bars">${vacsHere.slice(0,4).map(v => { const p=state.persons.find(pp=>pp.id===v.personId); return p?`<div class="print-day-bar" style="background:${p.color}" title="${escHtml(p.name)}"></div>`:''; }).join('')}</div></td>`;
+    html += `<td class="${isWeekend?'weekend':''}${isHol?' holiday':''}" style="${isHol?'color:#f97316':''}"><span class="print-day-num">${d}${isHol?'🔸':''}</span><div class="print-day-bars">${vacsHere.slice(0,4).map(v => { const p=reportPersonOnDate(v.personId,dateStr); return p?`<div class="print-day-bar" style="background:${p.color}" title="${escHtml(p.name)}"></div>`:''; }).join('')}</div></td>`;
     if ((firstDay+d)%7===0 && d<daysInMonth) html += '</tr><tr>';
   }
   const lastDow = new Date(YEAR, mi, daysInMonth).getDay();
@@ -5366,10 +5739,10 @@ function buildMonthVacationSummary(mi){
   const rows = getVacationPeriods()
     .filter(v => isActive(v.personId) && v.start <= last && v.end >= first)
     .map(v => {
-      const p = state.persons.find(pp => pp.id === v.personId);
-      if (!p) return null;
       const start = v.start < first ? first : v.start;
       const end = v.end > last ? last : v.end;
+      const p = reportPersonOnDate(v.personId,start);
+      if (!p) return null;
       return { p, start, end, days: countWorkingDays(start, end), note: v.note || '' };
     })
     .filter(Boolean)
@@ -5405,7 +5778,7 @@ function buildDayVacationTable(dateStr){
   const rows = getVacationsForDay(dateStr)
     .filter(v => isActive(v.personId))
     .map(v => {
-      const p = state.persons.find(pp => pp.id === v.personId);
+      const p = reportPersonOnDate(v.personId,dateStr);
       if (!p) return null;
       return { p, v };
     })
@@ -5454,7 +5827,7 @@ function doPrintFerias(){
       const isWeekend = dow===0||dow===6;
       const isHol = HOLIDAYS_2026.has(dateStr);
       const vacsHere = isWorkingDay(dateStr) ? getVacationsForDay(dateStr).filter(v => isActive(v.personId)) : [];
-      const chips = vacsHere.map(v => { const p=state.persons.find(pp=>pp.id===v.personId); if (!p) return ''; const r=p.role&&ROLE_LABELS[p.role]?` · ${ROLE_LABELS[p.role]}`:''; return `<span class="week-person-chip" style="background:${p.color}">${escHtml(p.name)}${r}</span>`; }).join('') || '<span style="color:#bbb;font-style:italic">—</span>';
+      const chips = vacsHere.map(v => { const p=reportPersonOnDate(v.personId,ds); if (!p) return ''; const r=p.role&&ROLE_LABELS[p.role]?` · ${ROLE_LABELS[p.role]}`:''; return `<span class="week-person-chip" style="background:${p.color}">${escHtml(p.name)}${r}</span>`; }).join('') || '<span style="color:#bbb;font-style:italic">—</span>';
       const holName = isHol ? ` 🔸 ${HOLIDAY_NAMES[dateStr]||'Feriado'}` : '';
       rows += `<tr><td style="font-weight:600;${isWeekend||isHol?'color:#aaa':''}">${fmtFull(dt)}${holName}</td><td>${isWeekend||isHol?`<span style="color:#bbb;font-style:italic">${isHol?'Feriado':'Fim de semana'}</span>`:chips}</td></tr>`;
     });
@@ -5487,6 +5860,7 @@ function doPrintAssid(){
       const we = dow===0||dow===6; const hol = HOLIDAYS_2026.has(ds);
       if (we){ tds += '<td class="we"></td>'; continue; }
       if (hol){ tds += '<td class="we" style="color:#f97316;font-weight:700">F</td>'; continue; }
+      if (!assidPersonMatchesDay(p,ds)){ tds += '<td class="we" style="color:#94a3b8">–</td>'; continue; }
       if (!isPersonDateActive(p, ds)){ tds += '<td class="we" style="color:#94a3b8;font-weight:700">–</td>'; continue; }
       const code = getRec(p.id, ds);
       if (code){

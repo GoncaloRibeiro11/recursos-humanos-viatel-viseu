@@ -4,6 +4,8 @@ const http = require('node:http');
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const testVacationSync = require('./test-vacation-sync.cjs');
+const { historyFixture, testTeamHistory } = require('./test-team-history-browser.cjs');
+const { teamChangeRpc,testTeamChanges } = require('./test-team-changes-browser.cjs');
 
 const root = path.resolve(__dirname,'../public');
 const headers = JSON.parse(fs.readFileSync(path.join(root,'../vercel.json'),'utf8')).headers[0].headers;
@@ -15,6 +17,7 @@ const database = {
   rh_attendance_records:Array.from({ length:1105 },(_,i) => ({ person_id:'test-person', record_date:new Date(Date.UTC(2020,0,i+1)).toISOString().slice(0,10), code:'P' }))
 };
 let paused = true;
+const teamFixture = historyFixture(database);
 const waiting = [];
 const writes = [];
 
@@ -29,6 +32,7 @@ function MockClient(base,fetcher){
     const execute = () => fetcher(base + '/test-query', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(query) }).then(response => response.json());
     const builder = {
       select(){ return builder; },
+      rpcArgs(args){ query.args=args; return builder; },
       eq(field,value){ query.filters.push([field,value]); return builder; },
       order(field){ query.ordering.push(field); return builder; },
       range(from,to){ query.range = [from,to]; return execute(); },
@@ -41,6 +45,7 @@ function MockClient(base,fetcher){
     };
     return builder;
   };
+  this.rpc = (name,args) => this.from('rpc:'+name).rpcArgs(args);
 }
 
 const sdk = `window.supabase={createClient:(url,key,config)=>new (${MockClient.toString()})(url,config.global.fetch)};`;
@@ -57,10 +62,23 @@ const server = http.createServer(async (req,res) => {
   if (file === '/test-query'){
     let body = ''; for await (const chunk of req) body += chunk;
     const query = JSON.parse(body);
+    if (query.table === 'rpc:rh_team_history_version'){
+      res.setHeader('Content-Type','application/json');
+      return res.end(JSON.stringify(teamFixture.enabled ? {data:teamFixture.version || 1} : {error:{code:'PGRST202'}}));
+    }
+    if (query.table.startsWith('rpc:')){
+      const result=teamChangeRpc(query.table.slice(4),query.args,database,teamFixture);
+      if (result){
+        if (query.table!=='rpc:rh_process_due_team_changes') writes.push(query);
+        res.setHeader('Content-Type','application/json'); return res.end(JSON.stringify(result));
+      }
+    }
     const matches = row => query.filters.every(([field,value]) => row[field] === value);
     let response;
     if (query.mode === 'select'){
-      const rows = database[query.table].filter(matches).map(row => structuredClone(row));
+      const source = query.table === 'rh_assignment_history' ? teamFixture.rows
+        : query.table === 'rpc:rh_visible_vacations' ? teamFixture.visibleVacations() : database[query.table];
+      const rows = teamFixture.scope(query.table,source).filter(matches).map(row => structuredClone(row));
       rows.sort((a,b) => { for (const field of query.ordering){ const result = String(a[field]).localeCompare(String(b[field])); if (result) return result; } return 0; });
       response = { data:query.single ? rows[0] || null : query.range ? rows.slice(query.range[0],query.range[1]+1) : rows, count:rows.length };
     } else {
@@ -123,6 +141,8 @@ const server = http.createServer(async (req,res) => {
     assert.equal(database.rh_vacations.length,1);
     assert.equal(writes.every(query => query.table === 'rh_attendance_records'),true);
     await testVacationSync(page, database, writes);
+    await testTeamHistory(page, database, writes, teamFixture);
+    await testTeamChanges(page, database, writes, teamFixture);
     assert.deepEqual(pageErrors,[]);
     await page.getByRole('button',{ name:'🗓️ Assiduidade', exact:true }).click();
     await page.screenshot({ path:path.resolve(root,'../../../../recovery/immediate-save-desktop.png') });
