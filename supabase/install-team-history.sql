@@ -7,6 +7,7 @@ lock table public.rh_persons,public.rh_vacations,public.rh_attendance_records in
 create table if not exists rh_private.installation_backups (
   id text primary key, created_at timestamptz not null default now(), data jsonb not null
 );
+alter table rh_private.installation_backups enable row level security;
 revoke all on rh_private.installation_backups from public,anon,authenticated;
 insert into rh_private.installation_backups(id,data)
 select 'team-history-20261030',jsonb_build_object(
