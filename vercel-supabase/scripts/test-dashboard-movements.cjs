@@ -56,24 +56,25 @@ const server=http.createServer((req,res)=>{
     await page.route('**/supabase-js**',route=>route.fulfill({body:'window.supabase={};',contentType:'application/javascript'}));
     await page.goto(`http://127.0.0.1:${server.address().port}/test.html`);
     const panel=page.locator('#dashAnnualMovements');
+    const teamTable=page.locator('#dashboardTeamAnalysis');
     await panel.waitFor();
     const total=key=>page.locator(`[data-movement-total="${key}"]`).textContent();
     assert.equal(await total('entries'),'19');assert.equal(await total('exits'),'9');assert.equal(await total('balance'),'+10');
-    assert.equal(await panel.locator('.dash-movement-month').count(),12);
-    assert.equal(await panel.locator('tbody tr').count(),4);
-    assert.equal(await panel.locator('[data-movement-team="c"] td').last().textContent(),'-9');
-    assert.equal(await panel.locator('tbody img').count(),3);
+    assert.equal(await panel.locator('.dash-movement-month').count(),11);
+    assert.equal(await teamTable.locator('tbody tr').count(),4);
+    assert.equal(await teamTable.locator('[data-movement-team="c"] td').last().textContent(),'-9');
+    assert.equal(await teamTable.locator('tbody img').count(),3);
     await panel.scrollIntoViewIfNeeded();
     await panel.screenshot({path:path.join(output,'dashboard-annual-movements-desktop.png')});
-    await page.locator('#dashboardMovementTeam').selectOption('a');
+    await page.locator('#dashboardAnalyticsTeam').selectOption('a');
     assert.equal(await total('entries'),'9');assert.equal(await total('exits'),'0');assert.equal(await total('balance'),'+9');
-    assert.equal(await panel.locator('tr.is-selected').getAttribute('data-movement-team'),'a');
-    await page.locator('#dashboardMovementTeam').selectOption('c');
+    assert.equal(await teamTable.locator('tr.is-selected').getAttribute('data-movement-team'),'a');
+    await page.locator('#dashboardAnalyticsTeam').selectOption('c');
     assert.equal(await total('entries'),'0');assert.equal(await total('exits'),'9');assert.equal(await total('balance'),'-9');
     assert.match(await page.locator('[data-movement-total="balance"]').getAttribute('class'),/negative/);
-    await page.locator('#dashboardMovementTeam').selectOption('');
+    await page.locator('#dashboardAnalyticsTeam').selectOption('');
     assert.equal(await total('balance'),'+1');
-    await page.locator('#dashboardMovementTeam').selectOption('*');
+    await page.locator('#dashboardAnalyticsTeam').selectOption('*');
     assert.equal(await total('balance'),'+10');
     for(const width of [820,390,320]){
       await page.setViewportSize({width,height:844});
@@ -92,7 +93,7 @@ const server=http.createServer((req,res)=>{
       }
       assert.ok(box.x>=0 && box.x+box.width<=width+1);
       assert.equal(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
-      const labels=await panel.locator('thead th').evaluateAll(cells=>cells.map(cell=>({width:cell.clientWidth,scroll:cell.scrollWidth})));
+      const labels=await teamTable.locator('thead th').evaluateAll(cells=>cells.map(cell=>({width:cell.clientWidth,scroll:cell.scrollWidth})));
       assert.ok(labels.every(cell=>cell.scroll<=cell.width+1));
       await panel.screenshot({path:path.join(output,`dashboard-annual-movements-mobile-${width}.png`)});
     }
@@ -104,7 +105,7 @@ const server=http.createServer((req,res)=>{
     assert.equal(writes,0);
     await page.evaluate(()=>{state={persons:[],vacations:[],records:{}};teamHistoryRows=[];renderDashboard();});
     assert.equal(await total('balance'),'0');assert.equal(await total('entries'),'0');assert.equal(await total('exits'),'0');
-    assert.match(await panel.textContent(),/Sem equipas registadas/);
+    assert.match(await page.locator('#dashboardAnalytics').textContent(),/Sem equipas registadas/);
     await testDashboardAnalytics(page,output);
     assert.deepEqual(errors,[]);
     console.log(JSON.stringify({entries:19,exits:9,annualBalance:10,teamFilter:'passed',negativeBalance:'passed',unassignedTeam:'passed',managerPhotos:true,mobile320:true,mobile390:true,darkTheme:true,emptyState:true,stateUnchanged:true,serverWrites:writes,pageErrors:errors},null,2));

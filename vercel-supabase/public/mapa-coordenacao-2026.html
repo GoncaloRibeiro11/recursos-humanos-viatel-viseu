@@ -404,83 +404,101 @@
   }
   .dashboard { margin-bottom: 22px; }
   .dashboard-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
-  .analytics-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
   #dashboardAnalytics { --text-muted:#657184; }
   body.theme-dark #dashboardAnalytics { --text-muted:#a4b1c2; }
   body.theme-dark .analytics-controls input[type="date"] { color-scheme:dark; }
-  .analytics-heading h2 { font-size:18px; margin:0; }
-  .analytics-period-label { font-size:12px; color:var(--text-muted); }
-  .analytics-controls { display:flex; align-items:end; flex-wrap:wrap; gap:12px; padding:12px 0 16px; border-bottom:1px solid var(--border); }
-  .analytics-controls label { display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--text-muted); min-width:0; }
-  .analytics-controls input,.analytics-controls select { max-width:100%; min-width:0; padding:7px 8px; border:1px solid var(--border); border-radius:6px; color:var(--text); background:var(--surface); font-size:12px; height:34px; }
-  .analytics-controls select { width:210px; }
-  .analytics-presets { display:flex; align-items:center; border:1px solid var(--border); border-radius:6px; height:34px; overflow:hidden; flex-shrink:0; }
-  .analytics-presets button { border:0; padding:0 12px; height:32px; background:var(--surface); color:var(--text-muted); cursor:pointer; font-size:12px; }
+  .analytics-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:20px; }
+  .analytics-heading h2 { font-size:26px; margin:0; }
+  .analytics-period-label { font-size:15px; color:var(--text-muted); overflow-wrap:anywhere; max-width:100%; }
+  .analytics-controls { display:flex; align-items:end; flex-wrap:wrap; gap:14px; padding:8px 0 16px; }
+  .analytics-controls label { display:flex; flex-direction:column; gap:6px; font-size:13px; color:var(--text-muted); min-width:0; }
+  .analytics-controls input,.analytics-controls select { max-width:100%; min-width:0; padding:8px 10px; border:1px solid var(--border); border-radius:6px; color:var(--text); background:var(--surface); font-size:15px; height:42px; }
+  .analytics-controls input { width:170px; }
+  .analytics-controls select { width:250px; }
+  .analytics-presets { display:flex; align-items:center; border:1px solid var(--border); border-radius:6px; height:42px; overflow:hidden; flex-shrink:0; }
+  .analytics-presets button { border:0; padding:0 16px; height:40px; background:var(--surface); color:var(--text-muted); cursor:pointer; font-size:14px; }
   .analytics-presets button[aria-pressed="true"] { background:var(--accent); color:#fff; }
-  .analytics-kpis { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); padding:20px 0; margin:0; border-bottom:1px solid var(--border); }
-  .analytics-kpis>div { padding:0 16px; border-right:1px solid var(--border); min-width:0; }
-  .analytics-kpis>div:first-child { padding-left:0; }
-  .analytics-kpis>div:last-child { border:0; }
-  .analytics-kpis dt { font-size:11px; color:var(--text-muted); min-height:30px; }
-  .analytics-kpis dd { font-size:26px; font-weight:700; margin:0 0 4px; font-variant-numeric:tabular-nums; }
-  .analytics-kpis small { color:var(--text-muted); font-size:10px; display:block; }
-  .analytics-context { display:flex; flex-wrap:wrap; gap:8px 24px; color:var(--text-muted); padding:12px 0; font-size:12px; }
-  .analytics-context strong { color:var(--text); }
-  .analytics-trend-scroll { overflow-x:auto; }
-  .analytics-trend { display:grid; gap:14px; align-items:end; height:150px; }
-  .analytics-trend-point { display:flex; flex-direction:column; align-items:center; min-width:0; gap:6px; }
-  .analytics-trend-value { font-size:12px; font-weight:600; font-variant-numeric:tabular-nums; }
-  .analytics-trend-track { height:100px; display:flex; align-items:end; width:100%; max-width:42px; }
-  .analytics-trend-fill { width:100%; border-radius:4px 4px 0 0; background:#0f766e; }
-  body.theme-dark .analytics-trend-fill { background:#2dd4bf; }
-  .analytics-trend-label { font-size:10px; color:var(--text-muted); white-space:nowrap; }
-  .analytics-net { display:flex; gap:8px; align-items:center; justify-content:end; }
-  .analytics-net-track { width:64px; height:14px; position:relative; flex-shrink:0; }
-  .analytics-net-track::before { content:''; position:absolute; left:50%; width:1px; height:100%; background:var(--border); }
-  .analytics-net-track i { position:absolute; left:50%; height:8px; top:3px; border-radius:2px; }
-  .analytics-section { padding:20px 0; border-bottom:1px solid var(--border); min-width:0; }
-  .analytics-section h3 { font-size:14px; margin:0 0 14px; }
-  .analytics-section-title { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .analytics-context { color:var(--text-muted); font-size:13px; padding:0 0 4px; }
+  .analytics-kpis { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; margin:18px 0 10px; }
+  .analytics-kpi { padding:20px 24px; min-width:0; min-height:158px; background:var(--surface); border:1px solid var(--border); border-top:4px solid var(--accent); border-radius:8px; }
+  .analytics-kpi.entry { border-top-color:var(--c-presente); }
+  .analytics-kpi.exit { border-top-color:var(--c-finjust); }
+  .analytics-kpi dt { font-size:15px; color:var(--text-muted); line-height:22px; }
+  .analytics-kpi dd { font-size:44px; line-height:1.2; font-weight:750; margin:8px 0 4px; font-variant-numeric:tabular-nums; }
+  .analytics-kpi small { display:block; color:var(--text-muted); font-size:13px; line-height:18px; }
+  .analytics-section { padding:24px 0; border-bottom:1px solid var(--border); min-width:0; }
+  .analytics-section h3 { font-size:20px; line-height:1.35; margin:0 0 18px; }
+  .analytics-section-title { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
   .analytics-section-title h3 { margin:0; }
-  .analytics-table-wrap { overflow:auto; max-width:100%; overscroll-behavior-x:contain; }
-  .analytics-table { min-width:820px; width:100%; border-collapse:collapse; font-size:12px; font-variant-numeric:tabular-nums; }
-  .analytics-table th { font-size:10px; color:var(--text-muted); font-weight:600; }
-  .analytics-table th,.analytics-table td { padding:10px 8px; border-bottom:1px solid var(--border); text-align:right; vertical-align:middle; }
-  .analytics-table th:first-child,.analytics-table td:first-child { text-align:left; min-width:180px; }
-  .analytics-table .dash-person { max-width:220px; }
-  .analytics-table .dash-person-name { white-space:normal; overflow-wrap:anywhere; }
-  .analytics-table tbody tr.is-selected { background:var(--surface); }
-  .analytics-table tfoot { font-weight:700; }
+  .analytics-scope-note { font-size:14px; color:var(--text-muted); }
+  .analytics-chart-legend { display:flex; align-items:center; gap:24px; margin-bottom:18px; font-size:15px; }
+  .analytics-chart-legend span { display:inline-flex; align-items:center; gap:8px; }
+  .analytics-chart-legend i { width:12px; height:12px; border-radius:3px; display:block; }
+  .analytics-chart-legend .entry,.analytics-team-track .entry { background:var(--c-presente); }
+  .analytics-chart-legend .exit,.analytics-team-track .exit { background:var(--c-finjust); }
+  .analytics-month-scroll { overflow-x:auto; overscroll-behavior-x:contain; }
+  .analytics-months { --movement-plot-height:190px; display:grid; gap:0; align-items:end; padding:0 0 8px; }
+  .analytics-month.dash-movement-month { display:flex; flex-direction:column; align-items:center; gap:12px; min-width:0; }
+  .analytics-month-bars { display:flex; gap:10px; align-items:end; }
+  .analytics-month-column { height:calc(var(--movement-plot-height) + 32px); width:30px; display:flex; flex-direction:column; justify-content:end; align-items:center; gap:8px; }
+  .analytics-month-column strong { font-size:18px; font-weight:700; line-height:24px; font-variant-numeric:tabular-nums; }
+  .analytics-month-column .dash-movement-bar { width:30px; min-height:0; flex-shrink:0; border-radius:4px 4px 0 0; }
+  #dashAnnualMovements .dash-movement-entry { background:var(--c-presente); }
+  #dashAnnualMovements .dash-movement-exit { background:var(--c-finjust); }
+  .analytics-month-label { font-size:14px; color:var(--text-muted); white-space:nowrap; line-height:20px; }
+  .analytics-team-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:32px; }
+  .analytics-team-row { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(100px,1fr); align-items:center; gap:20px; padding:14px 0; border-bottom:1px solid var(--border); min-height:78px; }
+  .analytics-team-identity { min-width:0; }
+  .analytics-team-bars { display:flex; flex-direction:column; gap:10px; }
+  .analytics-team-bar { display:grid; grid-template-columns:minmax(0,1fr) 36px; align-items:center; gap:10px; }
+  .analytics-team-bar strong { font-size:17px; text-align:right; font-variant-numeric:tabular-nums; }
+  .analytics-team-track { height:12px; background:var(--border); border-radius:4px; overflow:hidden; }
+  .analytics-team-track i { display:block; height:100%; border-radius:4px; }
   .analytics-team-button { display:inline-flex; align-items:center; text-align:left; border:0; color:var(--text); background:transparent; padding:0; cursor:pointer; font:inherit; }
   .analytics-team-button:hover { color:var(--accent); }
+  .analytics-team-identity .analytics-team-button { font-size:16px; }
   .analytics-team-button .dash-person { white-space:normal; }
-  .analytics-split { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:24px; }
-  .analytics-model-list { display:flex; flex-direction:column; gap:14px; }
-  .analytics-model-row { display:grid; grid-template-columns:minmax(90px,1fr) minmax(0,2fr) 80px; gap:10px; font-size:12px; align-items:center; }
-  .analytics-model-name { overflow-wrap:anywhere; }
-  .analytics-model-track { height:9px; border-radius:4px; overflow:hidden; background:var(--border); }
-  .analytics-model-fill { height:100%; min-width:2px; border-radius:4px; }
-  .analytics-model-value { text-align:right; font-variant-numeric:tabular-nums; }
-  .analytics-model-coverage { display:flex; gap:12px; align-items:baseline; margin-bottom:16px; font-size:12px; color:var(--text-muted); }
-  .analytics-model-coverage strong { font-size:22px; color:var(--text); }
-  .analytics-model-table { min-width:440px; }
-  .analytics-model-table td:not(:first-child) { background:color-mix(in srgb,var(--accent) var(--intensity,0%),transparent); }
-  .analytics-events { max-height:360px; overflow:auto; }
-  .analytics-events .analytics-table { min-width:580px; }
+  .analytics-team-button .dash-person-name { white-space:normal; overflow-wrap:anywhere; }
+  .analytics-table-wrap { overflow:auto; max-width:100%; overscroll-behavior-x:contain; }
+  .analytics-table { min-width:520px; width:100%; border-collapse:collapse; font-size:16px; font-variant-numeric:tabular-nums; }
+  .analytics-table th { font-size:13px; color:var(--text-muted); font-weight:600; }
+  .analytics-table th,.analytics-table td { padding:16px 10px; border-bottom:1px solid var(--border); text-align:right; vertical-align:middle; }
+  .analytics-table th:first-child,.analytics-table td:first-child { text-align:left; min-width:210px; }
+  .analytics-table .dash-person { max-width:240px; }
+  .analytics-table .dash-person-name { white-space:normal; overflow-wrap:anywhere; }
+  .analytics-table td:not(:first-child) { font-size:18px; }
+  .analytics-table td.movement-entry .analytics-team-button,.analytics-table td.movement-exit .analytics-team-button { color:inherit; }
+  .analytics-table tbody tr.is-selected { background:var(--surface); }
+  .analytics-events { max-height:440px; overflow:auto; }
+  .analytics-events .analytics-table { min-width:680px; }
   .analytics-events thead { position:sticky; top:0; background:var(--surface); z-index:1; }
-  .analytics-event-type { font-size:11px; font-weight:600; }
-  .analytics-detail { margin-top:20px; }
-  .analytics-detail>summary { cursor:pointer; font-size:14px; font-weight:600; padding:16px 0; }
-  .analytics-detail .dash-hero { margin-top:12px; }
-  .analytics-scope-note { font-size:11px; color:var(--text-muted); }
-  @media (max-width:760px) { .analytics-table th:first-child,.analytics-table td:first-child { position:sticky; left:0; background:var(--bg); z-index:1; }.analytics-table .dash-person { max-width:180px; } }
-  .analytics-empty { padding:16px 0; font-size:12px; color:var(--text-muted); }
-  #dashAnnualMovements { margin-top:8px; border:0; border-top:1px solid var(--border); border-bottom:1px solid var(--border); border-radius:0; padding:20px 0; background:transparent; }
-  #viewRH .rh-model-field { display:block; margin-top:8px; font-size:10px; color:var(--text-muted); }
-  #viewRH .rh-model-field input { margin-top:4px; }
-  #viewRH .rh-model-label { display:block; margin-top:4px; font-size:10px; color:var(--text-muted); overflow-wrap:anywhere; }
-  @media (max-width:1000px) { .analytics-kpis { grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px 0; }.analytics-kpis>div:nth-child(4) { padding-left:0; }.analytics-kpis>div:nth-child(3) { border:0; } }
-  @media (max-width:760px) { .analytics-split { grid-template-columns:minmax(0,1fr); gap:0; }.analytics-controls label { flex:1; min-width:120px; }.analytics-controls select { width:100%; }.analytics-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }.analytics-kpis>div:nth-child(odd) { padding-left:0; border-right:1px solid var(--border); }.analytics-kpis>div:nth-child(even) { padding-right:0; border:0; }.analytics-kpis>div:nth-child(4) { padding-left:16px; }.analytics-kpis dd { font-size:24px; }.analytics-model-row { grid-template-columns:minmax(80px,1fr) minmax(0,1.4fr) 80px; } }
+  .analytics-events .analytics-table td:not(:first-child) { font-size:15px; }
+  .analytics-event-type { font-weight:600; }
+  .analytics-movements { scroll-margin-top:110px; }
+  .analytics-movements>summary { cursor:pointer; font-size:18px; font-weight:600; }
+  .analytics-empty { padding:24px 0; font-size:15px; color:var(--text-muted); }
+  #dashAnnualMovements { margin:0; border:0; border-bottom:1px solid var(--border); border-radius:0; background:transparent; }
+  @media (max-width:1100px) { .analytics-team-grid { grid-template-columns:minmax(0,1fr); gap:0; } }
+  @media (max-width:700px) {
+    .analytics-heading h2 { font-size:24px; }
+    .analytics-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .analytics-controls .analytics-presets,.analytics-controls label:last-child { grid-column:1 / -1; }
+    .analytics-controls .analytics-presets { justify-self:start; }
+    .analytics-controls label { min-width:0; }
+    .analytics-controls input,.analytics-controls select { width:100%; font-size:14px; }
+    .analytics-presets button { padding:0 13px; }
+    .analytics-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .analytics-kpi { padding:16px; min-height:146px; }
+    .analytics-kpi:last-child { grid-column:1 / -1; }
+    .analytics-kpi dd { font-size:36px; }
+    .analytics-kpi dt { font-size:14px; }
+    .analytics-kpi small { font-size:12px; }
+    .analytics-months { --movement-plot-height:160px; }
+    .analytics-table { table-layout:fixed; min-width:460px; }
+    .analytics-table th:first-child,.analytics-table td:first-child { position:sticky; left:0; background:var(--bg); z-index:1; width:170px; min-width:170px; }
+    .analytics-table .dash-person { max-width:150px; }
+    .analytics-section-title { align-items:start; }
+  }
   .dash-grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 14px; }
   .dash-panel {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
@@ -1521,7 +1539,6 @@
       <div class="color-row" id="rhColorRow"></div>
     </div>
     <datalist id="empresaList"></datalist>
-    <datalist id="commissionModelsList"></datalist>
   </div>
 </div>
 
@@ -1876,7 +1893,6 @@ let currentIdCardPersonId = null;
 let dashboardMovementTeam = null;
 let dashboardAnalyticsPeriod = null;
 let dashboardAnalyticsEventType = 'all';
-let dashboardRhDetailsOpen = false;
 let dashboardEventsOpen = false;
 let teamHistoryEnabled = false;
 let teamHistoryRows = [];
@@ -1942,7 +1958,6 @@ function normalizeDateValue(value){
 }
 function normalizePerson(p){
   const person = { ...p };
-  if('modeloComissional' in person) person.modeloComissional=typeof person.modeloComissional==='string'?person.modeloComissional.trim().replace(/\s+/g,' ').slice(0,80):'';
   person.entrada = normalizeDateValue(person.entrada || person.dataEntrada || '');
   person.saida = normalizeDateValue(person.saida || person.dataSaida || '');
   person.nascimento = normalizeDateValue(person.nascimento || person.dataNascimento || '');
@@ -1954,7 +1969,6 @@ function normalizePerson(p){
 }
 const RH_MOVEMENT_LABELS = {
   name:'Nome', role:'Função', chefeId:'Chefe de equipa', empresa:'Empresa/contrato',
-  modeloComissional:'Modelo comissional',
   carga:'Carga horária/contrato', ativo:'Estado', entrada:'Data de entrada',
   saida:'Data de saída', telefone:'Telefone', agv:'N.º AGV', nascimento:'Data de nascimento'
 };
@@ -4773,43 +4787,9 @@ function dashMonthBars(months){
     return `<div class="dash-month" title="${MONTH_NAMES[i]}: ${value} dias"><div class="dash-month-value">${value}</div><div class="dash-month-bar"><div class="dash-month-fill" style="height:${pct}%"></div></div><div class="dash-month-label">${MONTH_NAMES[i].slice(0,3)}</div></div>`;
   }).join('')}</div>`;
 }
-function dashMovementMonths(entriesByMonth, exitsByMonth){
-  const max = Math.max(...entriesByMonth, ...exitsByMonth, 1);
-  const total = entriesByMonth.reduce((sum, n) => sum + n, 0) + exitsByMonth.reduce((sum, n) => sum + n, 0);
-  if (!total) return '<div class="dash-empty">Sem entradas ou saídas registadas.</div>';
-  return `<div class="dash-movement-chart"><div class="dash-movement-months">${MONTH_NAMES.map((name, i) => {
-    const entryPct = Math.round((entriesByMonth[i] / max) * 100);
-    const exitPct = Math.round((exitsByMonth[i] / max) * 100);
-    return `<div class="dash-movement-month" title="${name}: ${entriesByMonth[i]} entradas · ${exitsByMonth[i]} saídas"><div class="dash-movement-values"><span class="dash-movement-value entry">${entriesByMonth[i]}</span><span class="dash-movement-value exit">${exitsByMonth[i]}</span></div><div class="dash-movement-bars"><div class="dash-movement-bar dash-movement-entry" style="height:${entryPct}%"></div><div class="dash-movement-bar dash-movement-exit" style="height:${exitPct}%"></div></div><div class="dash-month-label">${name.slice(0,3)}</div></div>`;
-  }).join('')}</div></div><div class="dash-legend-mini"><span><span class="dash-legend-dot" style="background:var(--c-presente)"></span>Entradas: <strong>${entriesByMonth.reduce((s,n)=>s+n,0)}</strong></span><span><span class="dash-legend-dot" style="background:var(--c-finjust)"></span>Saídas: <strong>${exitsByMonth.reduce((s,n)=>s+n,0)}</strong></span></div>`;
-}
 function movementBalance(value){ return value > 0 ? '+' + value : String(value); }
 function movementBalanceClass(value){ return value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral'; }
 function setDashboardMovementTeam(value){ dashboardMovementTeam=value==='*'?null:value; renderDashboard(); }
-function dashAnnualMovements(){
-  const people = reportPersons().map(person => ({...person,entrada:normalizeDateValue(person.entrada),saida:normalizeDateValue(person.saida)}));
-  const totals = RhMovements.annualMovements(people,YEAR,(person,date)=>teamHistoryEnabled?RhTeams.assignmentAt(person,date,teamHistoryRows,true)?.chefeId:person.chefeId || '');
-  if(teamHistoryEnabled) for(const row of teamHistoryRows){
-    const id=row.chefe_id || '';
-    if(!totals.teams.some(team=>team.id===id)) totals.teams.push({id,entries:0,exits:0,balance:0,entriesByMonth:Array(12).fill(0),exitsByMonth:Array(12).fill(0)});
-  }
-  const teams = totals.teams.map(team => {
-    const manager = reportPerson(team.id);
-    return {...team,manager,label:dashboardTeamLabel(team.id)};
-  }).sort((a,b) => a.label.localeCompare(b.label,'pt'));
-  if (dashboardMovementTeam !== null && !teams.some(team => team.id === dashboardMovementTeam)) dashboardMovementTeam=null;
-  const selected = dashboardMovementTeam === null ? totals : teams.find(team => team.id === dashboardMovementTeam);
-  const options = '<option value="*">Todas as equipas</option>' + teams.map(team => `<option value="${escHtml(team.id)}" ${team.id===dashboardMovementTeam?'selected':''}>${escHtml(team.label)}</option>`).join('');
-  const rows = teams.map(team => `<tr data-movement-team="${escHtml(team.id)}" class="${team.id===dashboardMovementTeam?'is-selected':''}">
-    <td>${team.manager?dashPersonHtml(team.manager,24):escHtml(team.label)}</td><td class="movement-entry">${team.entries}</td><td class="movement-exit">${team.exits}</td><td class="movement-balance ${movementBalanceClass(team.balance)}"><strong>${movementBalance(team.balance)}</strong></td></tr>`).join('');
-  return `<section class="dash-panel dash-panel-wide" id="dashAnnualMovements">
-    <div class="dash-movement-heading"><h3>Entradas e saídas por mês · ${YEAR}</h3><label class="dash-movement-filter" for="dashboardMovementTeam">Equipa <select id="dashboardMovementTeam" onchange="setDashboardMovementTeam(this.value)">${options}</select></label></div>
-    <dl class="dash-movement-summary"><div><dt>Entradas ${YEAR}</dt><dd class="movement-entry" data-movement-total="entries">${selected.entries}</dd></div><div><dt>Saídas ${YEAR}</dt><dd class="movement-exit" data-movement-total="exits">${selected.exits}</dd></div><div><dt>Saldo anual ${YEAR}</dt><dd class="movement-balance ${movementBalanceClass(selected.balance)}" data-movement-total="balance">${movementBalance(selected.balance)}</dd></div></dl>
-    ${dashMovementMonths(selected.entriesByMonth,selected.exitsByMonth)}
-    <details class="analytics-detail"><summary>Saldo anual por equipa · ${YEAR}</summary>
-    ${rows?`<table class="dash-table dash-movement-team-table"><thead><tr><th>Equipa</th><th>Entradas</th><th>Saídas</th><th>Saldo</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="dash-empty">Sem equipas registadas.</div>'}</details>
-  </section>`;
-}
 function dashStack(parts){
   const total = parts.reduce((sum, p) => sum + p.value, 0);
   if (!total) return '<div class="dash-empty">Ainda não há ausências registadas.</div>';
@@ -4894,10 +4874,9 @@ function inspectDashboardTeam(id,type){
   dashboardMovementTeam=id;dashboardAnalyticsEventType=type;dashboardEventsOpen=true;renderDashboard();
   document.getElementById('dashboardMovementDetails')?.scrollIntoView({block:'start',behavior:'smooth'});
 }
-function analyticsPercent(value){ return value===null?'—':value.toLocaleString('pt-PT',{maximumFractionDigits:1})+'%'; }
 function analyticsTeamName(id){
   const manager=reportPerson(id);
-  return manager?dashPersonHtml(manager,24):escHtml(dashboardTeamLabel(id));
+  return manager?dashPersonHtml(manager,36):escHtml(dashboardTeamLabel(id));
 }
 function analyticsTeamButton(id){
   return `<button class="analytics-team-button" data-team="${escHtml(id)}" onclick="setDashboardMovementTeam(this.dataset.team)" title="${escHtml('Consultar equipa '+dashboardTeamLabel(id))}">${analyticsTeamName(id)}</button>`;
@@ -4906,25 +4885,41 @@ function analyticsCountButton(team,type,count){
   return count?`<button class="analytics-team-button" data-team="${escHtml(team.id)}" onclick="inspectDashboardTeam(this.dataset.team,'${type}')" title="${escHtml('Consultar '+(type==='entry'?'entradas':'saídas')+' da equipa '+dashboardTeamLabel(team.id))}">${count}</button>`:String(count);
 }
 function analyticsTrendHtml(analysis){
-  if(!analysis.series.length) return '<div class="analytics-empty">Sem datas observadas neste período.</div>';
-  const samples=new Map();
-  analysis.series.forEach((point,index)=>{
-    const key=analysis.days<=14?point.date:analysis.days<=100?String(Math.floor(index/7)):point.date.slice(0,7);
-    samples.set(key,point);
+  const months=new Map();
+  analysis.series.forEach(point=>{
+    const key=point.date.slice(0,7);
+    if(!months.has(key)) months.set(key,{key,entries:0,exits:0});
   });
-  const points=[...samples.values()],max=Math.max(1,...points.map(point=>point.count));
-  return `<div class="analytics-trend-scroll"><div class="analytics-trend" style="grid-template-columns:repeat(${points.length},minmax(28px,1fr));min-width:${points.length*45}px">${points.map(point=>`<div class="analytics-trend-point" title="${escHtml(formatDatePt(point.date)+': '+point.count+' colaboradores no fim do dia')}"><div class="analytics-trend-value">${point.count}</div><div class="analytics-trend-track"><div class="analytics-trend-fill" style="height:${point.count/max*100}%"></div></div><div class="analytics-trend-label">${analysis.days>100?MONTH_NAMES[Number(point.date.slice(5,7))-1].slice(0,3):point.date.slice(8,10)+'/'+point.date.slice(5,7)}</div></div>`).join('')}</div></div>`;
+  analysis.total.events.forEach(event=>{
+    const month=months.get(event.date.slice(0,7));
+    if(month && event.type==='entry') month.entries++;
+    if(month && event.type==='exit') month.exits++;
+  });
+  const points=[...months.values()];
+  if(!points.length) return '<div class="analytics-empty">Sem datas neste período.</div>';
+  const max=Math.max(1,...points.flatMap(point=>[point.entries,point.exits]));
+  const showYear=analysis.from.slice(0,4)!==analysis.to.slice(0,4);
+  return `<div class="analytics-chart-legend"><span><i class="entry"></i>Entradas</span><span><i class="exit"></i>Saídas</span></div>
+    <div class="analytics-month-scroll"><div class="analytics-months" style="grid-template-columns:repeat(${points.length},minmax(74px,1fr));min-width:${points.length*74}px">${points.map(point=>{
+      const label=MONTH_NAMES[Number(point.key.slice(5,7))-1].slice(0,3)+(showYear?' '+point.key.slice(0,4):'');
+      return `<div class="analytics-month dash-movement-month" data-month="${point.key}" title="${escHtml(label+': '+point.entries+' entradas e '+point.exits+' saídas')}"><div class="analytics-month-bars">
+        <div class="analytics-month-column"><strong class="movement-entry">${point.entries}</strong><div class="dash-movement-bar dash-movement-entry" style="height:calc(var(--movement-plot-height) * ${point.entries/max})"></div></div>
+        <div class="analytics-month-column"><strong class="movement-exit">${point.exits}</strong><div class="dash-movement-bar dash-movement-exit" style="height:calc(var(--movement-plot-height) * ${point.exits/max})"></div></div>
+      </div><span class="analytics-month-label">${label}</span></div>`;
+    }).join('')}</div></div>`;
 }
 function dashboardAnalyticsHtml(){
   const today=lisbonToday();
   if(!dashboardAnalyticsPeriod) dashboardAnalyticsPeriod={from:`${YEAR}-01-01`,to:today<`${YEAR}-12-31`?today:`${YEAR}-12-31`,preset:'year'};
   const period=dashboardAnalyticsPeriod,teams=dashboardTeamOptions();
   if(dashboardMovementTeam!==null && !teams.some(team=>team.id===dashboardMovementTeam)) dashboardMovementTeam=null;
+  if(!['all','entry','exit'].includes(dashboardAnalyticsEventType)) dashboardAnalyticsEventType='all';
   const controls=`<div class="analytics-heading"><h2>Dashboard RH</h2><span class="analytics-period-label">${escHtml(dashboardMovementTeam===null?'Todas as equipas':dashboardTeamLabel(dashboardMovementTeam))}</span></div>
     <div class="analytics-controls"><div class="analytics-presets" role="group" aria-label="Período de análise">${[['year','Ano'],['quarter','Trimestre'],['month','Mês']].map(([value,label])=>`<button type="button" aria-pressed="${period.preset===value}" onclick="setDashboardAnalyticsPreset('${value}')">${label}</button>`).join('')}</div>
-    <label for="dashboardAnalyticsFrom">De<input type="date" id="dashboardAnalyticsFrom" value="${escHtml(period.from)}" max="${today}" onchange="setDashboardAnalyticsDate('from',this.value)"></label>
-    <label for="dashboardAnalyticsTo">Até<input type="date" id="dashboardAnalyticsTo" value="${escHtml(period.to)}" max="${today}" onchange="setDashboardAnalyticsDate('to',this.value)"></label>
-    <label for="dashboardAnalyticsTeam">Equipa<select id="dashboardAnalyticsTeam" onchange="setDashboardMovementTeam(this.value)"><option value="*">Todas as equipas</option>${teams.map(team=>`<option value="${escHtml(team.id)}" ${dashboardMovementTeam===team.id?'selected':''}>${escHtml(team.label)}</option>`).join('')}</select></label></div>`;
+      <label for="dashboardAnalyticsFrom">De<input type="date" id="dashboardAnalyticsFrom" value="${escHtml(period.from)}" max="${today}" onchange="setDashboardAnalyticsDate('from',this.value)"></label>
+      <label for="dashboardAnalyticsTo">Até<input type="date" id="dashboardAnalyticsTo" value="${escHtml(period.to)}" max="${today}" onchange="setDashboardAnalyticsDate('to',this.value)"></label>
+      <label for="dashboardAnalyticsTeam">Equipa<select id="dashboardAnalyticsTeam" onchange="setDashboardMovementTeam(this.value)"><option value="*">Todas as equipas</option>${teams.map(team=>`<option value="${escHtml(team.id)}" ${dashboardMovementTeam===team.id?'selected':''}>${escHtml(team.label)}</option>`).join('')}</select></label>
+    </div>`;
   if(!period.from || !period.to || period.from>period.to || period.to>today) return `<section id="dashboardAnalytics">${controls}<div class="analytics-empty" role="alert">Confirma as datas: o início não pode ser posterior ao fim e o fim não pode ser futuro.</div></section>`;
   if((new Date(period.to+'T12:00:00Z')-new Date(period.from+'T12:00:00Z'))/86400000>7320) return `<section id="dashboardAnalytics">${controls}<div class="analytics-empty" role="alert">O período máximo de análise é de 20 anos.</div></section>`;
   const persons=reportPersons().map(person=>({...person,entrada:normalizeDateValue(person.entrada),saida:normalizeDateValue(person.saida)}));
@@ -4933,176 +4928,37 @@ function dashboardAnalyticsHtml(){
   const previousPeriod=RhAnalytics.comparisonPeriod(period.from,period.to,period.preset);
   const previous=RhAnalytics.workforceAnalytics({...args,...previousPeriod});
   const value=analysis.total;
-  const maxNet=Math.max(1,...analysis.teams.map(team=>Math.abs(team.netChange)));
-  const meanDisplay=value.uncertainCount?'—':value.average.toLocaleString('pt-PT',{maximumFractionDigits:1});
-  const metric=(label,key,color='',hint='')=>{
-    let comparison='Sem comparação válida';
-    if(key==='turnover'){
-      if(value.turnover!==null && previous.total.turnover!==null) comparison=movementBalance(Number((value.turnover-previous.total.turnover).toFixed(1))).replace('.',',')+' p.p.';
-    } else if(!['opening','closing'].includes(key) || (!value.uncertainCount && !previous.total.uncertainCount)) comparison=movementBalance(value[key]-previous.total[key])+' vs. anterior';
-    return `<div><dt ${hint?`title="${escHtml(hint)}"`:''}>${label}</dt><dd class="${color}" data-analytics-total="${key}">${key==='turnover'?analyticsPercent(value[key]):key==='balance'?movementBalance(value[key]):value[key]}</dd><small>${comparison}</small></div>`;
-  };
-  const teamRows=analysis.teams.sort((a,b)=>b.closing-a.closing || dashboardTeamLabel(a.id).localeCompare(dashboardTeamLabel(b.id),'pt')).map(team=>`<tr data-analytics-team="${escHtml(team.id)}" class="${team.id===dashboardMovementTeam?'is-selected':''}"><td>${analyticsTeamButton(team.id)}</td><td>${team.opening}</td><td>${team.closing}</td><td class="movement-entry">${analyticsCountButton(team,'entry',team.entries)}</td><td class="movement-exit">${analyticsCountButton(team,'exit',team.exits)}</td><td>${team.transfersIn}</td><td>${team.transfersOut}</td><td class="movement-balance ${movementBalanceClass(team.netChange)}"><div class="analytics-net"><span class="analytics-net-track"><i style="width:${Math.abs(team.netChange)/maxNet*50}%;background:${team.netChange<0?'var(--c-finjust)':'var(--c-presente)'};${team.netChange<0?'transform:translateX(-100%);':''}"></i></span><strong>${movementBalance(team.netChange)}</strong></div></td><td>${analyticsPercent(team.turnover)}</td><td>${team.earlyExits}</td></tr>`).join('');
-  const selectedEvents=value.events.filter(event=>dashboardAnalyticsEventType==='all' || event.type===dashboardAnalyticsEventType);
-  const eventRows=selectedEvents.map(event=>{
+  const metric=(label,key,tone)=>`<div class="analytics-kpi ${tone}"><dt>${label}</dt><dd class="${key==='entries'?'movement-entry':key==='exits'?'movement-exit':'movement-balance '+movementBalanceClass(value.balance)}" data-analytics-total="${key}" data-movement-total="${key}">${key==='balance'?movementBalance(value[key]):value[key]}</dd><small>${movementBalance(value[key]-previous.total[key])} vs. período anterior</small></div>`;
+  const ranked=[...analysis.teams].sort((a,b)=>(b.entries+b.exits)-(a.entries+a.exits) || dashboardTeamLabel(a.id).localeCompare(dashboardTeamLabel(b.id),'pt'));
+  const maximum=Math.max(1,...ranked.flatMap(team=>[team.entries,team.exits]));
+  const teamBars=ranked.map(team=>`<div class="analytics-team-row"><div class="analytics-team-identity">${analyticsTeamButton(team.id)}</div><div class="analytics-team-bars">
+    <div class="analytics-team-bar" title="${team.entries} entradas"><div class="analytics-team-track"><i class="entry" style="width:${team.entries/maximum*100}%"></i></div><strong class="movement-entry">${team.entries}</strong></div>
+    <div class="analytics-team-bar" title="${team.exits} saídas"><div class="analytics-team-track"><i class="exit" style="width:${team.exits/maximum*100}%"></i></div><strong class="movement-exit">${team.exits}</strong></div>
+  </div></div>`).join('');
+  const teamRows=ranked.map(team=>`<tr data-analytics-team="${escHtml(team.id)}" data-movement-team="${escHtml(team.id)}" class="${team.id===dashboardMovementTeam?'is-selected':''}"><td>${analyticsTeamButton(team.id)}</td><td class="movement-entry">${analyticsCountButton(team,'entry',team.entries)}</td><td class="movement-exit">${analyticsCountButton(team,'exit',team.exits)}</td><td class="movement-balance ${movementBalanceClass(team.balance)}"><strong>${movementBalance(team.balance)}</strong></td></tr>`).join('');
+  const movements=value.events.filter(event=>event.type==='entry' || event.type==='exit');
+  const selected=movements.filter(event=>dashboardAnalyticsEventType==='all' || event.type===dashboardAnalyticsEventType);
+  const eventRows=selected.map(event=>{
     const person=reportPerson(event.personId);
-    const type={entry:'Entrada',exit:'Saída',transfer:'Transferência'}[event.type];
-    const teamName=event.type==='transfer'?`${event.fromTeamId===undefined?'Outra equipa':dashboardTeamLabel(event.fromTeamId)} → ${event.toTeamId===undefined?'Outra equipa':dashboardTeamLabel(event.toTeamId)}`:dashboardTeamLabel(event.teamId);
-    return `<tr><td>${person?dashPersonHtml(person,24):escHtml(event.personId)}</td><td><span class="analytics-event-type ${event.type==='entry'?'movement-entry':event.type==='exit'?'movement-exit':''}">${type}</span></td><td>${escHtml(formatDatePt(event.date))}</td><td>${escHtml(teamName)}</td><td>${event.tenureDays===null || event.tenureDays===undefined?'—':event.tenureDays+' dias'}</td></tr>`;
+    return `<tr><td>${person?dashPersonHtml(person,32):escHtml(event.personId)}</td><td class="analytics-event-type ${event.type==='entry'?'movement-entry':'movement-exit'}">${event.type==='entry'?'Entrada':'Saída'}</td><td>${escHtml(formatDatePt(event.date))}</td><td>${escHtml(dashboardTeamLabel(event.teamId))}</td></tr>`;
   }).join('');
-  const modelColors=['#0284c7','#0f766e','#be185d','#b45309','#7c3aed','#475569'];
-  const modelTeamIds=[...new Set(analysis.models.flatMap(model=>Object.keys(model.teams)))].sort((a,b)=>dashboardTeamLabel(a).localeCompare(dashboardTeamLabel(b),'pt'));
-  const modelMax=Math.max(1,...analysis.models.flatMap(model=>Object.values(model.teams)));
-  const modelRows=analysis.models.map((model,index)=>`<div class="analytics-model-row"><span class="analytics-model-name">${escHtml(model.label)}</span><div class="analytics-model-track"><div class="analytics-model-fill" style="width:${analysis.currentPeople.length?model.count/analysis.currentPeople.length*100:0}%;background:${model.key?modelColors[index%modelColors.length]:'#94a3b8'}"></div></div><span class="analytics-model-value">${model.count} · ${analysis.currentPeople.length?Math.round(model.count/analysis.currentPeople.length*100):0}%</span></div>`).join('');
-  const modelMatrix=analysis.models.length?`<div class="analytics-table-wrap"><table class="analytics-table analytics-model-table" style="min-width:${180+analysis.models.length*100}px"><thead><tr><th>Equipa atual</th>${analysis.models.map(model=>`<th style="overflow-wrap:anywhere">${escHtml(model.label)}</th>`).join('')}</tr></thead><tbody>${modelTeamIds.map(id=>`<tr><td>${analyticsTeamName(id)}</td>${analysis.models.map(model=>`<td style="--intensity:${Math.round((model.teams[id] || 0)/modelMax*20)}%">${model.teams[id] || 0}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`:'<div class="analytics-empty">Sem colaboradores ativos nesta seleção.</div>';
   return `<section id="dashboardAnalytics">${controls}
-    <div class="analytics-context"><span>Comparação: <strong>${formatDatePt(previousPeriod.from)} a ${formatDatePt(previousPeriod.to)}</strong></span>${value.uncertainCount?'<span class="movement-exit" title="Existem colaboradores sem datas de emprego completas. Os efetivos incluem apenas registos com datas válidas; a taxa de saída fica indisponível.">Datas de emprego incompletas</span>':''}</div>
-    <dl class="analytics-kpis">${metric(value.uncertainCount?'Efetivo conhecido · início':'Efetivo no início','opening')}${metric(value.uncertainCount?'Efetivo conhecido · fim':'Efetivo no fim','closing')}${metric('Entradas na empresa','entries','movement-entry')}${metric('Saídas da empresa','exits','movement-exit')}${metric('Saldo de entradas/saídas','balance','movement-balance '+movementBalanceClass(value.balance),'Entradas menos saídas da empresa; não inclui transferências internas.')}${metric('Taxa de saída','turnover','','Saídas da empresa / efetivo médio diário no período × 100. Não inclui transferências internas. Sem taxa quando faltam datas de emprego.')}</dl>
-    <div class="analytics-context">${dashboardMovementTeam===null?`<span>Transferências internas: <strong>${value.events.filter(event=>event.type==='transfer').length}</strong></span>`:`<span>Transferências recebidas: <strong>${value.transfersIn}</strong></span><span>Transferências cedidas: <strong>${value.transfersOut}</strong></span>`}<span>Saídas até 60 dias de casa: <strong>${value.earlyExits}</strong></span><span>Efetivo médio diário: <strong>${meanDisplay}</strong></span></div>
-    <section class="analytics-section" id="dashboardHeadcountTrend"><div class="analytics-section-title"><h3>Evolução do efetivo${value.uncertainCount?' conhecido':''}</h3><span class="analytics-scope-note">${formatDatePt(period.from)} a ${formatDatePt(period.to)}</span></div>${analyticsTrendHtml(analysis)}</section>
-    <section class="analytics-section" id="dashboardTeamAnalysis"><div class="analytics-section-title"><h3>Comparação por equipa</h3><span class="analytics-scope-note">${formatDatePt(period.from)} a ${formatDatePt(period.to)}</span></div>${teamRows?`<div class="analytics-table-wrap"><table class="analytics-table"><thead><tr><th>Equipa</th><th>Início</th><th>Fim</th><th>Entradas</th><th>Saídas</th><th title="Transferências recebidas">Transf. +</th><th title="Transferências cedidas">Transf. −</th><th title="Entradas − saídas + transferências recebidas − cedidas">Variação</th><th title="Saídas / efetivo médio diário × 100">Taxa de saída</th><th>Saídas ≤ 60d</th></tr></thead><tbody>${teamRows}</tbody></table></div>`:'<div class="analytics-empty">Sem equipas registadas.</div>'}</section>
-    <details class="analytics-section" id="dashboardMovementDetails" ${dashboardEventsOpen?'open':''} ontoggle="dashboardEventsOpen=this.open" style="scroll-margin-top:110px"><summary>Movimentos do período (${value.events.length})</summary><div class="analytics-controls"><label for="dashboardAnalyticsEventType">Movimento<select id="dashboardAnalyticsEventType" onchange="dashboardAnalyticsEventType=this.value;renderDashboard()">${[['all','Todos'],['entry','Entradas'],['exit','Saídas'],['transfer','Transferências']].map(([key,label])=>`<option value="${key}" ${dashboardAnalyticsEventType===key?'selected':''}>${label}</option>`).join('')}</select></label></div>${eventRows?`<div class="analytics-events"><table class="analytics-table"><thead><tr><th>Colaborador</th><th>Movimento</th><th>Data</th><th>Equipa na data</th><th>Permanência na saída</th></tr></thead><tbody>${eventRows}</tbody></table></div>`:'<div class="analytics-empty">Sem movimentos nesta seleção.</div>'}</details>
-    <section class="analytics-section" id="dashboardCommissionModels"><div class="analytics-section-title"><h3>Modelos comissionais</h3><span class="analytics-scope-note">Situação atual · ${formatDatePt(today)}</span></div><div class="analytics-model-coverage"><strong data-model-coverage>${analyticsPercent(analysis.modelCoverage)}</strong><span>com modelo registado · ${analysis.unknownModels} por preencher</span></div><div class="analytics-split"><div class="analytics-model-list">${modelRows || '<div class="analytics-empty">Sem colaboradores ativos nesta seleção.</div>'}</div>${modelMatrix}</div></section>
+    <div class="analytics-context">Comparação com ${formatDatePt(previousPeriod.from)} a ${formatDatePt(previousPeriod.to)}</div>
+    <dl class="analytics-kpis">${metric('Entradas','entries','entry')}${metric('Saídas','exits','exit')}${metric('Saldo','balance','balance')}</dl>
+    <section class="analytics-section" id="dashAnnualMovements"><div class="analytics-section-title"><h3>Entradas e saídas por mês</h3><span class="analytics-scope-note">${formatDatePt(period.from)} a ${formatDatePt(period.to)}</span></div>${analyticsTrendHtml(analysis)}</section>
+    <div class="analytics-team-grid">
+      <section class="analytics-section" id="dashboardTeamChart"><h3>Comparação de equipas</h3><div class="analytics-chart-legend"><span><i class="entry"></i>Entradas</span><span><i class="exit"></i>Saídas</span></div>${teamBars || '<div class="analytics-empty">Sem equipas registadas.</div>'}</section>
+      <section class="analytics-section" id="dashboardTeamAnalysis"><h3>Resumo por equipa</h3>${teamRows?`<div class="analytics-table-wrap"><table class="analytics-table"><thead><tr><th>Equipa</th><th>Entradas</th><th>Saídas</th><th>Saldo</th></tr></thead><tbody>${teamRows}</tbody></table></div>`:'<div class="analytics-empty">Sem equipas registadas.</div>'}</section>
+    </div>
+    <details class="analytics-section analytics-movements" id="dashboardMovementDetails" ${dashboardEventsOpen?'open':''} ontoggle="dashboardEventsOpen=this.open"><summary>Entradas e saídas do período (${movements.length})</summary>
+      <div class="analytics-controls"><label for="dashboardAnalyticsEventType">Movimento<select id="dashboardAnalyticsEventType" onchange="dashboardAnalyticsEventType=this.value;renderDashboard()">${[['all','Todos'],['entry','Entradas'],['exit','Saídas']].map(([key,label])=>`<option value="${key}" ${dashboardAnalyticsEventType===key?'selected':''}>${label}</option>`).join('')}</select></label></div>
+      ${eventRows?`<div class="analytics-events"><table class="analytics-table"><thead><tr><th>Colaborador</th><th>Movimento</th><th>Data</th><th>Equipa na data</th></tr></thead><tbody>${eventRows}</tbody></table></div>`:'<div class="analytics-empty">Sem entradas ou saídas nesta seleção.</div>'}
+    </details>
   </section>`;
 }
 function renderDashboard(){
-  const box = document.getElementById('dashboard');
-  if (!box) return;
-  const active = activePersons();
-  const historicalActive = vacationPersons();
-  const activeIds = new Set(historicalActive.map(p => p.id));
-  const months = vacationMonthTotals(activeIds);
-  const maxVacationDays = Math.max(...months);
-  const bestMonthIdx = months.findIndex(v => v === maxVacationDays);
-  const abs = absenceSummary(historicalActive);
-  const noVacation = active.filter(p => !hasVacationMarkedInYear(p.id)).sort((a,b) => a.name.localeCompare(b.name));
-  const entries = state.persons
-    .filter(p => normalizeDateValue(p.entrada).startsWith(`${YEAR}-`))
-    .sort((a,b) => normalizeDateValue(a.entrada).localeCompare(normalizeDateValue(b.entrada)));
-  const exits = state.persons
-    .filter(p => normalizeDateValue(p.saida).startsWith(`${YEAR}-`))
-    .sort((a,b) => normalizeDateValue(a.saida).localeCompare(normalizeDateValue(b.saida)));
-
-  const teamCounts = {};
-  active.forEach(p => {
-    const chefe = state.persons.find(pp => pp.id === p.chefeId);
-    const label = chefe ? chefe.name : 'Sem chefe definido';
-    if (!teamCounts[label]) teamCounts[label] = { label, value:0, person:chefe || null };
-    teamCounts[label].value++;
-  });
-  const teamItems = Object.values(teamCounts)
-    .sort((a,b) => b.value - a.value || a.label.localeCompare(b.label));
-  const inactive = state.persons.filter(p => p.ativo === false);
-  const companyCount = new Set(active.map(p => (p.empresa || '').trim()).filter(Boolean)).size;
-  const ages = ageStats(active);
-  const roleItems = countBy(active, p => ROLE_LABELS[p.role] || 'Sem função');
-  const companyItems = countBy(active, p => (p.empresa || '').trim() || 'Sem empresa');
-  const cargaItems = countBy(active, p => CARGA_LABELS[p.carga] || 'Sem carga');
-  const tenureItems = countBy(active, p => tenureBucketLabel(monthDiffFromToday(p.entrada)));
-  const missingRows = active
-    .map(p => {
-      const missing = [];
-      if (!p.role) missing.push('Função');
-      if (!p.chefeId) missing.push('Chefe');
-      if (!p.empresa) missing.push('Empresa');
-      if (!p.telefone) missing.push('Telefone');
-      if (!p.agv) missing.push('AGV');
-      if (!normalizeDateValue(p.entrada)) missing.push('Entrada');
-      return { p, missing };
-    })
-    .filter(x => x.missing.length)
-    .slice(0,8)
-    .map(x => [dashPersonHtml(x.p), escHtml(x.missing.join(', '))]);
-  const loggedMovements = state.persons.flatMap(person =>
-    (Array.isArray(person.rhMovements) ? person.rhMovements : []).map(movement => ({ person, movement }))
-  );
-  const legacyMovements = state.persons.flatMap(person => {
-    if (Array.isArray(person.rhMovements) && person.rhMovements.length) return [];
-    const rows = [];
-    const entrada = normalizeDateValue(person.entrada);
-    const saida = normalizeDateValue(person.saida);
-    if (entrada) rows.push({ person, movement:{ type:'Entrada', field:'entrada', from:'', to:entrada, date:entrada, at:entrada } });
-    if (saida) rows.push({ person, movement:{ type:'Saída', field:'saida', from:'', to:saida, date:saida, at:saida } });
-    return rows;
-  });
-  const recentPeopleRows = [...loggedMovements, ...legacyMovements]
-    .sort((a,b) => String(b.movement.at || b.movement.date || '').localeCompare(String(a.movement.at || a.movement.date || '')))
-    .slice(0,12)
-    .map(({ person, movement }) => [
-      escHtml(movement.type || 'Alteração RH'),
-      dashPersonHtml(person),
-      escHtml(rhMovementDetail(movement)),
-      formatDatePt(movement.date || String(movement.at || '').slice(0,10))
-    ]);
-
-  const noVacationRows = noVacation.slice(0,8).map(p => [dashPersonHtml(p), escHtml(ROLE_LABELS[p.role] || '—')]);
-  const topPeopleItems = abs.topPeople.map(x => ({
-    label: x.p.name,
-    value: x.total,
-    color: x.FI ? 'var(--c-finjust)' : 'var(--accent)',
-    person: x.p
-  }));
-  const topDayItems = abs.topDays.map(x => ({ label: formatDatePt(x.date), value: x.total, color: 'var(--c-baixa)' }));
-  const statusParts = [
-    { label:'Férias', value:abs.totals.FE, color:'var(--c-ferias)' },
-    { label:'F. justificadas', value:abs.totals.FJ, color:'var(--c-fjust)' },
-    { label:'F. injustificadas', value:abs.totals.FI, color:'var(--c-finjust)' },
-    { label:'Baixa', value:abs.totals.B, color:'var(--c-baixa)' },
-  ];
-  const absenceTotal = statusParts.reduce((sum, p) => sum + p.value, 0);
-  const vacationCoverage = active.length ? Math.round(((active.length - noVacation.length) / active.length) * 100) : 0;
-  const fiTotal = abs.fiAlerts.reduce((s,x)=>s+x.count,0);
-  const topPeopleRows = abs.topPeople.map(x => [
-    dashPersonHtml(x.p),
-    `<span class="dash-chip">${x.total}</span>`,
-    `Fé ${x.FE} · FJ ${x.FJ} · <span class="dash-alert">FI ${x.FI}</span> · B ${x.B}`,
-  ]);
-  const topDayRows = abs.topDays.map(x => [
-    formatDatePt(x.date),
-    `<span class="dash-chip">${x.total}</span>`,
-    escHtml(x.names.slice(0,6).join(', ')) + (x.names.length > 6 ? ` +${x.names.length-6}` : ''),
-  ]);
-  const fiRows = abs.fiAlerts.slice(0,8).map(x => [
-    dashPersonHtml(x.p),
-    `<span class="dash-alert">${x.count}</span>`,
-    formatDatePt(x.last),
-  ]);
-  const movementRows = [
-    ...entries.slice(0,6).map(p => ({ type:'Entrada', person:p, date:normalizeDateValue(p.entrada) })),
-    ...exits.slice(0,6).map(p => ({ type:'Saída', person:p, date:normalizeDateValue(p.saida) })),
-  ].sort((a,b) => a.date.localeCompare(b.date)).map(x => [x.type, dashPersonHtml(x.person), formatDatePt(x.date)]);
-
-  box.innerHTML = `
-    ${dashboardAnalyticsHtml()}
-    ${dashAnnualMovements()}
-    <details class="analytics-detail" ${dashboardRhDetailsOpen?'open':''} ontoggle="dashboardRhDetailsOpen=this.open"><summary>Detalhe RH, férias e assiduidade · ${YEAR}</summary>
-    <div class="dash-hero">
-      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${active.length}</div><div class="dash-metric-icon">👥</div></div><div><div class="dash-metric-label">Colaboradores ativos</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:100%;background:var(--c-presente)"></div></div></div></div>
-      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${inactive.length}</div><div class="dash-metric-icon">⏸</div></div><div><div class="dash-metric-label">Colaboradores inativos</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${Math.min(100, inactive.length * 15)}%;background:#9ca3af"></div></div></div></div>
-      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${companyCount}</div><div class="dash-metric-icon">🏢</div></div><div><div class="dash-metric-label">Empresas ativas</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${Math.min(100, companyCount * 18)}%;background:#14b8a6"></div></div></div></div>
-      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${averageTenureText(active)}</div><div class="dash-metric-icon">⏱</div></div><div><div class="dash-metric-label">Antiguidade média</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:72%;background:#8b5cf6"></div></div></div></div>
-      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${ages.avg}</div><div class="dash-metric-icon">🎂</div></div><div><div class="dash-metric-label">Média de idades</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${ages.avg==='—'?0:68}%;background:#0ea5e9"></div></div></div></div>
-      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${ages.oldest ? ages.oldest.age + 'a' : '—'}</div><div class="dash-metric-icon">⬆️</div></div><div><div class="dash-metric-label">Mais velho</div>${dashMetricPersonHtml(ages.oldest ? ages.oldest.p : null)}<div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${ages.oldest?85:0}%;background:#f59e0b"></div></div></div></div>
-      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${ages.youngest ? ages.youngest.age + 'a' : '—'}</div><div class="dash-metric-icon">⬇️</div></div><div><div class="dash-metric-label">Mais novo</div>${dashMetricPersonHtml(ages.youngest ? ages.youngest.p : null)}<div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${ages.youngest?55:0}%;background:#14b8a6"></div></div></div></div>
-      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${vacationCoverage}%</div><div class="dash-metric-icon">🏖️</div></div><div><div class="dash-metric-label">Com férias marcadas</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${vacationCoverage}%;background:var(--c-ferias)"></div></div></div></div>
-      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value">${absenceTotal}</div><div class="dash-metric-icon">📊</div></div><div><div class="dash-metric-label">Dias de ausência registados</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${Math.min(100, absenceTotal ? 100 : 0)}%;background:var(--accent)"></div></div></div></div>
-      <div class="dash-metric"><div class="dash-metric-top"><div class="dash-metric-value" style="color:var(--c-finjust)">${fiTotal}</div><div class="dash-metric-icon">⚠️</div></div><div><div class="dash-metric-label">Faltas injustificadas</div><div class="dash-metric-bar"><div class="dash-metric-fill" style="width:${Math.min(100, fiTotal * 12)}%;background:var(--c-finjust)"></div></div></div></div>
-    </div>
-    <div class="dash-grid">
-      <div class="dash-panel"><h3>Colaboradores por função</h3>${dashBars(roleItems, 'Sem colaboradores ativos.')}</div>
-      <div class="dash-panel"><h3>Colaboradores por empresa</h3>${dashBars(companyItems, 'Sem empresas definidas.', '#14b8a6')}</div>
-      <div class="dash-panel"><h3>Carga horária</h3>${dashBars(cargaItems, 'Sem cargas horárias definidas.', '#8b5cf6')}</div>
-      <div class="dash-panel"><h3>Antiguidade RH</h3>${dashBars(tenureItems, 'Sem datas de entrada definidas.', '#f59e0b')}</div>
-      <div class="dash-panel dash-panel-wide"><h3>Dias de férias por mês</h3>${dashMonthBars(months)}</div>
-      <div class="dash-panel"><h3>Ausências por tipo</h3>${dashStack(statusParts)}</div>
-      <div class="dash-panel"><h3>Colaboradores por chefe de equipa</h3>${dashBars(teamItems, 'Sem colaboradores ativos.', 'var(--c-presente)')}</div>
-      <div class="dash-panel"><h3>Dados RH em falta</h3>${dashTable(['Colaborador', 'Campos'], missingRows, 'Todos os colaboradores ativos têm os dados principais preenchidos.')}</div>
-      <div class="dash-panel dash-panel-wide"><h3>Movimentos RH recentes</h3>${dashTable(['Tipo', 'Colaborador', 'Alteração', 'Data'], recentPeopleRows, 'Sem movimentos RH registados.')}</div>
-      <div class="dash-panel"><h3>Dias com mais pessoas ausentes</h3>${dashBars(topDayItems, 'Ainda não há ausências registadas.', 'var(--c-baixa)')}</div>
-      <div class="dash-panel"><h3>Top 5 colaboradores com mais ausências</h3>${dashBars(topPeopleItems, 'Ainda não há ausências registadas.')}</div>
-      <div class="dash-panel"><h3>Colaboradores sem férias marcadas</h3>${dashTable(['Colaborador', 'Função'], noVacationRows, 'Todos os colaboradores ativos têm férias marcadas.')}</div>
-      <div class="dash-panel"><h3>Alertas de faltas injustificadas</h3>${dashTable(['Colaborador', 'FI', 'Última'], fiRows, 'Sem faltas injustificadas registadas.')}</div>
-    </div></details>`;
+  const box=document.getElementById('dashboard');
+  if(box) box.innerHTML=dashboardAnalyticsHtml();
 }
 
 // ===================== BOLSA FORMAÇÃO OUTCOMES =====================
@@ -5521,8 +5377,6 @@ function renderRH(){
   const empresas = [...new Set(state.persons.map(p => p.empresa).filter(Boolean))].sort();
   const dl = document.getElementById('empresaList');
   if (dl) dl.innerHTML = empresas.map(e => `<option value="${escHtml(e)}">`).join('');
-  const models=[...new Set(state.persons.map(person=>person.modeloComissional).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));
-  document.getElementById('commissionModelsList').innerHTML=models.map(model=>`<option value="${escHtml(model)}">`).join('');
 
   // stats
   const total = state.persons.length;
@@ -5614,7 +5468,7 @@ function renderRH(){
         : `<button class="rh-card-btn" onclick="openIdCard('${p.id}')">Cartao</button>`;
       body += `<tr class="${ativo?'':'inactive'} ${isEditing?'editing':''}" data-rh-row="1" data-name="${escHtml(normalizeFilterText(p.name))}" data-role="${escHtml(p.role||'')}" data-chefe="${escHtml(p.chefeId||'')}" data-empresa="${escHtml(normalizeFilterText(p.empresa||''))}" data-carga="${escHtml(p.carga||'')}" data-nascimento="${escHtml(nascimento)}" data-entrada="${escHtml(entrada)}" data-saida="${escHtml(saida)}" data-ativo="${ativo?'ativo':'inativo'}">
         <td data-label="Colaborador"><div class="rh-name"><button class="rh-photo-btn ${isEditing?'':'locked'}" ${photoAction} title="${isEditing?(p.photo?'Mudar foto':'Adicionar foto'):'Bloqueado. Clica em Editar.'}">${avatarHtml(p, 28)}</button>${isEditing ? `<input class="rh-input rh-name-input" value="${escHtml(p.name)}" placeholder="Nome do colaborador..." onchange="rhUpdateName('${p.id}',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">` : `<span>${escHtml(p.name)}</span>`}${ativo?'':'<span class="badge-inativo">inativo</span>'}</div></td>
-        <td data-label="Função">${isEditing ? `<select class="rh-select" onchange="rhUpdate('${p.id}','role',this.value)">${roleOpts}</select><label class="rh-model-field">Modelo comissional<input class="rh-input" list="commissionModelsList" maxlength="80" value="${escHtml(p.modeloComissional || '')}" placeholder="Por preencher" onchange="rhUpdate('${p.id}','modeloComissional',this.value)"></label>` : rhRead(ROLE_LABELS[p.role])+(p.modeloComissional?`<span class="rh-model-label">${escHtml(p.modeloComissional)}</span>`:'')}</td>
+        <td data-label="Função">${isEditing ? `<select class="rh-select" onchange="rhUpdate('${p.id}','role',this.value)">${roleOpts}</select>` : rhRead(ROLE_LABELS[p.role])}</td>
         <td data-label="Chefe">${isEditing ? `<select class="rh-select" onchange="rhUpdate('${p.id}','chefeId',this.value)">${chefeOpts}</select>` : rhRead(chefe ? chefe.name : '')}</td>
         <td data-label="Empresa">${isEditing ? `<input class="rh-input" list="empresaList" value="${escHtml(p.empresa||'')}" placeholder="Empresa..." onchange="rhUpdate('${p.id}','empresa',this.value)">` : rhRead(p.empresa)}</td>
         <td data-label="Telefone">${isEditing ? `<input class="rh-input" value="${escHtml(formatPhone(p.telefone))}" placeholder="Telefone..." inputmode="tel" onchange="rhUpdate('${p.id}','telefone',this.value)">` : rhRead(formatPhone(p.telefone))}</td>
@@ -5718,7 +5572,6 @@ function rhUpdate(id, field, value){
     }
   }
   else if (field === 'empresa') p.empresa = value.trim();
-  else if (field === 'modeloComissional') p.modeloComissional = value.trim().replace(/\s+/g,' ').slice(0,80);
   else if (field === 'telefone') p.telefone = normalizePhone(value);
   else if (field === 'agv') p.agv = value.trim();
   else if (field === 'entrada' || field === 'saida' || field === 'nascimento') p[field] = normalizeDateValue(value);
