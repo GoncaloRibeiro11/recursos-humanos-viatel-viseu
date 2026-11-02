@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const testDashboardAnalytics=require('./test-dashboard-analytics.cjs');
 
 const root=path.resolve(__dirname,'../public');
 const output=path.resolve(root,'../../../../recovery');
@@ -19,6 +20,11 @@ const fixture=`
     ...Array.from({length:19},(_,i)=>({id:'entry-'+i,name:'Colaborador '+i,chefeId:i<9?'a':i<18?'b':'',role:'vendedor',ativo:true,entrada:'2026-'+String(i%10+1).padStart(2,'0')+'-01'})),
     ...Array.from({length:9},(_,i)=>({id:'exit-'+i,name:'Saida '+i,chefeId:'c',role:'vendedor',ativo:false,entrada:'2025-01-01',saida:'2026-06-'+String(i+1).padStart(2,'0')}))
   ],vacations:[],records:{}};
+  state.persons.forEach((person,index)=>{if(person.id.startsWith('entry-') && (index-3)%3) person.modeloComissional=index%2?'Modelo Base':'Modelo Variável';});
+  teamHistoryRows=state.persons.map(person=>({person_id:person.id,valid_from:'0001-01-01',valid_to:null,role_code:person.role,chefe_id:person.chefeId || '',person_snapshot:{name:person.name,entrada:person.entrada,ativo:person.ativo}}));
+  teamHistoryRows.find(row=>row.person_id==='entry-0').valid_to='2026-11-01';
+  teamHistoryRows.push({person_id:'entry-0',valid_from:'2026-11-01',valid_to:null,role_code:'vendedor',chefe_id:'b',person_snapshot:{}});
+  state.persons.find(person=>person.id==='entry-0').chefeId='b';teamHistoryEnabled=true;
   currentProfile={role:'admin',display_name:'Teste'};
   document.body.classList.add('authenticated','is-admin');document.getElementById('authOverlay').classList.remove('open');
   window.originalState=JSON.stringify(state);Object.defineProperty(window,'testState',{get:()=>state});
@@ -45,6 +51,7 @@ const server=http.createServer((req,res)=>{
   const browser=await chromium.launch({headless:true,channel:'chrome'});
   try{
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
+    await page.clock.install({time:new Date('2026-11-02T12:00:00Z')});
     const errors=[];page.on('pageerror',error=>errors.push(error.message));
     await page.route('**/supabase-js**',route=>route.fulfill({body:'window.supabase={};',contentType:'application/javascript'}));
     await page.goto(`http://127.0.0.1:${server.address().port}/test.html`);
@@ -95,9 +102,10 @@ const server=http.createServer((req,res)=>{
     await panel.screenshot({path:path.join(output,'dashboard-annual-movements-dark.png')});
     assert.equal(await page.evaluate(()=>JSON.stringify(state)===window.originalState),true);
     assert.equal(writes,0);
-    await page.evaluate(()=>{state={persons:[],vacations:[],records:{}};renderDashboard();});
+    await page.evaluate(()=>{state={persons:[],vacations:[],records:{}};teamHistoryRows=[];renderDashboard();});
     assert.equal(await total('balance'),'0');assert.equal(await total('entries'),'0');assert.equal(await total('exits'),'0');
     assert.match(await panel.textContent(),/Sem equipas registadas/);
+    await testDashboardAnalytics(page,output);
     assert.deepEqual(errors,[]);
     console.log(JSON.stringify({entries:19,exits:9,annualBalance:10,teamFilter:'passed',negativeBalance:'passed',unassignedTeam:'passed',managerPhotos:true,mobile320:true,mobile390:true,darkTheme:true,emptyState:true,stateUnchanged:true,serverWrites:writes,pageErrors:errors},null,2));
   }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}

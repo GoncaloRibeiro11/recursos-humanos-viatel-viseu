@@ -6,6 +6,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const testVacationSync = require('./test-vacation-sync.cjs');
 const { historyFixture, testTeamHistory } = require('./test-team-history-browser.cjs');
 const { teamChangeRpc,testTeamChanges } = require('./test-team-changes-browser.cjs');
+const testCommissionModel=require('./test-commission-model.cjs');
 
 const root = path.resolve(__dirname,'../public');
 const headers = JSON.parse(fs.readFileSync(path.join(root,'../vercel.json'),'utf8')).headers[0].headers;
@@ -50,7 +51,7 @@ function MockClient(base,fetcher){
 
 const sdk = `window.supabase={createClient:(url,key,config)=>new (${MockClient.toString()})(url,config.global.fetch)};`;
 const original = fs.readFileSync(path.join(root,'mapa-recursos-humanos.html'),'utf8');
-const html = original.replace(/^initSupabaseApp\(\);\r?$/m,"Object.defineProperty(window,'testState',{get:()=>state}); initSupabaseApp();");
+const html = original.replace(/^initSupabaseApp\(\);\r?$/m,"currentMonth=9; Object.defineProperty(window,'testState',{get:()=>state}); initSupabaseApp();");
 
 const server = http.createServer(async (req,res) => {
   for (const header of headers) res.setHeader(header.key,header.value);
@@ -143,6 +144,7 @@ const server = http.createServer(async (req,res) => {
     await testVacationSync(page, database, writes);
     await testTeamHistory(page, database, writes, teamFixture);
     await testTeamChanges(page, database, writes, teamFixture);
+    await testCommissionModel(page,database,writes);
     assert.deepEqual(pageErrors,[]);
     await page.getByRole('button',{ name:'🗓️ Assiduidade', exact:true }).click();
     await page.screenshot({ path:path.resolve(root,'../../../../recovery/immediate-save-desktop.png') });

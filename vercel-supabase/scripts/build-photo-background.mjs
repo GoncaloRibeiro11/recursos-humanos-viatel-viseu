@@ -93,3 +93,8 @@ await build({
   entryPoints:['src/rh-team-history.mjs'], outfile:'public/rh-team-history.js',
   bundle:true, minify:true, format:'iife', globalName:'RhTeams', platform:'browser', target:['chrome100','safari16']
 });
+await build({
+  absWorkingDir:fileURLToPath(new URL('../',import.meta.url)),
+  entryPoints:['src/rh-analytics.mjs'], outfile:'public/rh-analytics.js',
+  bundle:true, minify:true, format:'iife', globalName:'RhAnalytics', platform:'browser', target:['chrome100','safari16']
+});
