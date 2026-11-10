@@ -477,6 +477,39 @@
   .analytics-movements { scroll-margin-top:110px; }
   .analytics-movements>summary { cursor:pointer; font-size:18px; font-weight:600; }
   .analytics-empty { padding:24px 0; font-size:15px; color:var(--text-muted); }
+  .analytics-composition-totals { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin:24px 0; gap:20px; }
+  .analytics-composition-totals>div { border-left:3px solid var(--accent); padding-left:16px; min-width:0; }
+  .analytics-composition-totals dt { font-size:14px; line-height:20px; color:var(--text-muted); }
+  .analytics-composition-totals dd { margin:6px 0 0; font-size:36px; font-weight:750; line-height:1.2; font-variant-numeric:tabular-nums; }
+  .analytics-composition-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:32px; margin:28px 0; }
+  .analytics-composition-grid>div { min-width:0; }
+  .analytics-composition-grid h4 { font-size:17px; margin:0 0 18px; }
+  .analytics-composition-row { margin:0 0 20px; }
+  .analytics-composition-label { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:15px; min-height:38px; margin-bottom:8px; }
+  .analytics-composition-label>span:first-child { min-width:0; overflow-wrap:anywhere; }
+  .analytics-composition-label .analytics-team-button { font-size:15px; }
+  .analytics-composition-value { display:flex; gap:10px; align-items:baseline; flex-shrink:0; font-variant-numeric:tabular-nums; }
+  .analytics-composition-value strong { font-size:22px; }
+  .analytics-composition-value small { color:var(--text-muted); font-size:13px; min-width:45px; text-align:right; }
+  .analytics-composition-track { height:12px; border-radius:4px; background:var(--border); overflow:hidden; }
+  .analytics-composition-track i { display:block; height:100%; border-radius:4px; background:#0ea5e9; }
+  .analytics-composition-contracts .analytics-composition-track i { background:#0d9488; }
+  .analytics-composition-companies .analytics-composition-track i { background:#d97706; }
+  .analytics-composition-cross-title { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin:24px 0 16px; }
+  .analytics-composition-cross-title h4 { margin:0; font-size:18px; }
+  .analytics-composition-table { table-layout:auto; }
+  .analytics-composition-table th { white-space:normal; overflow-wrap:anywhere; }
+  .analytics-composition-table tfoot { font-weight:700; background:var(--surface); }
+  .analytics-composition-table .composition-total { font-weight:750; background:var(--surface); }
+  .analytics-composition-table th:last-child { color:var(--text); }
+  @media (max-width:1100px) { .analytics-composition-grid { grid-template-columns:minmax(0,1fr); gap:24px; } }
+  @media (max-width:700px) {
+    .analytics-composition-totals { grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 12px; }
+    .analytics-composition-totals>div { padding-left:12px; }
+    .analytics-composition-totals dd { font-size:32px; }
+    .analytics-composition-label { gap:10px; }
+    .analytics-composition-value { gap:6px; }
+  }
   #dashAnnualMovements { margin:0; border:0; border-bottom:1px solid var(--border); border-radius:0; background:transparent; }
   @media (max-width:1100px) { .analytics-team-grid { grid-template-columns:minmax(0,1fr); gap:0; } }
   @media (max-width:700px) {
@@ -1894,6 +1927,7 @@ let dashboardMovementTeam = null;
 let dashboardAnalyticsPeriod = null;
 let dashboardAnalyticsEventType = 'all';
 let dashboardEventsOpen = false;
+let dashboardCompositionView = 'contracts';
 let teamHistoryEnabled = false;
 let teamHistoryRows = [];
 let teamPastPersons = [];
@@ -4908,6 +4942,23 @@ function analyticsTrendHtml(analysis){
       </div><span class="analytics-month-label">${label}</span></div>`;
     }).join('')}</div></div>`;
 }
+function dashboardCompositionHtml(composition,today){
+  const {total,contracts,companies}=composition;
+  const teams=[...composition.teams].sort((a,b)=>b.count-a.count || dashboardTeamLabel(a.id).localeCompare(dashboardTeamLabel(b.id),'pt'));
+  const label=(group,dimension)=>group.key?(dimension==='contracts'?CARGA_LABELS[group.key] || group.label:group.label):'Por preencher';
+  const percentage=count=>new Intl.NumberFormat('pt-PT',{maximumFractionDigits:1}).format(total?count/total*100:0)+'%';
+  const bars=(groups,dimension)=>groups.length?groups.map(group=>`<div class="analytics-composition-row" data-composition-category="${escHtml(dimension==='teams'?group.id:group.key)}"><div class="analytics-composition-label"><span>${dimension==='teams'?analyticsTeamButton(group.id):escHtml(label(group,dimension))}</span><span class="analytics-composition-value"><strong>${group.count}</strong><small>${percentage(group.count)}</small></span></div><div class="analytics-composition-track" aria-hidden="true"><i style="width:${total?group.count/total*100:0}%"></i></div></div>`).join(''):'<div class="analytics-empty">Sem colaboradores ativos.</div>';
+  const dimension=dashboardCompositionView==='companies'?'companies':'contracts';
+  const groups=composition[dimension];
+  const count=(team,key)=>team[dimension].find(group=>group.key===key)?.count || 0;
+  const summary=(title,value,key)=>`<div><dt>${title}</dt><dd data-composition-total="${key}">${value}</dd></div>`;
+  const matrix=total?`<div class="analytics-table-wrap"><table class="analytics-table analytics-composition-table" style="min-width:${230+(groups.length+1)*110}px" aria-label="Colaboradores ativos por equipa e ${dimension==='contracts'?'contrato':'empresa'}"><thead><tr><th>Equipa</th>${groups.map(group=>`<th>${escHtml(label(group,dimension))}</th>`).join('')}<th>Total</th></tr></thead><tbody>${teams.map(team=>`<tr data-composition-team="${escHtml(team.id)}"><td>${analyticsTeamButton(team.id)}</td>${groups.map(group=>`<td data-composition-key="${escHtml(group.key)}">${count(team,group.key)}</td>`).join('')}<td class="composition-total">${team.count}</td></tr>`).join('')}</tbody><tfoot><tr><td>Total</td>${groups.map(group=>`<td>${group.count}</td>`).join('')}<td class="composition-total">${total}</td></tr></tfoot></table></div>`:'<div class="analytics-empty">Sem colaboradores ativos nesta seleção.</div>';
+  return `<section class="analytics-section" id="dashboardComposition"><div class="analytics-section-title"><h3>Estrutura atual</h3><span class="analytics-scope-note">Ativos a ${formatDatePt(today)} · ${escHtml(dashboardMovementTeam===null?'Todas as equipas':dashboardTeamLabel(dashboardMovementTeam))}</span></div>
+    <dl class="analytics-composition-totals">${summary('Colaboradores ativos',total,'people')}${summary('Equipas',teams.filter(team=>team.id).length,'teams')}${summary('Empresas',companies.filter(group=>group.key).length,'companies')}${summary('Modalidades de trabalho',contracts.filter(group=>group.key).length,'contracts')}</dl>
+    <div class="analytics-composition-grid"><div id="dashboardCompositionTeams"><h4>Colaboradores por equipa</h4>${bars(teams,'teams')}</div><div class="analytics-composition-contracts" id="dashboardCompositionContracts"><h4>Contratos / carga horária</h4>${bars(contracts,'contracts')}</div><div class="analytics-composition-companies" id="dashboardCompositionCompanies"><h4>Colaboradores por empresa</h4>${bars(companies,'companies')}</div></div>
+    <div class="analytics-composition-cross-title"><h4>Distribuição por equipa</h4><div class="analytics-presets" role="group" aria-label="Distribuição por equipa">${[['contracts','Contratos'],['companies','Empresas']].map(([key,title])=>`<button type="button" data-composition-view="${key}" aria-pressed="${dimension===key}" onclick="dashboardCompositionView='${key}';renderDashboard()">${title}</button>`).join('')}</div></div><div id="dashboardCompositionMatrix">${matrix}</div>
+  </section>`;
+}
 function dashboardAnalyticsHtml(){
   const today=lisbonToday();
   if(!dashboardAnalyticsPeriod) dashboardAnalyticsPeriod={from:`${YEAR}-01-01`,to:today<`${YEAR}-12-31`?today:`${YEAR}-12-31`,preset:'year'};
@@ -4945,6 +4996,7 @@ function dashboardAnalyticsHtml(){
   return `<section id="dashboardAnalytics">${controls}
     <div class="analytics-context">Comparação com ${formatDatePt(previousPeriod.from)} a ${formatDatePt(previousPeriod.to)}</div>
     <dl class="analytics-kpis">${metric('Entradas','entries','entry')}${metric('Saídas','exits','exit')}${metric('Saldo','balance','balance')}</dl>
+    ${dashboardCompositionHtml(analysis.composition,today)}
     <section class="analytics-section" id="dashAnnualMovements"><div class="analytics-section-title"><h3>Entradas e saídas por mês</h3><span class="analytics-scope-note">${formatDatePt(period.from)} a ${formatDatePt(period.to)}</span></div>${analyticsTrendHtml(analysis)}</section>
     <div class="analytics-team-grid">
       <section class="analytics-section" id="dashboardTeamChart"><h3>Comparação de equipas</h3><div class="analytics-chart-legend"><span><i class="entry"></i>Entradas</span><span><i class="exit"></i>Saídas</span></div>${teamBars || '<div class="analytics-empty">Sem equipas registadas.</div>'}</section>

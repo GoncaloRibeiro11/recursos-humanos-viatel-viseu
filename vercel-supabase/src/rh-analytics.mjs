@@ -30,6 +30,28 @@ function emptyTeam(id){
     dailyTotal:0,average:0,turnover:null,earlyExits:0,exitTenureDays:[],uncertain:new Set(),events:[]};
 }
 
+function currentComposition(persons){
+  const teams=new Map(),contracts=new Map(),companies=new Map();
+  const category=value=>{
+    const label=typeof value==='string'?value.normalize('NFKC').trim().replace(/\s+/g,' '):'';
+    return {key:label.toLocaleLowerCase('pt'),label};
+  };
+  const add=(groups,value)=>{
+    if(!groups.has(value.key)) groups.set(value.key,{...value,count:0});
+    groups.get(value.key).count++;
+  };
+  for(const person of persons){
+    const id=person.chefeId || '',contract=category(person.carga),company=category(person.empresa);
+    if(!teams.has(id)) teams.set(id,{id,count:0,contracts:new Map(),companies:new Map()});
+    const team=teams.get(id);team.count++;
+    add(contracts,contract);add(companies,company);
+    add(team.contracts,contract);add(team.companies,company);
+  }
+  const sorted=groups=>[...groups.values()].sort((a,b)=>Number(!a.key)-Number(!b.key) || b.count-a.count || a.label.localeCompare(b.label,'pt'));
+  return {total:persons.length,contracts:sorted(contracts),companies:sorted(companies),
+    teams:[...teams.values()].map(team=>({...team,contracts:sorted(team.contracts),companies:sorted(team.companies)}))};
+}
+
 export function workforceAnalytics({persons,history=[],historyEnabled=false,profile=null,from,to,today,teamId=null}){
   if (![from,to,today].every(validDate) || from>to) throw new Error('Confirma as datas do periodo.');
   if((new Date(to+'T12:00:00Z')-new Date(from+'T12:00:00Z'))/86400000>7320) throw new Error('O periodo maximo de analise e de 20 anos.');
@@ -135,7 +157,7 @@ export function workforceAnalytics({persons,history=[],historyEnabled=false,prof
   const currentPeople=persons.filter(person=>{
     const assigned=assignment(person,today);
     return !person.historyOnly && person.ativo!==false && employed(person,today)!==false && assigned && (teamId===null || (assigned.chefeId || '')===teamId);
-  });
+  }).map(person=>assignment(person,today));
   const modelGroups=new Map();
   for(const person of currentPeople){
     const model=typeof person.modeloComissional==='string'?person.modeloComissional.trim().replace(/\s+/g,' ').slice(0,80):'';
@@ -147,5 +169,5 @@ export function workforceAnalytics({persons,history=[],historyEnabled=false,prof
   const models=[...modelGroups.values()].sort((a,b)=>b.count-a.count || a.label.localeCompare(b.label,'pt'));
   const unknown=models.find(model=>model.key==='')?.count || 0;
   return {from,to:end,requestedTo:to,days:dates.length,truncated:to>today,quality,teams:all,total,series:dates.map((date,index)=>({date,count:total.dailyCounts[index]})),
-    models,currentPeople:currentPeople.map(person=>person.id),modelCoverage:currentPeople.length?(currentPeople.length-unknown)/currentPeople.length*100:null,unknownModels:unknown};
+    composition:currentComposition(currentPeople),models,currentPeople:currentPeople.map(person=>person.id),modelCoverage:currentPeople.length?(currentPeople.length-unknown)/currentPeople.length*100:null,unknownModels:unknown};
 }

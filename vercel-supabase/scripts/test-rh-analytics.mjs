@@ -79,3 +79,50 @@ test('datas de emprego contraditorias e intervalos excessivos nao produzem indic
   assert.equal(result.total.uncertainCount,1);assert.equal(result.quality.invalidDates,1);
   assert.throws(()=>workforceAnalytics({...base,from:'1900-01-01',persons:[]}),/20 anos/);
 });
+
+test('contagens atuais cruzam equipa, contrato e empresa sem duplicar categorias',()=>{
+  const persons=[
+    person('one',{carga:'40h',empresa:' Viatel  '}),
+    person('two',{carga:'40h',empresa:'viatel'}),
+    person('three',{chefeId:'b',carga:'bolsa_formacao',empresa:'Triangle   Solutions'}),
+    person('four',{chefeId:'',carga:'',empresa:''}),
+    person('five',{chefeId:'b',carga:'recibo_verde',empresa:'Triangle Solutions'}),
+    person('left',{ativo:false,saida:'2026-10-31',empresa:'Antiga'}),
+    person('future',{entrada:'2026-11-20',empresa:'Futura'}),
+    person('historical',{historyOnly:true,empresa:'Oculta'}),
+  ];
+  const original=JSON.stringify(persons);
+  const result=workforceAnalytics({...base,persons}).composition;
+  assert.equal(result.total,5);
+  assert.deepEqual(result.companies.map(group=>[group.key,group.count]),[['triangle solutions',2],['viatel',2],['',1]]);
+  assert.deepEqual(result.contracts.map(group=>[group.key,group.count]),[['40h',2],['bolsa_formacao',1],['recibo_verde',1],['',1]]);
+  for(const dimension of ['companies','contracts']){
+    assert.equal(result[dimension].reduce((sum,group)=>sum+group.count,0),result.total);
+    for(const group of result[dimension]) assert.equal(result.teams.reduce((sum,team)=>sum+(team[dimension].find(item=>item.key===group.key)?.count || 0),0),group.count);
+    for(const team of result.teams) assert.equal(team[dimension].reduce((sum,group)=>sum+group.count,0),team.count);
+  }
+  assert.equal(result.teams.find(team=>team.id==='').count,1);
+  assert.equal(JSON.stringify(persons),original);
+});
+
+test('estrutura atual segue a equipa em vigor, nao o periodo de movimentos ou a equipa antiga',()=>{
+  const persons=[person('move',{carga:'20h',empresa:'Viatel'})];
+  const history=[row('move','a','0001-01-01','2026-11-01'),row('move','b','2026-11-01')];
+  const args={...base,persons,history,historyEnabled:true};
+  const current=workforceAnalytics(args).composition;
+  assert.equal(current.teams[0].id,'b');assert.equal(current.total,1);
+  assert.deepEqual(workforceAnalytics({...args,from:'2026-10-01',to:'2026-10-31'}).composition,current);
+  assert.equal(workforceAnalytics({...args,teamId:'a'}).composition.total,0);
+  assert.equal(workforceAnalytics({...args,teamId:'b'}).composition.total,1);
+  assert.equal(workforceAnalytics({...args,profile:{role:'gestor',person_id:'a'}}).composition.total,0);
+  assert.equal(workforceAnalytics({...args,profile:{role:'gestor',person_id:'b'}}).composition.total,1);
+});
+
+test('contagens vazias, campos em falta e nomes especiais nao perdem registos',()=>{
+  assert.deepEqual(workforceAnalytics({...base,persons:[]}).composition,{total:0,contracts:[],companies:[],teams:[]});
+  const result=workforceAnalytics({...base,persons:[person('unknown',{entrada:'',carga:null,empresa:null}),person('special',{empresa:'__proto__',carga:'Outro'})]}).composition;
+  assert.equal(result.total,2);
+  assert.equal(result.companies.find(group=>group.key==='__proto__').count,1);
+  assert.equal(result.contracts.find(group=>group.key==='').count,1);
+  assert.equal(result.contracts.find(group=>group.key==='outro').count,1);
+});

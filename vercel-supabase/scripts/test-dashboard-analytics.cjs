@@ -1,5 +1,6 @@
 const assert=require('node:assert/strict');
 const path=require('node:path');
+const testDashboardComposition=require('./test-dashboard-composition.cjs');
 
 module.exports=async function testDashboardAnalytics(page,output){
   await page.reload();await page.locator('#dashboardAnalytics').waitFor();
@@ -17,6 +18,9 @@ module.exports=async function testDashboardAnalytics(page,output){
   assert.ok(await page.locator('.analytics-month-column .dash-movement-bar').evaluateAll(bars=>Math.max(...bars.map(bar=>bar.getBoundingClientRect().height)))>=180);
   assert.ok(await page.locator('#dashboardTeamAnalysis .analytics-table').evaluate(el=>parseFloat(getComputedStyle(el).fontSize))>=16);
   assert.equal(await page.locator('#dashboardTeamAnalysis tbody img').count(),3);
+  await testDashboardComposition(page);
+  await page.locator('#dashboardComposition').screenshot({path:path.join(output,'dashboard-composition-desktop.png'),style:'body > header { opacity:0; }'});
+  await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
   await page.screenshot({path:path.join(output,'dashboard-analytics-desktop.png'),fullPage:true});
   await page.locator('#dashboardAnalyticsFrom').fill('2026-11-01');await page.locator('#dashboardAnalyticsFrom').dispatchEvent('change');
   await page.locator('#dashboardAnalyticsTeam').selectOption('a');
@@ -38,16 +42,23 @@ module.exports=async function testDashboardAnalytics(page,output){
   for(const width of [820,390,320]){
     await page.setViewportSize({width,height:900});
     await page.evaluate(()=>window.scrollTo(0,0));
-    for(const selector of ['#dashboardAnalytics','#dashboardTeamAnalysis','#dashboardTeamChart','#dashAnnualMovements']){
+    for(const selector of ['#dashboardAnalytics','#dashboardTeamAnalysis','#dashboardTeamChart','#dashAnnualMovements','#dashboardComposition','#dashboardCompositionMatrix']){
       const box=await page.locator(selector).boundingBox();
       assert.ok(box.x>=0 && box.x+box.width<=width+1,selector+' fits '+width);
       assert.equal(await page.locator(selector).evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,selector+' has no content overflow');
     }
     assert.equal(await page.locator('.analytics-kpis>div').evaluateAll(items=>items.every(item=>item.scrollWidth<=item.clientWidth+1)),true);
     assert.ok(await page.locator('.analytics-kpis dd').first().evaluate(el=>parseFloat(getComputedStyle(el).fontSize))>=36);
+    assert.equal(await page.locator('.analytics-composition-label').evaluateAll(items=>items.every(item=>item.scrollWidth<=item.clientWidth+1)),true);
+    await page.locator('[data-composition-view="companies"]').click();
+    assert.equal(await page.locator('#dashboardCompositionMatrix').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+    await page.locator('#dashboardComposition').screenshot({path:path.join(output,`dashboard-composition-${width}.png`),style:'body > header { opacity:0; }'});
+    await page.locator('[data-composition-view="contracts"]').click();
+    await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
     await page.screenshot({path:path.join(output,`dashboard-analytics-${width}.png`),fullPage:true});
   }
   await page.evaluate(()=>setThemePreference('dark'));
+  await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
   await page.screenshot({path:path.join(output,'dashboard-analytics-dark.png'),fullPage:true});
   assert.equal(await page.locator('.dash-movement-entry').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(34, 197, 94)');
   assert.equal(await page.evaluate(()=>JSON.stringify(state)===window.originalState),true);

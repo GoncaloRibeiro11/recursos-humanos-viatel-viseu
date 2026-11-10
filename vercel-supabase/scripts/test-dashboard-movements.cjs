@@ -21,6 +21,10 @@ const fixture=`
     ...Array.from({length:9},(_,i)=>({id:'exit-'+i,name:'Saida '+i,chefeId:'c',role:'vendedor',ativo:false,entrada:'2025-01-01',saida:'2026-06-'+String(i+1).padStart(2,'0')}))
   ],vacations:[],records:{}};
   state.persons.forEach((person,index)=>{if(person.id.startsWith('entry-') && (index-3)%3) person.modeloComissional=index%2?'Modelo Base':'Modelo Variável';});
+  state.persons.forEach((person,index)=>{
+    person.carga=['40h','30h','20h','bolsa_formacao','recibo_verde',''][index%6];
+    person.empresa=index%4===0?' Viatel  ':index%4===1?'viatel':index%4===2?'Triangle Solutions':'';
+  });
   teamHistoryRows=state.persons.map(person=>({person_id:person.id,valid_from:'0001-01-01',valid_to:null,role_code:person.role,chefe_id:person.chefeId || '',person_snapshot:{name:person.name,entrada:person.entrada,ativo:person.ativo}}));
   teamHistoryRows.find(row=>row.person_id==='entry-0').valid_to='2026-11-01';
   teamHistoryRows.push({person_id:'entry-0',valid_from:'2026-11-01',valid_to:null,role_code:'vendedor',chefe_id:'b',person_snapshot:{}});
@@ -28,6 +32,7 @@ const fixture=`
   currentProfile={role:'admin',display_name:'Teste'};
   document.body.classList.add('authenticated','is-admin');document.getElementById('authOverlay').classList.remove('open');
   window.originalState=JSON.stringify(state);Object.defineProperty(window,'testState',{get:()=>state});
+  bolsaOutcomeDismissed=true;
   switchTab('dashboard');
 `;
 const html=original.replace(/^initSupabaseApp\(\);\r?$/m,fixture);
@@ -105,6 +110,8 @@ const server=http.createServer((req,res)=>{
     assert.equal(writes,0);
     await page.evaluate(()=>{state={persons:[],vacations:[],records:{}};teamHistoryRows=[];renderDashboard();});
     assert.equal(await total('balance'),'0');assert.equal(await total('entries'),'0');assert.equal(await total('exits'),'0');
+    assert.equal(await page.locator('[data-composition-total="people"]').textContent(),'0');
+    assert.match(await page.locator('#dashboardCompositionMatrix').textContent(),/Sem colaboradores ativos/);
     assert.match(await page.locator('#dashboardAnalytics').textContent(),/Sem equipas registadas/);
     await testDashboardAnalytics(page,output);
     assert.deepEqual(errors,[]);
