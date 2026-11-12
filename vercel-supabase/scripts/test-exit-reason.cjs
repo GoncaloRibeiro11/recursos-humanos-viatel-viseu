@@ -62,12 +62,12 @@ module.exports=async function testExitReason(page,database,writes,fixture,networ
   assert.match(await row.locator('td[data-label="Saída"]').textContent(),/Iniciativa do colaborador/);
   await row.getByRole('button',{name:'Editar saída',exact:true}).click();
   assert.equal(await page.locator('#exitReasonInput').inputValue(),'iniciativa_colaborador');
-  await page.locator('#exitReasonInput').selectOption('mutuo_acordo');
+  await page.locator('#exitReasonInput').selectOption('abandono_posto_trabalho');
   await page.locator('#exitDateConfirm').click();await saved();
-  assert.equal(person.data.motivoSaida,'mutuo_acordo');
+  assert.equal(person.data.motivoSaida,'abandono_posto_trabalho');
   await page.evaluate(()=>rhUpdate('exit-seller','ativo',true));await saved();
   assert.equal(person.ativo,true);assert.equal(person.saida,null);assert.equal(person.data.motivoSaida,'');
-  assert.ok(person.data.rhMovements.some(movement=>movement.field==='motivoSaida' && movement.from==='mutuo_acordo' && movement.to===''));
+  assert.ok(person.data.rhMovements.some(movement=>movement.field==='motivoSaida' && movement.from==='abandono_posto_trabalho' && movement.to===''));
   await page.evaluate(()=>{currentProfile={role:'gestor',person_id:'history-old'};openExitDateModal('exit-seller');});
   assert.equal(await page.locator('#exitDateModal.open').count(),0);
   assert.equal(JSON.stringify(database.rh_attendance_records),beforeRecords);assert.equal(JSON.stringify(database.rh_vacations),beforeVacations);

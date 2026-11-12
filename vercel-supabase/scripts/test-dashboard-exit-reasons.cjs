@@ -1,0 +1,38 @@
+const assert=require('node:assert/strict');
+
+module.exports=async function testDashboardExitReasons(page){
+  const total=key=>page.locator(`[data-exit-reason-total="${key}"]`).textContent();
+  const details=page.locator('#dashboardMovementDetails');
+  assert.equal(await total('total'),'9');assert.equal(await total('recorded'),'7');assert.equal(await total('missing'),'2');
+  assert.equal(await total('coverage'),'77,8%');
+  assert.deepEqual(await page.locator('#dashboardExitReasons .analytics-composition-value strong').allTextContents(),['4','2','1','2']);
+  assert.doesNotMatch(await page.locator('#dashboardExitReasons').textContent(),/Nota privada/);
+  await page.locator('#dashboardExitReasons [data-reason="abandono_posto_trabalho"]').click();
+  assert.equal(await details.getAttribute('open'),'');
+  assert.equal(await page.locator('#dashboardExitReasonFilter').inputValue(),'abandono_posto_trabalho');
+  assert.equal(await details.locator('tbody tr').count(),2);
+  assert.match(await details.locator('tbody').textContent(),/Saida 4/);assert.match(await details.locator('tbody').textContent(),/Saida 5/);
+  assert.match(await details.locator('tbody').textContent(),/Abandono do posto de trabalho/);
+  await page.locator('#dashboardExitReasonFilter').selectOption('');
+  assert.equal(await details.locator('tbody tr').count(),2);
+  assert.match(await details.locator('tbody').textContent(),/Por preencher/);
+  await page.locator('#dashboardExitReasonFilter').selectOption('*');
+  assert.equal(await details.locator('tbody tr').count(),9);
+  await page.locator('#dashboardAnalyticsTeam').selectOption('a');
+  assert.equal(await total('total'),'0');assert.equal(await total('coverage'),'—');
+  assert.match(await page.locator('#dashboardExitReasons').textContent(),/Sem saídas/);
+  await page.locator('#dashboardAnalyticsTeam').selectOption('c');
+  assert.equal(await total('total'),'9');
+  await page.locator('#dashboardAnalyticsFrom').fill('2026-07-01');await page.locator('#dashboardAnalyticsFrom').dispatchEvent('change');
+  assert.equal(await total('total'),'0');
+  await page.getByRole('button',{name:'Ano',exact:true}).click();
+  await page.locator('#dashboardAnalyticsTeam').selectOption('*');
+  assert.equal(await total('total'),'9');
+  await page.evaluate(()=>{currentProfile={role:'gestor',person_id:'c'};renderDashboard();});
+  assert.equal(await page.locator('#dashboardExitReasons').count(),0);
+  assert.equal(await details.getByRole('columnheader',{name:'Motivo de saída',exact:true}).count(),0);
+  await page.evaluate(()=>{currentProfile={role:'admin',display_name:'Teste'};dashboardAnalyticsEventType='all';dashboardExitReasonFilter=null;dashboardEventsOpen=false;renderDashboard();});
+  assert.equal(await total('total'),'9');
+  assert.equal(await page.evaluate(()=>JSON.stringify(state)===window.originalState),true);
+  console.log(JSON.stringify({exitReasonsTotal:9,recorded:7,missing:2,abandonmentReason:true,drilldown:true,teamFilter:true,periodFilter:true,adminOnly:true,noPrivateNotes:true,readOnly:true}));
+};

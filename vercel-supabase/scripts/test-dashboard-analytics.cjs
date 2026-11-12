@@ -1,6 +1,7 @@
 const assert=require('node:assert/strict');
 const path=require('node:path');
 const testDashboardComposition=require('./test-dashboard-composition.cjs');
+const testDashboardExitReasons=require('./test-dashboard-exit-reasons.cjs');
 
 module.exports=async function testDashboardAnalytics(page,output){
   await page.reload();await page.locator('#dashboardAnalytics').waitFor();
@@ -19,6 +20,8 @@ module.exports=async function testDashboardAnalytics(page,output){
   assert.ok(await page.locator('#dashboardTeamAnalysis .analytics-table').evaluate(el=>parseFloat(getComputedStyle(el).fontSize))>=16);
   assert.equal(await page.locator('#dashboardTeamAnalysis tbody img').count(),3);
   await testDashboardComposition(page);
+  await testDashboardExitReasons(page);
+  await page.locator('#dashboardExitReasons').screenshot({path:path.join(output,'dashboard-exit-reasons-desktop.png'),style:'body > header { opacity:0; }'});
   await page.locator('#dashboardComposition').screenshot({path:path.join(output,'dashboard-composition-desktop.png'),style:'body > header { opacity:0; }'});
   await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
   await page.screenshot({path:path.join(output,'dashboard-analytics-desktop.png'),fullPage:true});
@@ -42,7 +45,7 @@ module.exports=async function testDashboardAnalytics(page,output){
   for(const width of [820,390,320]){
     await page.setViewportSize({width,height:900});
     await page.evaluate(()=>window.scrollTo(0,0));
-    for(const selector of ['#dashboardAnalytics','#dashboardTeamAnalysis','#dashboardTeamChart','#dashAnnualMovements','#dashboardComposition','#dashboardCompositionMatrix']){
+    for(const selector of ['#dashboardAnalytics','#dashboardTeamAnalysis','#dashboardTeamChart','#dashAnnualMovements','#dashboardComposition','#dashboardCompositionMatrix','#dashboardExitReasons']){
       const box=await page.locator(selector).boundingBox();
       assert.ok(box.x>=0 && box.x+box.width<=width+1,selector+' fits '+width);
       assert.equal(await page.locator(selector).evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,selector+' has no content overflow');
@@ -54,10 +57,12 @@ module.exports=async function testDashboardAnalytics(page,output){
     assert.equal(await page.locator('#dashboardCompositionMatrix').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
     await page.locator('#dashboardComposition').screenshot({path:path.join(output,`dashboard-composition-${width}.png`),style:'body > header { opacity:0; }'});
     await page.locator('[data-composition-view="contracts"]').click();
+    await page.locator('#dashboardExitReasons').screenshot({path:path.join(output,`dashboard-exit-reasons-${width}.png`),style:'body > header { opacity:0; }'});
     await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
     await page.screenshot({path:path.join(output,`dashboard-analytics-${width}.png`),fullPage:true});
   }
   await page.evaluate(()=>setThemePreference('dark'));
+  await page.locator('#dashboardExitReasons').screenshot({path:path.join(output,'dashboard-exit-reasons-dark.png'),style:'body > header { opacity:0; }'});
   await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
   await page.screenshot({path:path.join(output,'dashboard-analytics-dark.png'),fullPage:true});
   assert.equal(await page.locator('.dash-movement-entry').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(34, 197, 94)');

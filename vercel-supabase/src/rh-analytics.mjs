@@ -52,6 +52,20 @@ function currentComposition(persons){
     teams:[...teams.values()].map(team=>({...team,contracts:sorted(team.contracts),companies:sorted(team.companies)}))};
 }
 
+function exitReasonSummary(events,persons){
+  const people=new Map(persons.map(person=>[person.id,person])),groups=new Map();
+  for(const event of events){
+    if(event.type!=='exit') continue;
+    const reason=people.get(event.personId)?.motivoSaida;
+    const key=typeof reason==='string'?reason.trim():'';
+    if(!groups.has(key)) groups.set(key,{key,count:0,events:[]});
+    const group=groups.get(key);group.count++;group.events.push(event);
+  }
+  const items=[...groups.values()].sort((a,b)=>Number(!a.key)-Number(!b.key) || b.count-a.count || a.key.localeCompare(b.key,'pt'));
+  const total=items.reduce((sum,group)=>sum+group.count,0),missing=groups.get('')?.count || 0;
+  return {total,recorded:total-missing,missing,coverage:total?(total-missing)/total*100:null,groups:items};
+}
+
 export function workforceAnalytics({persons,history=[],historyEnabled=false,profile=null,from,to,today,teamId=null}){
   if (![from,to,today].every(validDate) || from>to) throw new Error('Confirma as datas do periodo.');
   if((new Date(to+'T12:00:00Z')-new Date(from+'T12:00:00Z'))/86400000>7320) throw new Error('O periodo maximo de analise e de 20 anos.');
@@ -169,5 +183,6 @@ export function workforceAnalytics({persons,history=[],historyEnabled=false,prof
   const models=[...modelGroups.values()].sort((a,b)=>b.count-a.count || a.label.localeCompare(b.label,'pt'));
   const unknown=models.find(model=>model.key==='')?.count || 0;
   return {from,to:end,requestedTo:to,days:dates.length,truncated:to>today,quality,teams:all,total,series:dates.map((date,index)=>({date,count:total.dailyCounts[index]})),
+    exitReasons:!profile || profile.role==='admin'?exitReasonSummary(total.events,persons):null,
     composition:currentComposition(currentPeople),models,currentPeople:currentPeople.map(person=>person.id),modelCoverage:currentPeople.length?(currentPeople.length-unknown)/currentPeople.length*100:null,unknownModels:unknown};
 }

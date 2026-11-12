@@ -502,6 +502,14 @@
   .analytics-composition-table tfoot { font-weight:700; background:var(--surface); }
   .analytics-composition-table .composition-total { font-weight:750; background:var(--surface); }
   .analytics-composition-table th:last-child { color:var(--text); }
+  .analytics-exit-summary { display:flex; gap:28px; flex-wrap:wrap; margin:20px 0 28px; }
+  .analytics-exit-summary>div { min-width:100px; }
+  .analytics-exit-summary dt { font-size:14px; line-height:20px; color:var(--text-muted); }
+  .analytics-exit-summary dd { margin:6px 0 0; font-size:32px; font-weight:750; font-variant-numeric:tabular-nums; }
+  .analytics-exit-bars { max-width:900px; }
+  .analytics-exit-bars .analytics-composition-track i { background:#e05252; }
+  .analytics-exit-bars .is-missing .analytics-composition-track i { background:#8b95a4; }
+  .analytics-exit-bars .analytics-team-button { font-size:16px; overflow-wrap:anywhere; }
   @media (max-width:1100px) { .analytics-composition-grid { grid-template-columns:minmax(0,1fr); gap:24px; } }
   @media (max-width:700px) {
     .analytics-composition-totals { grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 12px; }
@@ -1907,6 +1915,7 @@ const EXIT_REASON_LABELS = {
   decisao_empresa:'Decisão da empresa',
   fim_contrato:'Fim de contrato / bolsa de formação',
   mutuo_acordo:'Mútuo acordo',
+  abandono_posto_trabalho:'Abandono do posto de trabalho',
   outro:'Outro motivo'
 };
 
@@ -1944,6 +1953,7 @@ let dashboardMovementTeam = null;
 let dashboardAnalyticsPeriod = null;
 let dashboardAnalyticsEventType = 'all';
 let dashboardEventsOpen = false;
+let dashboardExitReasonFilter = null;
 let dashboardCompositionView = 'contracts';
 let teamHistoryEnabled = false;
 let teamHistoryRows = [];
@@ -4841,7 +4851,7 @@ function dashMonthBars(months){
 }
 function movementBalance(value){ return value > 0 ? '+' + value : String(value); }
 function movementBalanceClass(value){ return value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral'; }
-function setDashboardMovementTeam(value){ dashboardMovementTeam=value==='*'?null:value; renderDashboard(); }
+function setDashboardMovementTeam(value){ dashboardMovementTeam=value==='*'?null:value; dashboardExitReasonFilter=null; renderDashboard(); }
 function dashStack(parts){
   const total = parts.reduce((sum, p) => sum + p.value, 0);
   if (!total) return '<div class="dash-empty">Ainda não há ausências registadas.</div>';
@@ -4923,7 +4933,7 @@ function setDashboardAnalyticsDate(field,value){
   dashboardAnalyticsPeriod={...dashboardAnalyticsPeriod,[field]:value,preset:'custom'};renderDashboard();
 }
 function inspectDashboardTeam(id,type){
-  dashboardMovementTeam=id;dashboardAnalyticsEventType=type;dashboardEventsOpen=true;renderDashboard();
+  dashboardMovementTeam=id;dashboardAnalyticsEventType=type;dashboardExitReasonFilter=null;dashboardEventsOpen=true;renderDashboard();
   document.getElementById('dashboardMovementDetails')?.scrollIntoView({block:'start',behavior:'smooth'});
 }
 function analyticsTeamName(id){
@@ -4977,6 +4987,21 @@ function dashboardCompositionHtml(composition,today){
     <div class="analytics-composition-cross-title"><h4>Distribuição por equipa</h4><div class="analytics-presets" role="group" aria-label="Distribuição por equipa">${[['contracts','Contratos'],['companies','Empresas']].map(([key,title])=>`<button type="button" data-composition-view="${key}" aria-pressed="${dimension===key}" onclick="dashboardCompositionView='${key}';renderDashboard()">${title}</button>`).join('')}</div></div><div id="dashboardCompositionMatrix">${matrix}</div>
   </section>`;
 }
+function dashboardExitReasonLabel(key){ return key?EXIT_REASON_LABELS[key] || key:'Por preencher'; }
+function inspectDashboardExitReason(key){
+  if(!isAdminUser()) return;
+  dashboardExitReasonFilter=key;dashboardAnalyticsEventType='exit';dashboardEventsOpen=true;renderDashboard();
+  document.getElementById('dashboardMovementDetails')?.scrollIntoView({block:'start',behavior:'smooth'});
+}
+function dashboardExitReasonsHtml(summary,period){
+  if(!isAdminUser() || !summary) return '';
+  const percentage=value=>new Intl.NumberFormat('pt-PT',{maximumFractionDigits:1}).format(value)+'%';
+  const metric=(label,value,key)=>`<div><dt>${label}</dt><dd data-exit-reason-total="${key}">${value}</dd></div>`;
+  return `<section class="analytics-section" id="dashboardExitReasons"><div class="analytics-section-title"><h3>Motivos de saída</h3><span class="analytics-scope-note">${formatDatePt(period.from)} a ${formatDatePt(period.to)}</span></div>
+    <dl class="analytics-exit-summary">${metric('Saídas no período',summary.total,'total')}${metric('Com motivo registado',summary.recorded,'recorded')}${metric('Por preencher',summary.missing,'missing')}${metric('Motivos preenchidos',summary.coverage===null?'—':percentage(summary.coverage),'coverage')}</dl>
+    <div class="analytics-exit-bars">${summary.groups.length?summary.groups.map(group=>`<div class="analytics-composition-row ${group.key?'':'is-missing'}" data-exit-reason="${escHtml(group.key)}"><div class="analytics-composition-label"><span><button type="button" class="analytics-team-button" data-reason="${escHtml(group.key)}" onclick="inspectDashboardExitReason(this.dataset.reason)" title="Consultar saídas: ${escHtml(dashboardExitReasonLabel(group.key))}">${escHtml(dashboardExitReasonLabel(group.key))}</button></span><span class="analytics-composition-value"><strong>${group.count}</strong><small>${percentage(group.count/summary.total*100)}</small></span></div><div class="analytics-composition-track" aria-hidden="true"><i style="width:${group.count/summary.total*100}%"></i></div></div>`).join(''):'<div class="analytics-empty">Sem saídas no período selecionado.</div>'}</div>
+  </section>`;
+}
 function dashboardAnalyticsHtml(){
   const today=lisbonToday();
   if(!dashboardAnalyticsPeriod) dashboardAnalyticsPeriod={from:`${YEAR}-01-01`,to:today<`${YEAR}-12-31`?today:`${YEAR}-12-31`,preset:'year'};
@@ -4994,6 +5019,9 @@ function dashboardAnalyticsHtml(){
   const persons=reportPersons().map(person=>({...person,entrada:normalizeDateValue(person.entrada),saida:normalizeDateValue(person.saida)}));
   const args={persons,history:teamHistoryRows,historyEnabled:teamHistoryEnabled,profile:currentProfile,today,teamId:dashboardMovementTeam};
   const analysis=RhAnalytics.workforceAnalytics({...args,from:period.from,to:period.to});
+  const reasonSummary=isAdminUser()?analysis.exitReasons:null;
+  if(!reasonSummary || (dashboardExitReasonFilter!==null && !reasonSummary.groups.some(group=>group.key===dashboardExitReasonFilter))) dashboardExitReasonFilter=null;
+  const exitReasonKeys=new Map((reasonSummary?.groups || []).flatMap(group=>group.events.map(event=>[event.personId,group.key])));
   const previousPeriod=RhAnalytics.comparisonPeriod(period.from,period.to,period.preset);
   const previous=RhAnalytics.workforceAnalytics({...args,...previousPeriod});
   const value=analysis.total;
@@ -5006,10 +5034,10 @@ function dashboardAnalyticsHtml(){
   </div></div>`).join('');
   const teamRows=ranked.map(team=>`<tr data-analytics-team="${escHtml(team.id)}" data-movement-team="${escHtml(team.id)}" class="${team.id===dashboardMovementTeam?'is-selected':''}"><td>${analyticsTeamButton(team.id)}</td><td class="movement-entry">${analyticsCountButton(team,'entry',team.entries)}</td><td class="movement-exit">${analyticsCountButton(team,'exit',team.exits)}</td><td class="movement-balance ${movementBalanceClass(team.balance)}"><strong>${movementBalance(team.balance)}</strong></td></tr>`).join('');
   const movements=value.events.filter(event=>event.type==='entry' || event.type==='exit');
-  const selected=movements.filter(event=>dashboardAnalyticsEventType==='all' || event.type===dashboardAnalyticsEventType);
+  const selected=movements.filter(event=>(dashboardAnalyticsEventType==='all' || event.type===dashboardAnalyticsEventType) && (dashboardAnalyticsEventType!=='exit' || dashboardExitReasonFilter===null || exitReasonKeys.get(event.personId)===dashboardExitReasonFilter));
   const eventRows=selected.map(event=>{
     const person=reportPerson(event.personId);
-    return `<tr><td>${person?dashPersonHtml(person,32):escHtml(event.personId)}</td><td class="analytics-event-type ${event.type==='entry'?'movement-entry':'movement-exit'}">${event.type==='entry'?'Entrada':'Saída'}</td><td>${escHtml(formatDatePt(event.date))}</td><td>${escHtml(dashboardTeamLabel(event.teamId))}</td></tr>`;
+    return `<tr><td>${person?dashPersonHtml(person,32):escHtml(event.personId)}</td><td class="analytics-event-type ${event.type==='entry'?'movement-entry':'movement-exit'}">${event.type==='entry'?'Entrada':'Saída'}</td><td>${escHtml(formatDatePt(event.date))}</td><td>${escHtml(dashboardTeamLabel(event.teamId))}</td>${reasonSummary?`<td>${event.type==='exit'?escHtml(dashboardExitReasonLabel(exitReasonKeys.get(event.personId) || '')):'—'}</td>`:''}</tr>`;
   }).join('');
   return `<section id="dashboardAnalytics">${controls}
     <div class="analytics-context">Comparação com ${formatDatePt(previousPeriod.from)} a ${formatDatePt(previousPeriod.to)}</div>
@@ -5020,9 +5048,10 @@ function dashboardAnalyticsHtml(){
       <section class="analytics-section" id="dashboardTeamChart"><h3>Comparação de equipas</h3><div class="analytics-chart-legend"><span><i class="entry"></i>Entradas</span><span><i class="exit"></i>Saídas</span></div>${teamBars || '<div class="analytics-empty">Sem equipas registadas.</div>'}</section>
       <section class="analytics-section" id="dashboardTeamAnalysis"><h3>Resumo por equipa</h3>${teamRows?`<div class="analytics-table-wrap"><table class="analytics-table"><thead><tr><th>Equipa</th><th>Entradas</th><th>Saídas</th><th>Saldo</th></tr></thead><tbody>${teamRows}</tbody></table></div>`:'<div class="analytics-empty">Sem equipas registadas.</div>'}</section>
     </div>
+    ${dashboardExitReasonsHtml(reasonSummary,period)}
     <details class="analytics-section analytics-movements" id="dashboardMovementDetails" ${dashboardEventsOpen?'open':''} ontoggle="dashboardEventsOpen=this.open"><summary>Entradas e saídas do período (${movements.length})</summary>
-      <div class="analytics-controls"><label for="dashboardAnalyticsEventType">Movimento<select id="dashboardAnalyticsEventType" onchange="dashboardAnalyticsEventType=this.value;renderDashboard()">${[['all','Todos'],['entry','Entradas'],['exit','Saídas']].map(([key,label])=>`<option value="${key}" ${dashboardAnalyticsEventType===key?'selected':''}>${label}</option>`).join('')}</select></label></div>
-      ${eventRows?`<div class="analytics-events"><table class="analytics-table"><thead><tr><th>Colaborador</th><th>Movimento</th><th>Data</th><th>Equipa na data</th></tr></thead><tbody>${eventRows}</tbody></table></div>`:'<div class="analytics-empty">Sem entradas ou saídas nesta seleção.</div>'}
+      <div class="analytics-controls"><label for="dashboardAnalyticsEventType">Movimento<select id="dashboardAnalyticsEventType" onchange="dashboardAnalyticsEventType=this.value;dashboardExitReasonFilter=null;renderDashboard()">${[['all','Todos'],['entry','Entradas'],['exit','Saídas']].map(([key,label])=>`<option value="${key}" ${dashboardAnalyticsEventType===key?'selected':''}>${label}</option>`).join('')}</select></label>${reasonSummary && dashboardAnalyticsEventType==='exit'?`<label for="dashboardExitReasonFilter">Motivo de saída<select id="dashboardExitReasonFilter" onchange="dashboardExitReasonFilter=this.value==='*'?null:this.value;renderDashboard()"><option value="*">Todos os motivos</option>${reasonSummary.groups.map(group=>`<option value="${escHtml(group.key)}" ${dashboardExitReasonFilter===group.key?'selected':''}>${escHtml(dashboardExitReasonLabel(group.key))} (${group.count})</option>`).join('')}</select></label>`:''}</div>
+      ${eventRows?`<div class="analytics-events"><table class="analytics-table"><thead><tr><th>Colaborador</th><th>Movimento</th><th>Data</th><th>Equipa na data</th>${reasonSummary?'<th>Motivo de saída</th>':''}</tr></thead><tbody>${eventRows}</tbody></table></div>`:'<div class="analytics-empty">Sem entradas ou saídas nesta seleção.</div>'}
     </details>
   </section>`;
 }

@@ -25,6 +25,10 @@ const fixture=`
     person.carga=['40h','30h','20h','bolsa_formacao','recibo_verde',''][index%6];
     person.empresa=index%4===0?' Viatel  ':index%4===1?'viatel':index%4===2?'Triangle Solutions':'';
   });
+  state.persons.filter(person=>person.id.startsWith('exit-')).forEach((person,index)=>{
+    person.motivoSaida=index<4?'iniciativa_colaborador':index<6?'abandono_posto_trabalho':index===6?'mutuo_acordo':'';
+    person.observacoesSaida='Nota privada de teste';
+  });
   teamHistoryRows=state.persons.map(person=>({person_id:person.id,valid_from:'0001-01-01',valid_to:null,role_code:person.role,chefe_id:person.chefeId || '',person_snapshot:{name:person.name,entrada:person.entrada,ativo:person.ativo}}));
   teamHistoryRows.find(row=>row.person_id==='entry-0').valid_to='2026-11-01';
   teamHistoryRows.push({person_id:'entry-0',valid_from:'2026-11-01',valid_to:null,role_code:'vendedor',chefe_id:'b',person_snapshot:{}});

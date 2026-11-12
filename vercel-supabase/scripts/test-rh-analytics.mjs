@@ -126,3 +126,34 @@ test('contagens vazias, campos em falta e nomes especiais nao perdem registos',(
   assert.equal(result.contracts.find(group=>group.key==='').count,1);
   assert.equal(result.contracts.find(group=>group.key==='outro').count,1);
 });
+
+test('motivos de saida reconciliam com as saidas do periodo sem inventar os antigos',()=>{
+  const persons=[
+    person('one',{saida:'2026-11-01',ativo:false,motivoSaida:'iniciativa_colaborador',observacoesSaida:'Nota privada'}),
+    person('two',{saida:'2026-11-02',ativo:false,motivoSaida:'abandono_posto_trabalho'}),
+    person('three',{saida:'2026-11-02',ativo:false,motivoSaida:'abandono_posto_trabalho'}),
+    person('old',{saida:'2026-11-01',ativo:false}),
+    person('before',{saida:'2026-10-31',ativo:false,motivoSaida:'fim_contrato'}),
+    person('future',{saida:'2026-11-20',motivoSaida:'outro'}),
+    person('active',{motivoSaida:'decisao_empresa'}),
+  ];
+  const original=JSON.stringify(persons),result=workforceAnalytics({...base,persons});
+  assert.equal(result.exitReasons.total,result.total.exits);assert.equal(result.exitReasons.total,4);
+  assert.equal(result.exitReasons.recorded,3);assert.equal(result.exitReasons.missing,1);assert.equal(result.exitReasons.coverage,75);
+  assert.deepEqual(result.exitReasons.groups.map(group=>[group.key,group.count]),[['abandono_posto_trabalho',2],['iniciativa_colaborador',1],['',1]]);
+  assert.equal(result.exitReasons.groups.reduce((sum,group)=>sum+group.count,0),4);
+  assert.doesNotMatch(JSON.stringify(result.exitReasons),/Nota privada|observacoesSaida/);
+  assert.equal(JSON.stringify(persons),original);
+  const empty=workforceAnalytics({...base,from:'2026-09-01',to:'2026-09-30',persons}).exitReasons;
+  assert.deepEqual(empty,{total:0,recorded:0,missing:0,coverage:null,groups:[]});
+});
+
+test('motivo de saida segue a equipa na data da saida e permanece privado para gestores',()=>{
+  const persons=[person('left',{chefeId:'b',saida:'2026-11-01',ativo:false,motivoSaida:'mutuo_acordo'})];
+  const history=[row('left','a','0001-01-01','2026-11-02'),row('left','b','2026-11-02')];
+  const args={...base,persons,history,historyEnabled:true};
+  assert.equal(workforceAnalytics({...args,teamId:'a'}).exitReasons.total,1);
+  assert.equal(workforceAnalytics({...args,teamId:'b'}).exitReasons.total,0);
+  const manager=workforceAnalytics({...args,profile:{role:'gestor',person_id:'a'}});
+  assert.equal(manager.total.exits,1);assert.equal(manager.exitReasons,null);
+});
