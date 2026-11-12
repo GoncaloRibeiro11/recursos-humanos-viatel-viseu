@@ -7,6 +7,7 @@ const testVacationSync = require('./test-vacation-sync.cjs');
 const { historyFixture, testTeamHistory } = require('./test-team-history-browser.cjs');
 const { teamChangeRpc,testTeamChanges } = require('./test-team-changes-browser.cjs');
 const testCommissionModel=require('./test-commission-model.cjs');
+const testExitReason=require('./test-exit-reason.cjs');
 
 const root = path.resolve(__dirname,'../public');
 const headers = JSON.parse(fs.readFileSync(path.join(root,'../vercel.json'),'utf8')).headers[0].headers;
@@ -145,6 +146,10 @@ const server = http.createServer(async (req,res) => {
     await testTeamHistory(page, database, writes, teamFixture);
     await testTeamChanges(page, database, writes, teamFixture);
     await testCommissionModel(page,database,writes);
+    await testExitReason(page,database,writes,teamFixture,{
+      pause:()=>{paused=true;},
+      resume:()=>{paused=false;waiting.splice(0).forEach(resolve=>resolve());}
+    });
     assert.deepEqual(pageErrors,[]);
     await page.getByRole('button',{ name:'🗓️ Assiduidade', exact:true }).click();
     await page.screenshot({ path:path.resolve(root,'../../../../recovery/immediate-save-desktop.png') });

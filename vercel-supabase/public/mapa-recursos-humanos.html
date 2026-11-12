@@ -978,8 +978,19 @@
   .bolsa-outcome-meta { font-size: 12px; color: #9a3412; margin-top: 3px; }
   .bolsa-outcome-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .bolsa-outcome-actions .btn { padding: 7px 10px; font-size: 12px; white-space: nowrap; }
-  .exit-date-modal { width: 420px; max-width: calc(100vw - 24px); }
+  .exit-date-modal { width: 480px; max-width: calc(100vw - 24px); overflow-y:auto; display:block; border-radius:8px; }
   .exit-date-help { color: var(--text-muted); font-size: 12px; line-height: 1.45; margin-top: 8px; }
+  #exitDateForm { display:flex; flex-direction:column; gap:14px; margin-top:16px; }
+  #exitDateForm input,#exitDateForm select,#exitDateForm textarea { width:100%; min-width:0; color:var(--text); background:var(--surface); }
+  #exitDateForm textarea { resize:vertical; min-height:90px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font:inherit; font-size:14px; }
+  #exitDateForm textarea:focus { outline:2px solid var(--accent); outline-offset:1px; }
+  #exitDateForm .modal-actions { flex-wrap:wrap; margin-top:0; }
+  #exitDateError { color:#b91c1c; font-size:13px; line-height:1.4; }
+  #exitDateError:empty { display:none; }
+  body.theme-dark #exitDateError { color:#fca5a5; }
+  body.theme-dark #exitDateInput { color-scheme:dark; }
+  .rh-exit-reason { display:block; margin-top:5px; font-size:11px; color:var(--text-muted); overflow-wrap:anywhere; }
+  .rh-exit-edit { margin-top:5px; border:0; padding:0; font:inherit; font-size:12px; color:var(--accent); background:transparent; cursor:pointer; }
 
   .mgmt-list { flex: 1; overflow-y: auto; margin: 12px 0; }
   .mgmt-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
@@ -1591,19 +1602,18 @@
 
 <!-- EXIT DATE MODAL -->
 <div class="modal-overlay" id="exitDateModal">
-  <div class="modal exit-date-modal">
-    <h2>Data de saída obrigatória</h2>
+  <div class="modal exit-date-modal" role="dialog" aria-modal="true" aria-labelledby="exitDateTitle" aria-describedby="exitDateHelp">
+    <h2 id="exitDateTitle">Registar saída</h2>
     <div class="exit-date-help" id="exitDateHelp">
       Indica a data de saída para inativar este colaborador.
     </div>
-    <div class="form-group" style="margin-top:16px">
-      <label>Data de saída</label>
-      <input type="date" id="exitDateInput">
-    </div>
-    <div class="modal-actions">
-      <button class="btn" onclick="cancelExitDate()">Cancelar</button>
-      <button class="btn btn-primary" onclick="confirmExitDate()">Confirmar inativação</button>
-    </div>
+    <form id="exitDateForm" novalidate onsubmit="event.preventDefault();confirmExitDate()">
+      <div class="form-group"><label for="exitDateInput">Data de saída</label><input type="date" id="exitDateInput" required aria-describedby="exitDateError"></div>
+      <div class="form-group"><label for="exitReasonInput" id="exitReasonLabel">Motivo de saída</label><select id="exitReasonInput" onchange="updateExitReasonDetails()" aria-describedby="exitDateError"></select></div>
+      <div class="form-group"><label for="exitNotesInput" id="exitNotesLabel">Observações (opcional)</label><textarea id="exitNotesInput" rows="3" maxlength="500" aria-describedby="exitDateError"></textarea></div>
+      <div id="exitDateError" role="alert"></div>
+      <div class="modal-actions"><button type="button" class="btn" onclick="cancelExitDate()">Cancelar</button><button type="submit" class="btn btn-primary" id="exitDateConfirm">Confirmar saída</button></div>
+    </form>
   </div>
 </div>
 
@@ -1892,6 +1902,13 @@ const CARGAS = [
   { value:'recibo_verde', label:'Recibo verde' },
 ];
 const CARGA_LABELS = Object.fromEntries(CARGAS.filter(c => c.value).map(c => [c.value, c.label]));
+const EXIT_REASON_LABELS = {
+  iniciativa_colaborador:'Iniciativa do colaborador',
+  decisao_empresa:'Decisão da empresa',
+  fim_contrato:'Fim de contrato / bolsa de formação',
+  mutuo_acordo:'Mútuo acordo',
+  outro:'Outro motivo'
+};
 
 const YEAR = 2026;
 const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -2004,12 +2021,13 @@ function normalizePerson(p){
 const RH_MOVEMENT_LABELS = {
   name:'Nome', role:'Função', chefeId:'Chefe de equipa', empresa:'Empresa/contrato',
   carga:'Carga horária/contrato', ativo:'Estado', entrada:'Data de entrada',
-  saida:'Data de saída', telefone:'Telefone', agv:'N.º AGV', nascimento:'Data de nascimento'
+  saida:'Data de saída', motivoSaida:'Motivo de saída', observacoesSaida:'Observações de saída', telefone:'Telefone', agv:'N.º AGV', nascimento:'Data de nascimento'
 };
 function rhMovementValue(field, value){
   if (value === undefined || value === null || value === '') return 'Sem informação';
   if (field === 'role') return ROLE_LABELS[value] || value;
   if (field === 'carga') return CARGA_LABELS[value] || value;
+  if (field === 'motivoSaida') return EXIT_REASON_LABELS[value] || value;
   if (field === 'chefeId') return state.persons.find(p => p.id === value)?.name || 'Sem chefe';
   if (field === 'ativo') return value ? 'Ativo' : 'Inativo';
   if (field === 'entrada' || field === 'saida' || field === 'nascimento') return formatDatePt(normalizeDateValue(value)) || value;
@@ -5379,15 +5397,32 @@ function upcomingBirthdays(limit = 30){
     .filter(x => x.days <= limit)
     .sort((a,b) => a.days - b.days || a.person.name.localeCompare(b.person.name));
 }
-function openExitDateModal(personId){
+function updateExitReasonDetails(){
+  const other=document.getElementById('exitReasonInput').value==='outro';
+  document.getElementById('exitNotesInput').required=other;
+  document.getElementById('exitNotesLabel').textContent=other?'Indica o motivo (obrigatório)':'Observações (opcional)';
+  document.getElementById('exitDateError').textContent='';
+}
+function openExitDateModal(personId,initialDate){
+  if (!requireAdminAction()) return;
   const person = state.persons.find(p => p.id === personId);
   if (!person) return;
   pendingExitPersonId = personId;
   const input = document.getElementById('exitDateInput');
   const help = document.getElementById('exitDateHelp');
-  if (help) help.textContent = `Indica a data de saída para inativar ${person.name}.`;
+  if (help) help.textContent = person.ativo===false?`Saída de ${person.name}.`:`Regista a saída de ${person.name}.`;
+  document.getElementById('exitDateTitle').textContent=person.ativo===false?'Dados de saída':'Registar saída';
+  document.getElementById('exitDateConfirm').textContent=person.ativo===false?'Guardar alterações':'Confirmar saída';
+  const reason=document.getElementById('exitReasonInput');
+  reason.innerHTML='<option value="">Selecionar motivo...</option>'+Object.entries(EXIT_REASON_LABELS).map(([value,label])=>`<option value="${value}">${escHtml(label)}</option>`).join('');
+  reason.value=person.motivoSaida || '';
+  reason.required=person.role==='vendedor';
+  document.getElementById('exitReasonLabel').textContent=reason.required?'Motivo de saída (obrigatório)':'Motivo de saída (opcional)';
+  document.getElementById('exitNotesInput').value=person.observacoesSaida || '';
+  updateExitReasonDetails();
+  [input,reason,document.getElementById('exitNotesInput')].forEach(field=>field.removeAttribute('aria-invalid'));
   if (input){
-    input.value = normalizeDateValue(person.saida) || todayIso();
+    input.value = normalizeDateValue(initialDate===undefined?person.saida:initialDate) || todayIso();
     input.min = normalizeDateValue(person.entrada) || '';
     setTimeout(() => input.focus(), 50);
   }
@@ -5399,25 +5434,38 @@ function cancelExitDate(){
   renderAll();
 }
 function confirmExitDate(){
+  if (!requireAdminAction()) return;
   const person = state.persons.find(p => p.id === pendingExitPersonId);
   const input = document.getElementById('exitDateInput');
   const saida = normalizeDateValue(input ? input.value : '');
   if (!person) return;
+  const reason=document.getElementById('exitReasonInput'),notes=document.getElementById('exitNotesInput');
+  const motivo=reason.value,observacoes=notes.value.trim();
+  const fail=(message,field)=>{document.getElementById('exitDateError').textContent=message;field.setAttribute('aria-invalid','true');field.focus();};
+  [input,reason,notes].forEach(field=>field.removeAttribute('aria-invalid'));
   if (!saida){
-    alert('Tens de preencher a data de saída.');
-    if (input) input.focus();
+    fail('Tens de preencher a data de saída.',input);
     return;
   }
   const entrada = normalizeDateValue(person.entrada);
   if (entrada && saida < entrada){
-    alert('A data de saída não pode ser anterior à data de entrada.');
-    if (input) input.focus();
+    fail('A data de saída não pode ser anterior à data de entrada.',input);
     return;
+  }
+  if ((person.role==='vendedor' && !motivo) || (motivo && !Object.hasOwn(EXIT_REASON_LABELS,motivo))){
+    fail('Seleciona o motivo de saída.',reason);return;
+  }
+  if ((motivo==='outro' && !observacoes) || observacoes.length>500){
+    fail(observacoes.length>500?'As observações podem ter no máximo 500 caracteres.':'Indica o motivo de saída nas observações.',notes);return;
   }
   recordRhMovement(person, 'ativo', person.ativo !== false, false, 'Saída/Inativação');
   recordRhMovement(person, 'saida', person.saida || '', saida, 'Data de saída');
+  recordRhMovement(person, 'motivoSaida', person.motivoSaida || '', motivo);
+  recordRhMovement(person, 'observacoesSaida', person.observacoesSaida || '', observacoes);
   person.ativo = false;
   person.saida = saida;
+  person.motivoSaida = motivo;
+  person.observacoesSaida = observacoes;
   pendingExitPersonId = null;
   rhShowInactive = true;
   document.getElementById('exitDateModal')?.classList.remove('open');
@@ -5511,7 +5559,7 @@ function renderRH(){
       const saidaParaCalculo = ativo ? '' : saida;
       const saidaField = ativo
         ? rhRead('')
-        : (isEditing ? `<input class="rh-input" type="date" value="${escHtml(saida)}" onchange="rhUpdate('${p.id}','saida',this.value)">` : rhRead(formatDatePt(saida)));
+        : rhRead(formatDatePt(saida))+(p.motivoSaida?`<span class="rh-exit-reason" title="${escHtml(p.observacoesSaida || '')}">${escHtml(EXIT_REASON_LABELS[p.motivoSaida] || p.motivoSaida)}</span>`:'')+(isEditing?`<button type="button" class="rh-exit-edit" onclick="openExitDateModal('${p.id}')">Editar saída</button>`:'');
       const tempoCasa = tenureText(entrada, saidaParaCalculo);
       const tempoClass = entrada ? 'rh-tenure' : 'rh-tenure muted';
       const photoAction = isEditing ? `onclick="pickPhoto('${p.id}')"` : '';
@@ -5608,6 +5656,9 @@ function rhUpdate(id, field, value){
     if ((p[field] || '') !== value) openTeamChanges(id,{[field]:value});
     renderRH(); return;
   }
+  if (field==='saida' || field==='motivoSaida' || field==='observacoesSaida'){
+    openExitDateModal(id,field==='saida'?value:undefined);renderRH();return;
+  }
   const previousValue = p[field];
   let movementType = '';
   if (field === 'ativo') {
@@ -5617,6 +5668,9 @@ function rhUpdate(id, field, value){
       p.saida = '';
       movementType = 'Reativação';
       recordRhMovement(p, 'saida', previousExit, '', 'Remoção da data de saída');
+      for (const field of ['motivoSaida','observacoesSaida']){
+        recordRhMovement(p,field,p[field] || '','', 'Reativação');p[field]='';
+      }
     } else {
       openExitDateModal(id);
       renderRH();
