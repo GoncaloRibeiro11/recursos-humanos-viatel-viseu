@@ -1,5 +1,9 @@
 {
   "version": 2,
+  "crons": [{"path":"/api/telegram-anniversaries","schedule":"0 9 * * *"}],
+  "functions": {
+    "api/telegram-*.js": {"includeFiles":["assets/fonts/**","public/viatel.svg","public/Logo_MEO.svg.webp","src/anniversary-card.mjs"],"maxDuration":300}
+  },
   "headers": [
     {
       "source": "/(.*)",

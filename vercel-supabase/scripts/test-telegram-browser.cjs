@@ -1,0 +1,42 @@
+const assert=require('node:assert/strict');
+const path=require('node:path');
+const fs=require('node:fs');
+module.exports=async function testTelegramBrowser(page,mock){
+  const before=await page.evaluate(()=>JSON.stringify(state));
+  await page.evaluate(()=>openTelegramModal());
+  await page.getByText('Liga a tua conversa privada ao bot.',{exact:true}).waitFor();
+  await page.locator('#telegramPair').click();
+  await page.locator('#telegramPairArea:not([hidden])').waitFor();
+  assert.match(await page.locator('#telegramPairLink').getAttribute('href'),/^https:\/\/t.me\/viatelviseubot\?start=/);
+  await page.locator('#telegramVerify').click();
+  await page.getByText('Ligação ativa.',{exact:true}).waitFor();
+  assert.match(await page.locator('#telegramSummary').textContent(),/Administrador de teste/);
+  assert.equal(await page.locator('#telegramEnabled').isChecked(),true);
+  await page.locator('#telegramTest').click();await page.getByText('Imagem de teste enviada.',{exact:true}).waitFor();
+  await page.locator('#telegramToday').click();await page.getByText('1 imagem(ns) enviada(s). 0 já tratada(s).',{exact:true}).waitFor();
+  await page.locator('#telegramEnabled').uncheck();await page.getByText('Avisos pausados.',{exact:true}).waitFor();
+  await page.locator('#telegramEnabled').check();await page.getByText('Ligação ativa.',{exact:true}).waitFor();
+  for(const width of [1440,390,320]){
+    await page.setViewportSize({width,height:width===320?568:900});
+    const modal=page.locator('#telegramModal .modal'),box=await modal.boundingBox();
+    assert.ok(box.x>=0 && box.x+box.width<=width+1);
+    assert.equal(await modal.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+    await page.screenshot({path:path.resolve(__dirname,`../../../../recovery/telegram-settings-${width}.png`)});
+  }
+  await page.evaluate(()=>setThemePreference('dark'));
+  await page.screenshot({path:path.resolve(__dirname,'../../../../recovery/telegram-settings-dark.png')});
+  await page.evaluate(()=>{setThemePreference('light');closeModal('telegramModal');});
+  const image=await page.evaluate(async()=>{const canvas=await buildWorkAnniversaryImage({person:{name:'Teste Gonçalves'},years:5});return canvas.toDataURL('image/png');});
+  fs.writeFileSync(path.resolve(__dirname,'../../../../recovery/anniversary-browser-shared.png'),Buffer.from(image.split(',')[1],'base64'));
+  mock.state.cronConfigured=false;
+  await page.evaluate(()=>openTelegramModal());await page.getByText(/Falta CRON_SECRET/).waitFor();
+  assert.equal(await page.locator('#telegramToday').isDisabled(),true);
+  await page.evaluate(()=>{closeModal('telegramModal');currentProfile={role:'gestor',person_id:'history-old'};openTelegramModal();});
+  assert.equal(await page.locator('#telegramModal.open').count(),0);
+  await page.evaluate(()=>{currentProfile={role:'admin',person_id:'test-person',display_name:'Teste'};});
+  mock.state.cronConfigured=true;
+  assert.equal(await page.evaluate(()=>JSON.stringify(state)),before);
+  assert.deepEqual(mock.actions,['pair','verify','test','send-today','pause','resume']);
+  await page.setViewportSize({width:1440,height:900});
+  console.log(JSON.stringify({telegramSettings:true,privatePairing:true,testImage:true,todayCommand:true,pauseResume:true,missingConfigBlocked:true,mobile320:true,darkTheme:true,sharedCardRenderer:true,employeeDataUnchanged:true}));
+};
