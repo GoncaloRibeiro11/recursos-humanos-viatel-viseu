@@ -510,6 +510,49 @@
   .analytics-exit-bars .analytics-composition-track i { background:#e05252; }
   .analytics-exit-bars .is-missing .analytics-composition-track i { background:#8b95a4; }
   .analytics-exit-bars .analytics-team-button { font-size:16px; overflow-wrap:anywhere; }
+  .attendance-code-FI { --attendance-color:#b91c1c; }
+  .attendance-code-FJ { --attendance-color:#a45a08; }
+  .attendance-code-B { --attendance-color:#7440c4; }
+  .attendance-code-FE { --attendance-color:#087da8; }
+  body.theme-dark .attendance-code-FI { --attendance-color:#fca5a5; }
+  body.theme-dark .attendance-code-FJ { --attendance-color:#fbbf24; }
+  body.theme-dark .attendance-code-B { --attendance-color:#c4b5fd; }
+  body.theme-dark .attendance-code-FE { --attendance-color:#7dd3fc; }
+  #dashboardAttendance { padding-top:16px; }
+  .attendance-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin:0 0 26px; }
+  .attendance-metric { min-width:0; border:1px solid var(--border); border-top:4px solid var(--attendance-color); border-radius:8px; padding:18px; background:var(--surface); }
+  .attendance-metric.attendance-code-FI { background:#fff1f2; border-color:#fecdd3; border-top-color:var(--attendance-color); }
+  body.theme-dark .attendance-metric.attendance-code-FI { background:#2d1c24; border-color:#663143; border-top-color:var(--attendance-color); }
+  .attendance-metric dt { font-size:14px; line-height:20px; min-height:40px; color:var(--text-muted); }
+  .attendance-metric dd { margin:8px 0; }
+  .attendance-metric dd button { padding:0; border:0; background:transparent; color:var(--attendance-color); cursor:pointer; font:inherit; font-size:42px; line-height:1.1; font-weight:750; font-variant-numeric:tabular-nums; }
+  .attendance-metric small { color:var(--text-muted); font-size:13px; line-height:18px; display:block; }
+  .attendance-overview { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:32px; }
+  .attendance-overview>div { min-width:0; }
+  .attendance-overview h4 { font-size:18px; margin:0 0 14px; }
+  .attendance-fi-heading { color:var(--attendance-color); }
+  .attendance-fi-list { max-height:380px; overflow-y:auto; }
+  .attendance-fi-row { display:grid; grid-template-columns:minmax(0,1fr) 62px; gap:12px; width:100%; text-align:left; padding:14px 0; min-height:86px; background:transparent; border:0; border-bottom:1px solid var(--border); font:inherit; color:var(--text); cursor:pointer; }
+  .attendance-fi-row:hover .dash-person-name { color:var(--attendance-color); }
+  .attendance-fi-person { min-width:0; }
+  .attendance-fi-person .dash-person { font-size:16px; white-space:normal; }
+  .attendance-fi-person .dash-person-name { white-space:normal; overflow-wrap:anywhere; }
+  .attendance-fi-meta { display:block; color:var(--text-muted); font-size:12px; line-height:18px; margin:6px 0 0 43px; overflow-wrap:anywhere; }
+  .attendance-fi-days { color:var(--attendance-color); font-variant-numeric:tabular-nums; text-align:right; align-self:center; }
+  .attendance-fi-days strong { display:block; font-size:28px; line-height:32px; }
+  .attendance-fi-days small { font-size:12px; }
+  .attendance-count { border:0; background:transparent; padding:4px; min-width:24px; cursor:pointer; color:var(--attendance-color); font:inherit; font-weight:700; }
+  .attendance-team-table tfoot { background:var(--surface); font-weight:700; }
+  .attendance-type { color:var(--attendance-color); font-weight:650; }
+  #dashboardAttendanceDetails { margin-top:24px; padding-top:20px; border-top:1px solid var(--border); scroll-margin-top:100px; }
+  #dashboardAttendanceDetails>summary { cursor:pointer; font-size:17px; font-weight:650; }
+  .attendance-details-note { margin:16px 0 0; font-size:13px; color:var(--text-muted); }
+  @media(max-width:1100px) { .attendance-overview { grid-template-columns:minmax(0,1fr); gap:24px; } }
+  @media(max-width:700px) {
+    .attendance-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .attendance-metric { padding:14px; }
+    .attendance-metric dd button { font-size:36px; }
+  }
   @media (max-width:1100px) { .analytics-composition-grid { grid-template-columns:minmax(0,1fr); gap:24px; } }
   @media (max-width:700px) {
     .analytics-composition-totals { grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 12px; }
@@ -1981,6 +2024,9 @@ let dashboardMovementTeam = null;
 let dashboardAnalyticsPeriod = null;
 let dashboardAnalyticsEventType = 'all';
 let dashboardEventsOpen = false;
+let dashboardAttendanceOpen = false;
+let dashboardAttendanceCode = 'all';
+let dashboardAttendancePerson = null;
 let dashboardExitReasonFilter = null;
 let dashboardCompositionView = 'contracts';
 let teamHistoryEnabled = false;
@@ -4936,7 +4982,7 @@ function dashMonthBars(months){
 }
 function movementBalance(value){ return value > 0 ? '+' + value : String(value); }
 function movementBalanceClass(value){ return value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral'; }
-function setDashboardMovementTeam(value){ dashboardMovementTeam=value==='*'?null:value; dashboardExitReasonFilter=null; renderDashboard(); }
+function setDashboardMovementTeam(value){ dashboardMovementTeam=value==='*'?null:value; dashboardExitReasonFilter=null; dashboardAttendancePerson=null; renderDashboard(); }
 function dashStack(parts){
   const total = parts.reduce((sum, p) => sum + p.value, 0);
   if (!total) return '<div class="dash-empty">Ainda não há ausências registadas.</div>';
@@ -5087,6 +5133,34 @@ function dashboardExitReasonsHtml(summary,period){
     <div class="analytics-exit-bars">${summary.groups.length?summary.groups.map(group=>`<div class="analytics-composition-row ${group.key?'':'is-missing'}" data-exit-reason="${escHtml(group.key)}"><div class="analytics-composition-label"><span><button type="button" class="analytics-team-button" data-reason="${escHtml(group.key)}" onclick="inspectDashboardExitReason(this.dataset.reason)" title="Consultar saídas: ${escHtml(dashboardExitReasonLabel(group.key))}">${escHtml(dashboardExitReasonLabel(group.key))}</button></span><span class="analytics-composition-value"><strong>${group.count}</strong><small>${percentage(group.count/summary.total*100)}</small></span></div><div class="analytics-composition-track" aria-hidden="true"><i style="width:${group.count/summary.total*100}%"></i></div></div>`).join(''):'<div class="analytics-empty">Sem saídas no período selecionado.</div>'}</div>
   </section>`;
 }
+function inspectDashboardAttendance(code,teamId,personId){
+  if(teamId!==undefined) dashboardMovementTeam=teamId;
+  dashboardAttendanceCode=code;dashboardAttendancePerson=personId || null;dashboardAttendanceOpen=true;renderDashboard();
+  document.getElementById('dashboardAttendanceDetails')?.scrollIntoView({block:'start',behavior:'smooth'});
+}
+function dashboardAttendanceHtml(summary,period){
+  const types=[['FI','Faltas injustificadas'],['FJ','Faltas justificadas'],['B','Baixa médica'],['FE','Férias']];
+  const label=code=>types.find(item=>item[0]===code)?.[1] || code;
+  if(!['all',...types.map(item=>item[0])].includes(dashboardAttendanceCode)) dashboardAttendanceCode='all';
+  const ids=[...new Set(summary.events.map(event=>event.personId))];
+  if(dashboardAttendancePerson!==null && !ids.includes(dashboardAttendancePerson)) dashboardAttendancePerson=null;
+  const metrics=types.map(([code,title])=>`<div class="attendance-metric attendance-code-${code}"><dt>${title}</dt><dd><button type="button" data-attendance-total="${code}" onclick="inspectDashboardAttendance('${code}')" title="Consultar dias de ${title.toLocaleLowerCase('pt')}">${summary.total[code]}</button></dd><small>dias · ${summary.peopleCounts[code]} ${summary.peopleCounts[code]===1?'colaborador':'colaboradores'}</small></div>`).join('');
+  const fiRows=summary.people.filter(group=>group.FI).map(group=>{
+    const person=reportPerson(group.personId);
+    return `<button type="button" class="attendance-fi-row attendance-code-FI" data-attendance-person="${escHtml(group.personId)}" data-team="${escHtml(group.teamId)}" onclick="inspectDashboardAttendance('FI',this.dataset.team,this.dataset.attendancePerson)" title="${escHtml('Consultar faltas injustificadas de '+(person?.name || group.personId))}"><span class="attendance-fi-person">${person?dashPersonHtml(person,36):escHtml(group.personId)}<span class="attendance-fi-meta">${escHtml(dashboardTeamLabel(group.teamId))}<br>Última ocorrência: ${formatDatePt(group.lastFI)}</span></span><span class="attendance-fi-days"><strong>${group.FI}</strong><small>${group.FI===1?'dia':'dias'}</small></span></button>`;
+  }).join('');
+  const count=(group,code)=>group[code]?`<button type="button" class="attendance-count" data-team="${escHtml(group.id)}" onclick="inspectDashboardAttendance('${code}',this.dataset.team)" title="${escHtml('Consultar '+label(code).toLocaleLowerCase('pt')+' da equipa '+dashboardTeamLabel(group.id))}">${group[code]}</button>`:'0';
+  const teamRows=summary.teams.map(group=>`<tr data-attendance-team="${escHtml(group.id)}"><td>${analyticsTeamButton(group.id)}</td>${types.map(([code])=>`<td class="attendance-type attendance-code-${code}">${count(group,code)}</td>`).join('')}</tr>`).join('');
+  const selected=summary.events.filter(event=>(dashboardAttendanceCode==='all' || event.code===dashboardAttendanceCode) && (dashboardAttendancePerson===null || event.personId===dashboardAttendancePerson));
+  const eventRows=selected.map(event=>`<tr data-attendance-event="${escHtml(event.personId+'|'+event.date)}"><td>${reportPerson(event.personId)?dashPersonHtml(reportPerson(event.personId),32):escHtml(event.personId)}</td><td>${formatDatePt(event.date)}</td><td class="attendance-type attendance-code-${event.code}">${escHtml(label(event.code))}</td><td>${escHtml(dashboardTeamLabel(event.teamId))}</td></tr>`).join('');
+  const personOptions=ids.map(id=>({id,name:reportPerson(id)?.name || id})).sort((a,b)=>a.name.localeCompare(b.name,'pt')).map(person=>`<option value="${escHtml(person.id)}" ${dashboardAttendancePerson===person.id?'selected':''}>${escHtml(person.name)}</option>`).join('');
+  return `<section class="analytics-section" id="dashboardAttendance"><div class="analytics-section-title"><h3>Assiduidade e ausências</h3><span class="analytics-scope-note">${formatDatePt(period.from)} a ${formatDatePt(period.to)} · dias por colaborador</span></div><dl class="attendance-kpis">${metrics}</dl>
+    <div class="attendance-overview"><div><h4 class="attendance-fi-heading attendance-code-FI">Faltas injustificadas · ${summary.peopleCounts.FI} ${summary.peopleCounts.FI===1?'colaborador':'colaboradores'}</h4><div class="attendance-fi-list">${fiRows || '<div class="analytics-empty">Sem faltas injustificadas registadas nesta seleção.</div>'}</div></div>
+    <div id="dashboardAttendanceTeams"><h4>Ausências por equipa</h4>${teamRows?`<div class="analytics-table-wrap"><table class="analytics-table attendance-team-table"><thead><tr><th>Equipa</th><th title="Faltas injustificadas">FI</th><th title="Faltas justificadas">FJ</th><th>Baixa</th><th>Férias</th></tr></thead><tbody>${teamRows}</tbody><tfoot><tr><td>Total</td>${types.map(([code])=>`<td class="attendance-type attendance-code-${code}">${summary.total[code]}</td>`).join('')}</tr></tfoot></table></div>`:'<div class="analytics-empty">Sem ausências registadas nesta seleção.</div>'}</div></div>
+    <details id="dashboardAttendanceDetails" ${dashboardAttendanceOpen?'open':''} ontoggle="dashboardAttendanceOpen=this.open"><summary>Registos de ausência (${summary.total.total})</summary><div class="analytics-controls"><label for="dashboardAttendanceType">Tipo<select id="dashboardAttendanceType" onchange="dashboardAttendanceCode=this.value;renderDashboard()"><option value="all">Todas as ausências</option>${types.map(([code,title])=>`<option value="${code}" ${dashboardAttendanceCode===code?'selected':''}>${title}</option>`).join('')}</select></label><label for="dashboardAttendancePerson">Colaborador<select id="dashboardAttendancePerson" onchange="dashboardAttendancePerson=this.value==='*'?null:this.value;renderDashboard()"><option value="*">Todos os colaboradores</option>${personOptions}</select></label></div>
+    <div class="attendance-details-note">${selected.length} ${selected.length===1?'registo':'registos'}</div>${eventRows?`<div class="analytics-events"><table class="analytics-table"><thead><tr><th>Colaborador</th><th>Data</th><th>Tipo</th><th>Equipa na data</th></tr></thead><tbody>${eventRows}</tbody></table></div>`:'<div class="analytics-empty">Sem registos para os filtros selecionados.</div>'}</details>
+  </section>`;
+}
 function dashboardAnalyticsHtml(){
   const today=lisbonToday();
   if(!dashboardAnalyticsPeriod) dashboardAnalyticsPeriod={from:`${YEAR}-01-01`,to:today<`${YEAR}-12-31`?today:`${YEAR}-12-31`,preset:'year'};
@@ -5104,6 +5178,7 @@ function dashboardAnalyticsHtml(){
   const persons=reportPersons().map(person=>({...person,entrada:normalizeDateValue(person.entrada),saida:normalizeDateValue(person.saida)}));
   const args={persons,history:teamHistoryRows,historyEnabled:teamHistoryEnabled,profile:currentProfile,today,teamId:dashboardMovementTeam};
   const analysis=RhAnalytics.workforceAnalytics({...args,from:period.from,to:period.to});
+  const attendance=RhAnalytics.attendanceAnalytics({...args,from:period.from,to:period.to,records:state.records,vacations:state.vacations,holidays:[...HOLIDAYS_2026]});
   const reasonSummary=isAdminUser()?analysis.exitReasons:null;
   if(!reasonSummary || (dashboardExitReasonFilter!==null && !reasonSummary.groups.some(group=>group.key===dashboardExitReasonFilter))) dashboardExitReasonFilter=null;
   const exitReasonKeys=new Map((reasonSummary?.groups || []).flatMap(group=>group.events.map(event=>[event.personId,group.key])));
@@ -5125,6 +5200,7 @@ function dashboardAnalyticsHtml(){
     return `<tr><td>${person?dashPersonHtml(person,32):escHtml(event.personId)}</td><td class="analytics-event-type ${event.type==='entry'?'movement-entry':'movement-exit'}">${event.type==='entry'?'Entrada':'Saída'}</td><td>${escHtml(formatDatePt(event.date))}</td><td>${escHtml(dashboardTeamLabel(event.teamId))}</td>${reasonSummary?`<td>${event.type==='exit'?escHtml(dashboardExitReasonLabel(exitReasonKeys.get(event.personId) || '')):'—'}</td>`:''}</tr>`;
   }).join('');
   return `<section id="dashboardAnalytics">${controls}
+    ${dashboardAttendanceHtml(attendance,period)}
     <div class="analytics-context">Comparação com ${formatDatePt(previousPeriod.from)} a ${formatDatePt(previousPeriod.to)}</div>
     <dl class="analytics-kpis">${metric('Entradas','entries','entry')}${metric('Saídas','exits','exit')}${metric('Saldo','balance','balance')}</dl>
     ${dashboardCompositionHtml(analysis.composition,today)}

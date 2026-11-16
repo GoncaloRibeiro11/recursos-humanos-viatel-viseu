@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { workforceAnalytics,comparisonPeriod } from '../src/rh-analytics.mjs';
+import { workforceAnalytics,comparisonPeriod,attendanceAnalytics } from '../src/rh-analytics.mjs';
 
 const person=(id,overrides={})=>({id,name:id,entrada:'2025-01-01',ativo:true,role:'vendedor',chefeId:'a',...overrides});
 const base={from:'2026-11-01',to:'2026-11-30',today:'2026-11-02'};
@@ -156,4 +156,46 @@ test('motivo de saida segue a equipa na data da saida e permanece privado para g
   assert.equal(workforceAnalytics({...args,teamId:'b'}).exitReasons.total,0);
   const manager=workforceAnalytics({...args,profile:{role:'gestor',person_id:'a'}});
   assert.equal(manager.total.exits,1);assert.equal(manager.exitReasons,null);
+});
+
+const attendanceBase={from:'2026-10-01',to:'2026-11-30',today:'2026-11-02',holidays:['2026-10-05']};
+test('ausencias contam registos reais e ferias sem duplicar nem inferir faltas',()=>{
+  const persons=[person('one')],records={
+    'one|2026-10-26':'FI','one|2026-10-27':'FI','one|2026-10-28':'FJ','one|2026-10-29':'B',
+    'one|2026-10-30':'FE','one|2026-10-20':'P','one|2026-10-31':'FI','one|2026-10-05':'FI','one|2026-11-03':'FI'
+  };
+  const vacations=[{personId:'one',start:'2026-10-19',end:'2026-10-23'},{personId:'one',start:'2026-10-21',end:'2026-10-23'},{personId:'one',start:'2026-10-30',end:'2026-10-30'}];
+  const before=JSON.stringify({persons,records,vacations});
+  const result=attendanceAnalytics({...attendanceBase,persons,records,vacations});
+  assert.deepEqual([result.total.FI,result.total.FJ,result.total.B,result.total.FE,result.total.total],[2,1,1,5,9]);
+  assert.deepEqual(result.peopleCounts,{FI:1,FJ:1,B:1,FE:1});assert.equal(result.total.lastFI,'2026-10-27');
+  assert.equal(new Set(result.events.map(event=>event.personId+'|'+event.date)).size,9);
+  assert.equal(result.events.some(event=>event.date==='2026-10-20'),false);
+  assert.equal(JSON.stringify({persons,records,vacations}),before);
+});
+test('historico de ausencias inclui inativos apenas entre entrada e saida, com os dois dias incluidos',()=>{
+  const persons=[person('left',{entrada:'2026-10-26',saida:'2026-10-28',ativo:false})];
+  const records=Object.fromEntries(['2026-10-23','2026-10-26','2026-10-28','2026-10-29'].map(date=>['left|'+date,'FI']));
+  const result=attendanceAnalytics({...attendanceBase,persons,records});
+  assert.equal(result.total.FI,2);assert.deepEqual(result.events.map(event=>event.date),['2026-10-28','2026-10-26']);
+});
+test('ausencias usam a equipa na data e o gestor nao ve os dias da outra equipa',()=>{
+  const persons=[person('move',{chefeId:'b',historyOnly:true})];
+  const history=[row('move','a','0001-01-01','2026-11-01'),row('move','b','2026-11-01')];
+  const records={'move|2026-10-30':'FI','move|2026-11-02':'FI'},vacations=[{personId:'move',start:'2026-10-29',end:'2026-11-03'}];
+  const args={...attendanceBase,persons,records,vacations,history,historyEnabled:true};
+  const all=attendanceAnalytics(args);assert.equal(all.total.FI,2);assert.equal(all.total.FE,1);
+  assert.equal(all.peopleCounts.FI,1);assert.equal(all.people.length,2);
+  assert.equal(attendanceAnalytics({...args,teamId:'a'}).total.FI,1);
+  assert.equal(attendanceAnalytics({...args,teamId:'b'}).total.FI,1);
+  const manager=attendanceAnalytics({...args,profile:{role:'gestor',person_id:'a'}});
+  assert.equal(manager.total.FI,1);assert.equal(manager.total.FE,1);assert.ok(manager.events.every(event=>event.teamId==='a'));
+  const unavailable=attendanceAnalytics({...args,history:[]});assert.equal(unavailable.total.total,0);
+});
+test('marcacoes invalidas ou desconhecidas nao se tornam faltas nem ferias',()=>{
+  const result=attendanceAnalytics({...attendanceBase,persons:[person('one')],records:{'one|2026-10-26':'X','one|2026-10-27':'P','missing|2026-10-28':'FI','one|2026-02-31':'FI'},vacations:[{personId:'one',start:'2026-10-26',end:'2026-10-27'}]});
+  assert.equal(result.total.total,0);assert.deepEqual(result.events,[]);
+  assert.equal(attendanceAnalytics({...attendanceBase,persons:[],records:{}}).total.FI,0);
+  assert.throws(()=>attendanceAnalytics({...attendanceBase,from:'2026-12-01',to:'2026-11-01',persons:[]}),/datas/);
+  assert.throws(()=>attendanceAnalytics({...attendanceBase,from:'1900-01-01',persons:[]}),/20 anos/);
 });

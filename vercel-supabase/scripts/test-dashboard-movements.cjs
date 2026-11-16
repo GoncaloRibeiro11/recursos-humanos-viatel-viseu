@@ -33,6 +33,14 @@ const fixture=`
   teamHistoryRows.find(row=>row.person_id==='entry-0').valid_to='2026-11-01';
   teamHistoryRows.push({person_id:'entry-0',valid_from:'2026-11-01',valid_to:null,role_code:'vendedor',chefe_id:'b',person_snapshot:{}});
   state.persons.find(person=>person.id==='entry-0').chefeId='b';teamHistoryEnabled=true;
+  state.persons.find(person=>person.id==='entry-0').photo=photo;
+  state.records={
+    'entry-0|2026-10-28':'FI','entry-0|2026-10-29':'FI','entry-0|2026-11-02':'FI',
+    'entry-1|2026-10-29':'FJ','entry-2|2026-10-26':'B','entry-2|2026-10-27':'B',
+    'entry-3|2026-10-30':'FE','entry-4|2026-10-30':'P','entry-5|2026-10-31':'FI',
+    'entry-5|2026-11-03':'FI','entry-0|2026-10-05':'FI','exit-0|2026-05-29':'FI','exit-0|2026-06-02':'FI'
+  };
+  state.vacations=[{id:'vac-3',personId:'entry-3',start:'2026-10-29',end:'2026-10-30'},{id:'vac-4',personId:'entry-4',start:'2026-10-29',end:'2026-10-30'}];
   currentProfile={role:'admin',display_name:'Teste'};
   document.body.classList.add('authenticated','is-admin');document.getElementById('authOverlay').classList.remove('open');
   window.originalState=JSON.stringify(state);Object.defineProperty(window,'testState',{get:()=>state});
@@ -115,6 +123,7 @@ const server=http.createServer((req,res)=>{
     await page.evaluate(()=>{state={persons:[],vacations:[],records:{}};teamHistoryRows=[];renderDashboard();});
     assert.equal(await total('balance'),'0');assert.equal(await total('entries'),'0');assert.equal(await total('exits'),'0');
     assert.equal(await page.locator('[data-composition-total="people"]').textContent(),'0');
+    assert.equal(await page.locator('[data-attendance-total="FI"]').textContent(),'0');
     assert.match(await page.locator('#dashboardCompositionMatrix').textContent(),/Sem colaboradores ativos/);
     assert.match(await page.locator('#dashboardAnalytics').textContent(),/Sem equipas registadas/);
     await testDashboardAnalytics(page,output);

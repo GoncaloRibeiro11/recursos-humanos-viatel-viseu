@@ -1,4 +1,4 @@
-import { validDate } from './rh-team-history.mjs';
+import { validDate,assignmentAt } from './rh-team-history.mjs';
 
 export function shiftDate(date,days){
   const value=new Date(date+'T12:00:00Z'); value.setUTCDate(value.getUTCDate()+days);
@@ -64,6 +64,55 @@ function exitReasonSummary(events,persons){
   const items=[...groups.values()].sort((a,b)=>Number(!a.key)-Number(!b.key) || b.count-a.count || a.key.localeCompare(b.key,'pt'));
   const total=items.reduce((sum,group)=>sum+group.count,0),missing=groups.get('')?.count || 0;
   return {total,recorded:total-missing,missing,coverage:total?(total-missing)/total*100:null,groups:items};
+}
+
+export function attendanceAnalytics({persons,records={},vacations=[],history=[],historyEnabled=false,profile=null,from,to,today,teamId=null,holidays=[]}){
+  if(![from,to,today].every(validDate) || from>to) throw new Error('Confirma as datas do periodo.');
+  if((new Date(to+'T12:00:00Z')-new Date(from+'T12:00:00Z'))/86400000>7320) throw new Error('O periodo maximo de analise e de 20 anos.');
+  const end=to<today?to:today,codes=['FI','FJ','B','FE'],holidaySet=new Set(holidays);
+  const people=new Map(persons.map(person=>[person.id,person])),candidates=new Map();
+  const add=(personId,date,code)=>{
+    if(date<from || date>end || !validDate(date) || !people.has(personId)) return;
+    const day=new Date(date+'T12:00:00Z').getUTCDay();
+    if(day===0 || day===6 || holidaySet.has(date)) return;
+    candidates.set(JSON.stringify([personId,date]),{personId,date,code});
+  };
+  for(const [key,code] of Object.entries(records)){
+    if(!codes.includes(code)) continue;
+    const separator=key.lastIndexOf('|');if(separator<0) continue;
+    add(key.slice(0,separator),key.slice(separator+1),code);
+  }
+  for(const vacation of vacations){
+    if(!validDate(vacation.start) || !validDate(vacation.end) || vacation.start>vacation.end || !people.has(vacation.personId)) continue;
+    const first=vacation.start>from?vacation.start:from,last=vacation.end<end?vacation.end:end;
+    for(let date=first;date<=last;date=shiftDate(date,1)){
+      // Explicit attendance always takes precedence, including a recorded presence.
+      if(!records[vacation.personId+'|'+date]) add(vacation.personId,date,'FE');
+    }
+  }
+  const empty=()=>({FI:0,FJ:0,B:0,FE:0,total:0,lastFI:'',lastDate:''});
+  const total=empty(),teams=new Map(),byPersonTeam=new Map(),distinct=Object.fromEntries(codes.map(code=>[code,new Set()])),events=[];
+  for(const event of candidates.values()){
+    const person=people.get(event.personId);
+    if((person.entrada && !validDate(person.entrada)) || (person.saida && !validDate(person.saida)) ||
+      (person.entrada && event.date<person.entrada) || (person.saida && event.date>person.saida) ||
+      (person.entrada && person.saida && person.saida<person.entrada)) continue;
+    const assigned=assignmentAt(person,event.date,historyEnabled?history:[],historyEnabled);
+    if(!assigned || (profile && profile.role!=='admin' && assigned.id!==profile.person_id && assigned.chefeId!==profile.person_id)) continue;
+    const id=assigned.chefeId || '';if(teamId!==null && id!==teamId) continue;
+    const key=JSON.stringify([person.id,id]);
+    if(!teams.has(id)) teams.set(id,{id,...empty()});
+    if(!byPersonTeam.has(key)) byPersonTeam.set(key,{personId:person.id,teamId:id,...empty()});
+    for(const group of [total,teams.get(id),byPersonTeam.get(key)]){
+      group.total++;group[event.code]++;if(event.date>group.lastDate) group.lastDate=event.date;
+      if(event.code==='FI' && event.date>group.lastFI) group.lastFI=event.date;
+    }
+    distinct[event.code].add(person.id);events.push({...event,teamId:id});
+  }
+  return {from,to:end,total,peopleCounts:Object.fromEntries(codes.map(code=>[code,distinct[code].size])),
+    teams:[...teams.values()].sort((a,b)=>b.FI-a.FI || b.total-a.total || a.id.localeCompare(b.id)),
+    people:[...byPersonTeam.values()].sort((a,b)=>b.FI-a.FI || b.lastFI.localeCompare(a.lastFI) || a.personId.localeCompare(b.personId)),
+    events:events.sort((a,b)=>b.date.localeCompare(a.date) || codes.indexOf(a.code)-codes.indexOf(b.code) || a.personId.localeCompare(b.personId))};
 }
 
 export function workforceAnalytics({persons,history=[],historyEnabled=false,profile=null,from,to,today,teamId=null}){
