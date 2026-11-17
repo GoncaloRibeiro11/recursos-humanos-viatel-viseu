@@ -19,6 +19,11 @@ export const INSPECTION_ITEMS=INSPECTION_GROUPS.flatMap(group=>group.items);
 export const TEMPLATE_VERSION=1;
 // View coordinates are cropped; stored damage marks keep the original PDF coordinates.
 export const DAMAGE_VIEW={x:49,y:239,width:490,height:385};
+export function adoptInitialDraftVersion(draft,saved,baseline){
+  // Only the metadata-only setup revision can be adopted without replacing local fields.
+  if(!draft || draft.type!=='handover' || !saved || !baseline || saved.id!==draft.id || saved.vehicle_id!==draft.vehicleId || saved.status!=='draft' || baseline.origin!=='initial_state' || baseline.vehicle_id!==draft.vehicleId || saved.expected_custody_id!==baseline.id || draft.expectedCustodyId!=null || saved.version!==draft.version+1 || +new Date(saved.updated_at)!==+new Date(baseline.initial_recorded_at))return draft;
+  return {...draft,version:saved.version,expectedCustodyId:baseline.id};
+}
 export function handoverOrigin(vehicle,current,kind,persons=[]){
   const id=current?.person_id || (kind!=='initial'?vehicle.habitual_person_id:null);
   const person=id?persons.find(p=>p.id===id):null;
@@ -42,12 +47,12 @@ export function validateHandover(data,vehicle,current,now=new Date()){
   const at=new Date(data.at);
   if(!data.at || !Number.isFinite(+at))errors.push('Indica uma data e hora válidas.');
   else if(+at>+now)errors.push('A entrega ainda não ocorreu. Guarda-a como rascunho.');
-  if(current && +at<=+new Date(current.from_at))errors.push('A operação tem de ser posterior à entrega atual.');
+  if(current?.from_at && +at<=+new Date(current.from_at))errors.push('A operação tem de ser posterior à entrega atual.');
   if(!Number.isInteger(Number(data.odometer)) || data.odometer==='' || data.odometer==null || Number(data.odometer)<Number(vehicle.odometer) || Number(data.odometer)>99999999)errors.push('Confirma os quilómetros; não podem diminuir.');
   if(!['Reserva','1/4','1/2','3/4','Cheio'].includes(data.fuel))errors.push('Confirma o combustível.');
   if(data.kind!=='return' && (!data.to_person_id || data.to_person_id===current?.person_id))errors.push('Seleciona quem recebe, diferente de quem entrega.');
   if(data.kind==='initial' && current)errors.push('A viatura já tem um responsável.');
-  if(['temporary','return'].includes(data.kind) && !current)errors.push('Falta registar e confirmar a entrega inicial desta viatura a quem a tem atualmente, antes de fazer uma passagem temporária ou devolução.');
+  if(['temporary','return'].includes(data.kind) && !current)errors.push('A viatura não tem uma utilização em curso. Se já está em uso e ainda não existe histórico, regista a situação inicial; caso contrário, faz uma entrega inicial.');
   if(data.kind==='temporary' && (!data.expected_return || +new Date(data.expected_return)<=+at || !Number.isFinite(+new Date(data.expected_return))))errors.push('Indica a devolução prevista posterior à entrega.');
   for(const group of INSPECTION_GROUPS)for(const item of group.items){
     const value=data.inspection?.[item.key];
@@ -71,5 +76,5 @@ export function fromLisbonInput(value){
   return options.length===1?new Date(options[0]).toISOString():'';
 }
 export function custodyAt(rows,vehicleId,date){
-  return rows.find(row=>row.vehicle_id===vehicleId && +new Date(row.from_at)<=+new Date(date) && (!row.to_at || +new Date(date)<+new Date(row.to_at))) || null;
+  return rows.find(row=>row.vehicle_id===vehicleId && row.from_at && +new Date(row.from_at)<=+new Date(date) && (!row.to_at || +new Date(date)<+new Date(row.to_at))) || null;
 }

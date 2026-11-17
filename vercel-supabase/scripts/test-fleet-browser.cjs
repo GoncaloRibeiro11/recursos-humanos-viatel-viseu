@@ -74,7 +74,7 @@ const server=http.createServer(async(req,res)=>{
     assert.equal(await page.locator('[name="driver.from.name"]').inputValue(),'');assert.equal(await page.locator('[name="driver.to.name"]').inputValue(),'Gestor A');
     await page.locator('[name=kind]').selectOption('temporary');
     assert.equal(await page.locator('[data-giver]').inputValue(),'Gestor A');assert.equal(await page.locator('[name="driver.from.name"]').inputValue(),'Gestor A');
-    assert.match(await page.locator('[data-giver-status]').innerText(),/sem entrega inicial registada/);assert.equal((await query('select * from rh_fleet_custody')).length,0);
+    assert.match(await page.locator('[data-giver-status]').innerText(),/situação inicial por registar/);assert.equal((await query('select * from rh_fleet_custody')).length,0);
     await page.setViewportSize({width:390,height:900});await page.locator('.fleet-dialog').screenshot({path:path.join(output,'nome-associado-390.png')});
     await page.setViewportSize({width:1440,height:1000});await page.locator('[name=kind]').selectOption('initial');
     await page.locator('[name="driver.from.name"]').fill('Manuel de Entrega Teste');await page.locator('[name="driver.to.name"]').fill('Gestor A Nome Completo');

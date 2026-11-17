@@ -4,6 +4,10 @@ Instalacao: executar `migrations/20261117_fleet.sql` no projeto RH. A migracao
 cria apenas tabelas, funcoes e politicas de frota; nao atualiza colaboradores,
 equipas, ferias ou assiduidade. Pode ser repetida sem apagar o historico.
 Depois executar `migrations/20261117_fleet_shares.sql` para as ligacoes privadas.
+Depois executar `migrations/20261117_fleet_initial_state.sql` para o arranque
+de viaturas ja em uso. So a primeira instalacao assume as associacoes existentes
+sem historico e sem assinaturas em curso. Repetir a migracao nao inclui carros
+adicionados depois nem reabre periodos ja terminados.
 
 ## Acesso e dados
 
@@ -20,7 +24,8 @@ Depois executar `migrations/20261117_fleet_shares.sql` para as ligacoes privadas
 ## Fluxo
 
 1. Adicionar viatura e respetivo N. Cartrack.
-2. Registar entrega inicial; o titular habitual sozinho nao cria uma posse real.
+2. Registar entrega inicial para uma entrega nova. No arranque de viaturas ja
+   em uso, a Situacao inicial assume a associacao atual sem inventar um auto.
 3. Passagem temporaria/permanente ou devolucao: data/hora de Portugal,
    quilometros, combustivel, inspecao e confirmacao explicita da entrega real.
 4. Rascunhos gravam localmente a cada alteracao e no servidor com debounce;
@@ -47,6 +52,22 @@ empresa como origem e sugere o habitual em Recebe. As sugestoes nao criam
 posses nem dispensam o registo inicial para confirmar uma passagem temporaria.
 Nomes indicados manualmente sao preservados; pedidos de assinatura ativos nao
 recebem alteracoes automaticas aos nomes. Trocar Recebe sugere o novo nome.
+
+## Situacao inicial sem autos antigos
+
+- E um registo administrativo de arranque, nao um auto antigo confirmado.
+- Custody com `origin=initial_state` tem `from_at=null`, `handover_id=null` e
+  data de registo separada. O inicio desconhecido nunca e convertido em 1970,
+  na data de cadastro da viatura, nem inferido em consultas de datas passadas.
+- A primeira passagem/devolucao fecha essa situacao na data real da operacao
+  e cria o historico normal. Nao sao inventadas inspecoes, PDFs ou assinaturas.
+- Rascunhos de passagem/devolucao ficam associados ao ponto inicial sem mudar
+  os campos preenchidos. Ligacoes privadas antigas sao revogadas por mudanca
+  de contexto; o administrador pode gerar novas ligacoes no mesmo rascunho.
+- Viaturas com historico ou pedidos de assinatura ativos nao sao adotadas.
+- Para outra viatura ja em uso, Registar situacao inicial exige confirmacao
+  explicita do administrador e so funciona uma vez, antes do primeiro auto.
+- Depois de uma devolucao nao e possivel usar o arranque para saltar um auto.
 
 Os itens da inspecao comecam por verificar. Aplicar um estado a itens vazios e
 uma acao explicita do utilizador. Mau exige justificacao. Assinaturas sao
@@ -95,3 +116,7 @@ Assinaturas: `node scripts/test-fleet-shares-sql.cjs` com PGLITE_MODULE e
 `node scripts/test-fleet-remote-browser.cjs` com ambos os modulos. Incluem
 desenho com eventos touch em 320/390 px, duas assinaturas, recibo de utilizacao
 unica, conflitos de versao, expiracao/cancelamento e PDF privado arquivado.
+Arranque: `node scripts/test-fleet-initial-state-sql.cjs`; executar o teste de
+browser remoto tambem com `TEST_INITIAL_STATE=1` verifica a primeira passagem
+com as duas assinaturas, o registo manual por viatura e o historico sem datas
+de inicio inventadas.

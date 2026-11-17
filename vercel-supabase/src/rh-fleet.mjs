@@ -1,7 +1,7 @@
 import {createIcons,Car,Plus,Pencil,ArrowRightLeft,History,FileText,RefreshCw,X,Check,Save,Download,Archive,Lock,Undo2,Trash2,Paperclip,Link,Copy,Share2} from 'lucide';
 import {signaturePad} from './fleet-signature-pad.mjs';
 import {fetchAllRows} from './rh-sync.mjs';
-import {OPERATIONS,CONDITIONS,INSPECTION_GROUPS,inspectionProgress,validateHandover,lisbonInput,fromLisbonInput,handoverOrigin,DAMAGE_VIEW} from './rh-fleet-model.mjs';
+import {OPERATIONS,CONDITIONS,INSPECTION_GROUPS,inspectionProgress,validateHandover,lisbonInput,fromLisbonInput,handoverOrigin,DAMAGE_VIEW,adoptInitialDraftVersion} from './rh-fleet-model.mjs';
 const icons={Car,Plus,Pencil,ArrowRightLeft,History,FileText,RefreshCw,X,Check,Save,Download,Archive,Lock,Undo2,Trash2,Paperclip,Link,Copy,Share2};
 const esc=value=>String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clone=value=>JSON.parse(JSON.stringify(value));
@@ -36,6 +36,7 @@ class Fleet {
   person(id,name='Empresa / parque'){const person=this.persons.find(p=>p.id===id);return person || {id,name};}
   personHtml(id,name){const person=this.person(id,name),p=name?{...person,name}:person;return `<span class="fleet-person">${p.photo?`<img src="${esc(p.photo)}" alt="">`:''}<span>${esc(p.name)}</span></span>`;}
   holder(id){return this.custody.find(item=>item.vehicle_id===id && !item.to_at);}
+  canRegisterInitial(v){return v.active && v.habitual_person_id && !this.custody.some(c=>c.vehicle_id===v.id) && !this.handovers.some(h=>h.vehicle_id===v.id && h.status==='confirmed');}
   vehicle(id){return this.vehicles.find(v=>v.id===id);}
   localDraft(){try{return JSON.parse(localStorage.getItem(this.storageKey) || 'null');}catch{return null;}}
   stash(){
@@ -87,7 +88,8 @@ class Fleet {
     if(!vehicles.length)return '<div class="fleet-empty">Sem viaturas nesta seleção.</div>';
     return `<div class="fleet-table-wrap"><table><thead><tr><th>Viatura</th><th>N.º Cartrack</th><th>Responsável habitual</th><th>Quem tem agora</th><th>Km</th><th>Devolução prevista</th><th>Validades</th><th>Ações</th></tr></thead><tbody>${vehicles.map(v=>{
       const holder=this.holder(v.id),current=holder && this.handovers.find(h=>h.id===holder.handover_id),expected=current?.data.kind==='temporary'?current.data.expected_return:null;
-      return `<tr data-fleet-vehicle="${v.id}"><td class="fleet-cell"><strong>${esc(v.plate)}</strong><span class="fleet-small">${esc(v.make_model)}${v.company?' · '+esc(v.company):''}${!v.active?' · Arquivada':''}</span></td><td>${esc(v.cartrack_number) || '—'}</td><td>${v.habitual_person_id?this.personHtml(v.habitual_person_id):'—'}</td><td>${holder?this.personHtml(holder.person_id,holder.person_name)+'<span class="fleet-small">'+date(holder.from_at)+'</span>':'Disponível / empresa'}</td><td>${Number(v.odometer).toLocaleString('pt-PT')}</td><td class="${expected && +new Date(expected)<Date.now()?'fleet-late':''}">${date(expected)}</td><td><span class="fleet-small ${v.insurance_until && v.insurance_until<new Date().toISOString().slice(0,10)?'fleet-late':''}">Seguro: ${day(v.insurance_until)}</span><span class="fleet-small ${v.inspection_until && v.inspection_until<new Date().toISOString().slice(0,10)?'fleet-late':''}">Inspeção: ${day(v.inspection_until)}</span></td><td><div class="fleet-actions">${button('pencil','Editar viatura','edit-vehicle',`data-id="${v.id}"`)}${v.active?button('arrow-right-left',holder?'Passar ou devolver viatura':'Registar entrega inicial','handover',`data-id="${v.id}"`):''}${button('history','Histórico da viatura','vehicle-history',`data-id="${v.id}"`)}</div></td></tr>`;
+      const custodyLabel=holder?.origin==='initial_state'?'Situação inicial · sem auto anterior':date(holder?.from_at);
+      return `<tr data-fleet-vehicle="${v.id}"><td class="fleet-cell"><strong>${esc(v.plate)}</strong><span class="fleet-small">${esc(v.make_model)}${v.company?' · '+esc(v.company):''}${!v.active?' · Arquivada':''}</span></td><td>${esc(v.cartrack_number) || '—'}</td><td>${v.habitual_person_id?this.personHtml(v.habitual_person_id):'—'}</td><td>${holder?this.personHtml(holder.person_id,holder.person_name)+'<span class="fleet-small">'+custodyLabel+'</span>':'Disponível / empresa'}</td><td>${Number(v.odometer).toLocaleString('pt-PT')}</td><td class="${expected && +new Date(expected)<Date.now()?'fleet-late':''}">${date(expected)}</td><td><span class="fleet-small ${v.insurance_until && v.insurance_until<new Date().toISOString().slice(0,10)?'fleet-late':''}">Seguro: ${day(v.insurance_until)}</span><span class="fleet-small ${v.inspection_until && v.inspection_until<new Date().toISOString().slice(0,10)?'fleet-late':''}">Inspeção: ${day(v.inspection_until)}</span></td><td><div class="fleet-actions">${button('pencil','Editar viatura','edit-vehicle',`data-id="${v.id}"`)}${v.active?button('arrow-right-left',holder?'Passar ou devolver viatura':'Registar entrega inicial','handover',`data-id="${v.id}"`):''}${this.canRegisterInitial(v)?button('check','Registar situação inicial','initial-state',`data-id="${v.id}"`):''}${button('history','Histórico da viatura','vehicle-history',`data-id="${v.id}"`)}</div></td></tr>`;
     }).join('')}</tbody></table></div>`;
   }
   handoversHtml(vehicles){
@@ -96,7 +98,7 @@ class Fleet {
   }
   historyHtml(vehicles){
     const ids=new Set(vehicles.map(v=>v.id));const rows=this.custody.filter(c=>ids.has(c.vehicle_id)).sort((a,b)=>+new Date(b.from_at)-+new Date(a.from_at));
-    return rows.length?`<div class="fleet-table-wrap"><table><thead><tr><th>Viatura</th><th>Responsável</th><th>Desde</th><th>Até</th><th>Auto</th></tr></thead><tbody>${rows.map(c=>{const h=this.handovers.find(h=>h.id===c.handover_id);return `<tr><td>${esc(this.vehicle(c.vehicle_id)?.plate)}</td><td>${this.personHtml(c.person_id,c.person_name)}</td><td>${date(c.from_at)}</td><td>${c.to_at?date(c.to_at):'Em curso'}</td><td>${h?`<button type="button" class="btn" data-action="edit-handover" data-id="${h.id}">${icon('file-text')}FRO-${String(h.number).padStart(5,'0')}</button>`:'—'}</td></tr>`;}).join('')}</tbody></table></div>`:'<div class="fleet-empty">Sem entregas confirmadas nesta seleção.</div>';
+    return rows.length?`<div class="fleet-table-wrap"><table><thead><tr><th>Viatura</th><th>Responsável</th><th>Desde</th><th>Até</th><th>Auto</th></tr></thead><tbody>${rows.map(c=>{const h=this.handovers.find(h=>h.id===c.handover_id);return `<tr><td>${esc(this.vehicle(c.vehicle_id)?.plate)}</td><td>${this.personHtml(c.person_id,c.person_name)}</td><td>${c.origin==='initial_state'?'Início desconhecido':date(c.from_at)}</td><td>${c.to_at?date(c.to_at):'Em curso'}</td><td>${c.origin==='initial_state'?'<span class="fleet-small">Situação inicial · sem auto anterior<br>Registo: '+date(c.initial_recorded_at)+'</span>':h?`<button type="button" class="btn" data-action="edit-handover" data-id="${h.id}">${icon('file-text')}FRO-${String(h.number).padStart(5,'0')}</button>`:'—'}</td></tr>`;}).join('')}</tbody></table></div>`:'<div class="fleet-empty">Sem entregas confirmadas nesta seleção.</div>';
   }
   drawIcons(){createIcons({icons,attrs:{'stroke-width':1.7}});}
   async click(event){
@@ -109,6 +111,8 @@ class Fleet {
       if(action==='new-vehicle')this.openVehicle();
       if(action==='edit-vehicle')this.openVehicle(this.vehicle(id));
       if(action==='handover')this.openHandover(this.vehicle(id));
+      if(action==='initial-state')this.openInitialState(this.vehicle(id));
+      if(action==='register-initial-state')await this.registerInitialState();
       if(action==='vehicle-history'){this.vehicleFilter=id;this.page='history';this.render();}
       if(action==='edit-handover'){const h=this.handovers.find(h=>h.id===id);this.openHandover(this.vehicle(h.vehicle_id),h);}
       if(action==='resume'){const d=this.localDraft();if(d?.type==='vehicle')this.openVehicle(null,d);if(d?.type==='handover')this.openHandover(this.vehicle(d.vehicleId),null,d);}
@@ -141,6 +145,17 @@ class Fleet {
     this.host.querySelector('.fleet-dialog').addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();this.close();}if(event.key==='Tab'){const items=[...this.host.querySelectorAll('button,input,select,textarea,summary')].filter(el=>!el.disabled && el.getClientRects().length);const index=items.indexOf(document.activeElement);if(event.shiftKey && index===0){event.preventDefault();items.at(-1)?.focus();}else if(!event.shiftKey && index===items.length-1){event.preventDefault();items[0]?.focus();}}});
   }
   field(label,name,value='',type='text',extra=''){return `<label>${esc(label)}<input type="${type}" name="${name}" value="${esc(value)}" ${extra}></label>`;}
+  openInitialState(vehicle){
+    if(!this.canRegisterInitial(vehicle))throw new Error('Esta viatura já tem histórico ou falta o responsável habitual.');
+    this.dialog={type:'initial-state',vehicleId:vehicle.id,version:vehicle.version};
+    this.showDialog(vehicle.plate+' · Situação inicial',`<dl class="fleet-read-data"><div><dt>Responsável</dt><dd>${esc(this.person(vehicle.habitual_person_id).name)}</dd></div><div><dt>Início da utilização</dt><dd>Desconhecido</dd></div><div><dt>Auto anterior</dt><dd>Não disponível</dd></div></dl><label class="fleet-check"><input type="checkbox" data-initial-confirm>Confirmo que a viatura já está com esta pessoa e não tenho um auto anterior.</label>`,`<button type="button" class="btn btn-primary" data-action="register-initial-state">${icon('check')}Registar situação inicial</button>`);
+  }
+  async registerInitialState(){
+    if(this.busy)return;if(!this.host.querySelector('[data-initial-confirm]')?.checked)throw new Error('Confirma a situação inicial da viatura.');
+    this.busy=true;const control=this.host.querySelector('[data-action=register-initial-state]');control.disabled=true;
+    try{await this.rpc('rh_fleet_register_initial_state',{p_vehicle_id:this.dialog.vehicleId,p_vehicle_version:this.dialog.version});this.dialog=null;this.host.innerHTML='';await this.load();}
+    finally{this.busy=false;if(control.isConnected)control.disabled=false;}
+  }
   openVehicle(vehicle,resume){
     this.dialog=resume || {type:'vehicle',id:vehicle?.id || crypto.randomUUID(),version:vehicle?.version || 0,data:vehicle?clone(vehicle):{plate:'',make_model:'',cartrack_number:'',company:'',habitual_person_id:this.personFilter,odometer:0,active:true}};
     const d=this.dialog.data;
@@ -197,6 +212,7 @@ class Fleet {
   openHandover(vehicle,handover,resume){
     if(!vehicle)throw new Error('Viatura indisponível. Atualiza a frota.');
     const current=this.holder(vehicle.id);
+    if(resume && !this.remote)resume=adoptInitialDraftVersion(resume,handover || this.handovers.find(h=>h.id===resume.id),current);
     this.dialog=resume || {type:'handover',id:handover?.id || crypto.randomUUID(),vehicleId:vehicle.id,version:handover?.version || 0,expectedCustodyId:handover?.expected_custody_id ?? current?.id ?? null,readOnly:handover && handover.status!=='draft',data:handover?clone(handover.data):{kind:current?'temporary':'initial',reason:current?'Férias do titular':'Entrega de viatura',to_person_id:current?'':vehicle.habitual_person_id || '',at:fromLisbonInput(lisbonInput(new Date())),expected_return:'',place:'Viseu',odometer:'',fuel:'',zone_name:this.getProfile()?.display_name || '',inspection:{},damage_markers:[],signatures:{},driver_fields:{from:{},to:{}},notes:'',damage_notes:'',checked:false}};
     const d=this.dialog.data;d.signatures ||= {};d.damage_markers ||= [];d.inspection ||= {};
     if(this.dialog.readOnly){this.readHandover(handover,vehicle);return;}
@@ -224,7 +240,7 @@ class Fleet {
     this.host.querySelector('[data-expected]').hidden=kind!=='temporary';this.host.querySelector('[data-receiver]').hidden=kind==='return';
     const d=this.dialog.data,origin=handoverOrigin(this.vehicle(this.dialog.vehicleId),this.holder(this.dialog.vehicleId),kind,this.persons);
     form.querySelector('[data-giver]').value=origin.name;
-    form.querySelector('[data-giver-status]').textContent=origin.source==='habitual'?'Responsável habitual · sem entrega inicial registada':'';
+    form.querySelector('[data-giver-status]').textContent=origin.source==='habitual'?(this.custody.some(c=>c.vehicle_id===this.dialog.vehicleId)?'Sem utilização em curso':'Responsável habitual · situação inicial por registar'):'';
     const defaults={from:origin.id?origin.name:'',to:kind==='return'?'':this.person(form.elements.to_person_id.value,'').name};
     for(const role of ['from','to']){
       const input=form.querySelector(`[data-kind=${role}][data-driver=name]`);

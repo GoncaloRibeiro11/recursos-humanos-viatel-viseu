@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createRequire} from 'node:module';
-import {INSPECTION_ITEMS,INSPECTION_GROUPS,inspectionProgress,validateHandover,fromLisbonInput,lisbonInput,custodyAt,driverName,handoverOrigin} from '../src/rh-fleet-model.mjs';
+import {INSPECTION_ITEMS,INSPECTION_GROUPS,inspectionProgress,validateHandover,fromLisbonInput,lisbonInput,custodyAt,driverName,handoverOrigin,adoptInitialDraftVersion} from '../src/rh-fleet-model.mjs';
 const require=createRequire(import.meta.url);
 const {renderFleetPdf}=require('../lib/fleet-pdf.cjs');
 const {createFleetApi}=require('../api/fleet-auto.js');
@@ -47,7 +47,22 @@ test('origem usa entrega real antes do habitual sem inventar periodos de utiliza
 });
 test('passagem sem entrega real explica o registo inicial em falta mesmo com responsavel habitual',()=>{
   const errors=validateHandover({...structuredClone(fixture.snapshot.operation),to_person_id:'b'},{odometer:0,habitual_person_id:'a'},null);
-  assert.ok(errors.some(message=>message.includes('registar e confirmar a entrega inicial')));
+  assert.ok(errors.some(message=>message.includes('regista a situação inicial')));
+});
+test('situacao inicial nao inventa uma data nem atribui utilizacao em datas antigas',()=>{
+  const baseline={vehicle_id:'v',person_id:'a',from_at:null,to_at:null,origin:'initial_state'};
+  assert.equal(custodyAt([baseline],'v','2026-01-01T09:00:00Z'),null);
+  const data={...structuredClone(fixture.snapshot.operation),to_person_id:'b'};
+  assert.deepEqual(validateHandover(data,{odometer:0},baseline,new Date('2026-11-18')),[]);
+});
+test('rascunho local conserva os campos ao adotar apenas a versao administrativa do arranque',()=>{
+  const d={type:'handover',id:'h',vehicleId:'v',version:1,expectedCustodyId:null,data:{notes:'Alteracao local ainda nao enviada'}};
+  const b={id:'c',vehicle_id:'v',origin:'initial_state',initial_recorded_at:'2026-11-17T10:00:00Z'};
+  const h={id:'h',vehicle_id:'v',status:'draft',version:2,expected_custody_id:'c',updated_at:b.initial_recorded_at,data:{notes:'Versao do servidor'}};
+  const adopted=adoptInitialDraftVersion(d,h,b);assert.equal(adopted.version,2);assert.equal(adopted.expectedCustodyId,'c');assert.equal(adopted.data.notes,d.data.notes);assert.equal(d.version,1);
+  assert.equal(adoptInitialDraftVersion(d,{...h,version:3},b),d);
+  assert.equal(adoptInitialDraftVersion(d,{...h,updated_at:'2026-11-17T10:01:00Z'},b),d);
+  assert.equal(adoptInitialDraftVersion(d,{...h,status:'confirmed'},b),d);
 });
 test('auto mantem duas paginas e suporta acentos, observacoes extensas e modelo versionado',async()=>{
   const bytes=await renderFleetPdf(fixture);assert.equal(bytes.subarray(0,4).toString(),'%PDF');

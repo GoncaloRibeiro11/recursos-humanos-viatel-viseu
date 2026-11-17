@@ -6,7 +6,14 @@ const root=path.resolve(__dirname,'../public'),output=path.resolve(__dirname,'..
 const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
 (async()=>{
  const t=await createDb(),objects=new Map(),secret='local-test-server-key';let base,archived;
- const h=await t.draft(2);
+ const initialState=process.env.TEST_INITIAL_STATE==='1';
+ let h=await t.draft(2,initialState?{kind:'temporary',to_person_id:'b',expected_return:new Date(Date.now()+86400000).toISOString()}:{});
+ if(initialState){
+  await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261117_fleet_initial_state.sql'),'utf8')));
+  h=(await t.query('select * from rh_fleet_handovers where id=$1',[h.id]))[0];
+  assert.equal((await t.query("select * from rh_fleet_handovers where status='confirmed'")).length,0);
+  await t.call('rh_fleet_save_vehicle',[t.uuid(99),0,{plate:'EF-34-GH',make_model:'Teste inicial',habitual_person_id:'b',odometer:0,active:true}]);
+ }
  const fetcher=async(url,options={})=>{
   const u=new URL(url),body=options.body && !Buffer.isBuffer(options.body)?JSON.parse(options.body):null;
   if(u.pathname==='/auth/v1/user')return Response.json({id:t.admin});
@@ -30,7 +37,7 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
  };
  const service=createFleetShares({env:{SUPABASE_SERVICE_ROLE_KEY:secret},fetcher});const pdfApi=createFleetApi({env:{},fetcher});
  const fixture=`
-  state={persons:[{id:'a',name:'Gestor A',role:'chefe_equipa',ativo:true,entrada:'2020-01-01'}],vacations:[],records:{}};currentProfile={role:'admin',display_name:'Admin de teste'};currentUserId='${t.admin}';supabaseReady=true;
+  state={persons:[{id:'a',name:'Gestor A',role:'chefe_equipa',ativo:true,entrada:'2020-01-01'},{id:'b',name:'Colaborador B',role:'vendedor',ativo:true,entrada:'2020-01-01'}],vacations:[],records:{}};currentProfile={role:'admin',display_name:'Admin de teste'};currentUserId='${t.admin}';supabaseReady=true;
   document.body.classList.add('authenticated','is-admin');document.getElementById('authOverlay').classList.remove('open');bolsaOutcomeDismissed=true;window.hrBefore=JSON.stringify(state);
   const send=async value=>(await fetch('/__db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)})).json();
   supabaseClient={rpc:(name,args)=>send({rpc:name,args}),auth:{getSession:async()=>({data:{session:{access_token:'admin-test-session'}}})},from(table){const q={table,order:[]},chain={select(){return chain;},order(key){q.order.push(key);return chain;},range(a,b){q.range=[a,b];return send(q);}};return chain;},storage:{from:()=>({list:async()=>({data:[]}),upload:async()=>({}),download:async()=>({})})}};
@@ -62,7 +69,17 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
   fs.mkdirSync(output,{recursive:true});const context=await browser.newContext({viewport:{width:1440,height:1000}}),admin=await context.newPage();
   const errors=[];admin.on('pageerror',error=>errors.push(error.message));admin.on('dialog',dialog=>dialog.accept());
   await admin.route('**/supabase-js**',route=>route.fulfill({body:'window.supabase={}',contentType:'application/javascript'}));
-  await admin.goto(base+'/test.html');await admin.locator('[data-action=page][data-page=handovers]').click();await admin.locator('[data-action=edit-handover]').click();
+  await admin.goto(base+'/test.html');
+  if(initialState){
+   await admin.getByText('Situação inicial · sem auto anterior',{exact:true}).waitFor();
+   await admin.locator('[data-fleet-vehicle="'+t.uuid(99)+'"]').getByRole('button',{name:'Registar situação inicial',exact:true}).click();
+   const dialog=admin.locator('.fleet-dialog');await dialog.getByRole('button',{name:'Registar situação inicial',exact:true}).click();await dialog.getByText('Confirma a situação inicial da viatura.',{exact:true}).waitFor();
+   await admin.setViewportSize({width:390,height:844});await dialog.screenshot({path:path.join(output,'situacao-inicial-390.png')});
+   await dialog.locator('[data-initial-confirm]').check();await dialog.getByRole('button',{name:'Registar situação inicial',exact:true}).click();await admin.waitForFunction(()=>!document.querySelector('.fleet-dialog'));
+   await admin.setViewportSize({width:1440,height:1000});assert.equal(await admin.locator('[data-action=initial-state][data-id="'+t.uuid(99)+'"]').count(),0);
+   await admin.locator('[data-action=page][data-page=history]').click();await admin.getByText('Início desconhecido',{exact:true}).first().waitFor();await admin.screenshot({path:path.join(output,'situacao-inicial-historico.png'),fullPage:true});
+  }
+  await admin.locator('[data-action=page][data-page=handovers]').click();await admin.locator('[data-action=edit-handover]').click();
   async function makeLink(role){const ready=admin.waitForResponse(response=>response.url().endsWith('/api/fleet-share') && response.request().postDataJSON()?.action==='create' && response.request().postDataJSON()?.purpose===role);await admin.locator(`[data-action=create-link][data-purpose=${role}]`).click();const response=await ready,value=await response.json();assert.equal(response.status(),200,JSON.stringify(value));await admin.waitForFunction(url=>document.querySelector('[data-share-url]')?.value===url,value.url);return new URL(value.url).hash;}
   const editorHash=await makeLink('editor');
   const mobile=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,acceptDownloads:true});const editor=await mobile.newPage();editor.on('pageerror',error=>errors.push(error.message));
@@ -111,13 +128,14 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
   await admin.getByRole('button',{name:'Atualizar assinaturas',exact:true}).click();await admin.locator('[data-share-status]').getByText(new RegExp(fromName)).waitFor();
   await admin.getByRole('button',{name:'Confirmar entrega',exact:true}).click();await admin.waitForFunction(()=>!document.querySelector('.fleet-dialog'));
   const final=(await t.query('select * from rh_fleet_handovers where id=$1',[h.id]))[0];assert.equal(final.status,'confirmed');assert.ok(final.snapshot.operation.signatures.from);assert.ok(final.snapshot.operation.signatures.to);
-  assert.equal(final.snapshot.operation.driver_fields.from.name,fromName);assert.equal(final.snapshot.operation.driver_fields.to.name,toName);assert.equal(final.snapshot.to_person.id,'a');
+  assert.equal(final.snapshot.operation.driver_fields.from.name,fromName);assert.equal(final.snapshot.operation.driver_fields.to.name,toName);assert.equal(final.snapshot.to_person.id,initialState?'b':'a');
+  if(initialState){const rows=await t.query('select * from rh_fleet_custody where vehicle_id=$1 order by from_at nulls first',[t.uuid(1)]);assert.equal(rows.length,2);assert.equal(rows[0].origin,'initial_state');assert.equal(rows[0].from_at,null);assert.equal(rows[1].person_id,'b');}
   assert.equal(final.snapshot.operation.damage_markers.length,1);assert.ok(Math.abs(final.snapshot.operation.damage_markers[0].x-100)<=1);assert.ok(Math.abs(final.snapshot.operation.damage_markers[0].y-335)<=1);
   for(let i=0;i<50 && !archived;i++)await new Promise(resolve=>setTimeout(resolve,100));
   assert.ok(archived);assert.equal((await PDFDocument.load(archived)).getPageCount(),3);
   fs.writeFileSync(path.join(output,'auto-assinado-teste.pdf'),archived);
   assert.equal(await admin.evaluate(()=>JSON.stringify(state)===window.hrBefore),true);assert.deepEqual(errors,[]);
   const expired=await mobile.newPage();await expired.goto(base+'/auto-viatura.html#'+'x'.repeat(43));await expired.getByRole('heading',{name:'Ligação indisponível',exact:true}).waitFor();
-  console.log(JSON.stringify({editorWithoutRhAccess:true,mobileDraftSurvivesReload:true,driverNamesSaved:true,sameNamesForSigning:true,privatePhotoUpload:true,scopedLinks:true,signWithFinger390:true,signWithFinger320:true,darkTheme:true,oneTimeReceipt:true,bothSignaturesRequired:true,pdfHasImagesAndReceipts:true,serverArchive:true,tokensNotInRequestUrls:true,hrUnchanged:true,pageErrors:errors}));
+  console.log(JSON.stringify({initialState,editorWithoutRhAccess:true,mobileDraftSurvivesReload:true,driverNamesSaved:true,sameNamesForSigning:true,privatePhotoUpload:true,scopedLinks:true,signWithFinger390:true,signWithFinger320:true,darkTheme:true,oneTimeReceipt:true,bothSignaturesRequired:true,pdfHasImagesAndReceipts:true,serverArchive:true,tokensNotInRequestUrls:true,hrUnchanged:true,pageErrors:errors}));
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve));await t.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});
