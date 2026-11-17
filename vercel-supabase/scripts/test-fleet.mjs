@@ -45,6 +45,10 @@ test('origem usa entrega real antes do habitual sem inventar periodos de utiliza
   assert.equal(handoverOrigin({},null,'temporary',persons).source,'company');
   assert.equal(current.person_id,'b');assert.equal(vehicle.habitual_person_id,'a');
 });
+test('passagem sem entrega real explica o registo inicial em falta mesmo com responsavel habitual',()=>{
+  const errors=validateHandover({...structuredClone(fixture.snapshot.operation),to_person_id:'b'},{odometer:0,habitual_person_id:'a'},null);
+  assert.ok(errors.some(message=>message.includes('registar e confirmar a entrega inicial')));
+});
 test('auto mantem duas paginas e suporta acentos, observacoes extensas e modelo versionado',async()=>{
   const bytes=await renderFleetPdf(fixture);assert.equal(bytes.subarray(0,4).toString(),'%PDF');
   const doc=await PDFDocument.load(bytes);assert.equal(doc.getPageCount(),2);assert.match(doc.getTitle(),/AB-12-CD/);

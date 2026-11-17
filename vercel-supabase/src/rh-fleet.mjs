@@ -1,7 +1,7 @@
 import {createIcons,Car,Plus,Pencil,ArrowRightLeft,History,FileText,RefreshCw,X,Check,Save,Download,Archive,Lock,Undo2,Trash2,Paperclip,Link,Copy,Share2} from 'lucide';
 import {signaturePad} from './fleet-signature-pad.mjs';
 import {fetchAllRows} from './rh-sync.mjs';
-import {OPERATIONS,CONDITIONS,INSPECTION_GROUPS,inspectionProgress,validateHandover,lisbonInput,fromLisbonInput,handoverOrigin} from './rh-fleet-model.mjs';
+import {OPERATIONS,CONDITIONS,INSPECTION_GROUPS,inspectionProgress,validateHandover,lisbonInput,fromLisbonInput,handoverOrigin,DAMAGE_VIEW} from './rh-fleet-model.mjs';
 const icons={Car,Plus,Pencil,ArrowRightLeft,History,FileText,RefreshCw,X,Check,Save,Download,Archive,Lock,Undo2,Trash2,Paperclip,Link,Copy,Share2};
 const esc=value=>String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clone=value=>JSON.parse(JSON.stringify(value));
@@ -322,18 +322,22 @@ class Fleet {
     if(!response.ok){let value;try{value=await response.json();}catch{}throw new Error(value?.error || 'Pedido indisponível. Tenta novamente.');}return response;
   }
   async loadDamage(){
+    const canvas=this.host.querySelector('.fleet-damage-canvas');if(!canvas)return;
+    canvas.width=DAMAGE_VIEW.width;canvas.height=DAMAGE_VIEW.height;
     if(this.damageImage)this.paintDamage();
     else try{
       const response=await this.authFetch('/api/fleet-auto?diagram=1');const blob=await response.blob();const url=URL.createObjectURL(blob);const image=new Image();
       image.onload=()=>{URL.revokeObjectURL(url);this.damageImage=image;this.paintDamage();};image.src=url;
     }catch(error){const target=this.host.querySelector('[data-damage-error]');if(target)target.textContent=error.message;}
-    const canvas=this.host.querySelector('.fleet-damage-canvas');if(!canvas)return;
-    canvas.onclick=event=>{const box=canvas.getBoundingClientRect(),x=(event.clientX-box.left)*595/box.width,y=(event.clientY-box.top)*842/box.height;if(x<50 || x>537 || y<260 || y>622)return;
+    canvas.onclick=event=>{const box=canvas.getBoundingClientRect(),x=DAMAGE_VIEW.x+(event.clientX-box.left)*DAMAGE_VIEW.width/box.width,y=DAMAGE_VIEW.y+(event.clientY-box.top)*DAMAGE_VIEW.height/box.height;if(x<50 || x>537 || y<260 || y>622)return;
       if(this.dialog.data.damage_markers.length>=100){this.message('O limite é de 100 marcas por auto.',true);return;}
       this.dialog.data.damage_markers.push({x:Math.round(x),y:Math.round(y),type:this.host.querySelector('[data-damage-type]').value});this.paintDamage();this.stash();this.scheduleSave();};
   }
   paintDamage(){
-    const canvas=this.host.querySelector('.fleet-damage-canvas');if(!canvas || !this.damageImage)return;const ctx=canvas.getContext('2d');ctx.clearRect(0,0,595,842);ctx.drawImage(this.damageImage,0,0,595,842);ctx.font='bold 14px Arial';ctx.fillStyle='#b91c1c';for(const marker of this.dialog.data.damage_markers || [])ctx.fillText(marker.type,marker.x-4,marker.y+4);
+    const canvas=this.host.querySelector('.fleet-damage-canvas');if(!canvas || !this.damageImage)return;
+    const ctx=canvas.getContext('2d'),view=DAMAGE_VIEW;ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(this.damageImage,view.x*this.damageImage.naturalWidth/595,view.y*this.damageImage.naturalHeight/842,view.width*this.damageImage.naturalWidth/595,view.height*this.damageImage.naturalHeight/842,0,0,canvas.width,canvas.height);
+    ctx.font='bold 14px Arial';ctx.fillStyle='#b91c1c';for(const marker of this.dialog.data.damage_markers || [])ctx.fillText(marker.type,marker.x-view.x-4,marker.y-view.y+4);
   }
   setupFiles(){this.host.querySelector('[data-fleet-upload]')?.addEventListener('change',async event=>{
     const files=[...event.target.files];if(!files.length)return;

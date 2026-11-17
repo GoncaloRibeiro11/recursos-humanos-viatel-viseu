@@ -82,6 +82,10 @@ sem todas as assinaturas e identificado como Por assinar.
 O original preservado esta em `vercel-supabase/assets/fleet/modri-94-01-v1.pdf`.
 O desenho da pagina 2 e servido apenas a administradores autenticados. Notas
 extensas criam paginas de continuacao, sem cortar informacao.
+Na marcacao interativa de danos aparece apenas o ponto 10 (desenhos), sem os
+quadros 8/9 nem a zona de observacoes/assinaturas. A imagem original e o PDF
+final continuam completos. As marcas mantem coordenadas da pagina original,
+incluindo as antigas; o recorte nao desloca nem reescreve danos guardados.
 
 `npm test`; `node scripts/test-fleet-sql.cjs` com PGLITE_MODULE;
 `node scripts/test-fleet-browser.cjs` com PLAYWRIGHT_MODULE e PGLITE_MODULE.

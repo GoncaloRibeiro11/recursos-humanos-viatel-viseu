@@ -102,12 +102,16 @@ const server=http.createServer(async(req,res)=>{
     assert.equal(await page.locator('[name="driver.to.name"]').inputValue(),'Colaborador B');
     await page.locator('[name=odometer]').fill('180');await page.locator('[name=fuel]').selectOption('3/4');await complete();
     await page.locator('[data-damage-details] summary').click();await page.waitForFunction(()=>document.querySelector('.fleet-damage-canvas')?.onclick);
-    const damage=page.locator('.fleet-damage-canvas');const box=await damage.boundingBox();await damage.click({position:{x:box.width*100/595,y:box.height*335/842}});
+    const damage=page.locator('.fleet-damage-canvas');assert.equal(await damage.getAttribute('width'),'490');assert.equal(await damage.getAttribute('height'),'385');
+    const box=await damage.boundingBox();await page.mouse.click(box.x+box.width*(100-49)/490,box.y+box.height*(335-239)/385);
     await page.locator('[name=damage_notes]').fill('Risco na porta esquerda.');
     await page.getByRole('button',{name:'Guardar rascunho',exact:true}).click();await page.getByText('Rascunho guardado no servidor',{exact:true}).waitFor();
     await page.reload();await page.getByRole('button',{name:'Retomar rascunho local',exact:true}).click();
     assert.equal(await page.locator('[name=to_person_id]').inputValue(),'b');assert.equal(await page.locator('[name=odometer]').inputValue(),'180');
     assert.equal(await page.locator('[name=damage_notes]').inputValue(),'Risco na porta esquerda.');
+    await page.locator('[data-damage-details] summary').click();await page.waitForFunction(()=>{const c=document.querySelector('.fleet-damage-canvas');if(!c)return false;return [...c.getContext('2d').getImageData(45,85,20,20).data].some((v,i,a)=>i%4===0 && v>120 && a[i+1]<90 && a[i+2]<90 && a[i+3]>200);});
+    const stored=(await query("select data from rh_fleet_handovers where status='draft' order by number desc"))[0].data.damage_markers[0];assert.ok(Math.abs(stored.x-100)<=1);assert.ok(Math.abs(stored.y-335)<=1);
+    await page.locator('.fleet-damage-canvas').screenshot({path:path.join(output,'danos-desenhos.png')});
     await page.getByRole('button',{name:'Confirmar entrega',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.fleet-dialog'));
     assert.equal((await query('select * from rh_fleet_custody where to_at is null'))[0].person_id,'b');
     assert.equal((await query('select habitual_person_id from rh_fleet_vehicles'))[0].habitual_person_id,'a');
@@ -120,6 +124,8 @@ const server=http.createServer(async(req,res)=>{
       await page.locator('[name=kind]').selectOption('return');assert.equal(await page.locator('[data-receiver]').isVisible(),false);
       assert.equal(await page.locator('[data-giver]').inputValue(),'Colaborador B');assert.equal(await page.locator('[name="driver.from.name"]').inputValue(),'Colaborador B');
       assert.equal(await page.locator('[name="driver.to.name"]').inputValue(),'');assert.equal(await page.locator('[data-giver-status]').innerText(),'');
+      await page.locator('[data-damage-details] summary').click();await page.waitForFunction(()=>document.querySelector('.fleet-damage-canvas')?.onclick);
+      await page.locator('.fleet-damage-canvas').screenshot({path:path.join(output,`danos-desenhos-${width}.png`)});
       await page.locator('.fleet-dialog').screenshot({path:path.join(output,`frota-form-${width}.png`)});
       await page.getByRole('button',{name:'Fechar',exact:true}).click();
       await page.screenshot({path:path.join(output,`frota-site-${width}.png`),fullPage:true});
@@ -130,6 +136,6 @@ const server=http.createServer(async(req,res)=>{
     await page.screenshot({path:path.join(output,'frota-history.png'),fullPage:true});
     assert.equal(await page.evaluate(()=>JSON.stringify(state)===window.originalHR),true);assert.deepEqual(errors,[]);
     assert.equal(writes.every(name=>name.startsWith('rh_fleet_')),true);
-    console.log(JSON.stringify({vehicleAndCartrack:true,initialHandover:true,temporaryHandover:true,inspectionRequired:true,serverDraftSurvivesReload:true,damageMarkerSaved:true,historyPreserved:true,hrDataUntouched:true,mobile320:true,mobile390:true,darkTheme:true,pageErrors:errors}));
+    console.log(JSON.stringify({vehicleAndCartrack:true,initialHandover:true,temporaryHandover:true,inspectionRequired:true,serverDraftSurvivesReload:true,onlyDamageDrawings:true,originalMarkerCoordinates:true,damageMarkerSaved:true,historyPreserved:true,hrDataUntouched:true,mobile320:true,mobile390:true,darkTheme:true,pageErrors:errors}));
   }finally{pauseSave=false;waiting.splice(0).forEach(resolve=>resolve());await browser.close();await new Promise(resolve=>server.close(resolve));await db.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

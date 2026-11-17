@@ -17,6 +17,8 @@ const columns=[[209.21,227.81,246.41,265.01,283.61],[456.65,474.65,491.21,509.81
 for(const group of INSPECTION_GROUPS)group.columns=group.page===1?(group.id==='body'?[215.81,233.21,250.61,268.01]:[448.25,468.65,489.05,509.45]):columns[['glass','int','level'].includes(group.id)?1:0];
 export const INSPECTION_ITEMS=INSPECTION_GROUPS.flatMap(group=>group.items);
 export const TEMPLATE_VERSION=1;
+// View coordinates are cropped; stored damage marks keep the original PDF coordinates.
+export const DAMAGE_VIEW={x:49,y:239,width:490,height:385};
 export function handoverOrigin(vehicle,current,kind,persons=[]){
   const id=current?.person_id || (kind!=='initial'?vehicle.habitual_person_id:null);
   const person=id?persons.find(p=>p.id===id):null;
@@ -45,7 +47,7 @@ export function validateHandover(data,vehicle,current,now=new Date()){
   if(!['Reserva','1/4','1/2','3/4','Cheio'].includes(data.fuel))errors.push('Confirma o combustível.');
   if(data.kind!=='return' && (!data.to_person_id || data.to_person_id===current?.person_id))errors.push('Seleciona quem recebe, diferente de quem entrega.');
   if(data.kind==='initial' && current)errors.push('A viatura já tem um responsável.');
-  if(['temporary','return'].includes(data.kind) && !current)errors.push('A viatura não tem uma entrega em curso.');
+  if(['temporary','return'].includes(data.kind) && !current)errors.push('Falta registar e confirmar a entrega inicial desta viatura a quem a tem atualmente, antes de fazer uma passagem temporária ou devolução.');
   if(data.kind==='temporary' && (!data.expected_return || +new Date(data.expected_return)<=+at || !Number.isFinite(+new Date(data.expected_return))))errors.push('Indica a devolução prevista posterior à entrega.');
   for(const group of INSPECTION_GROUPS)for(const item of group.items){
     const value=data.inspection?.[item.key];
