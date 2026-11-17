@@ -70,6 +70,13 @@ const server=http.createServer(async(req,res)=>{
     await page.locator('[data-fleet-vehicle]').waitFor();assert.match(await page.locator('#fleetRoot').textContent(),/000145/);
     assert.equal((await query('select * from rh_fleet_custody')).length,0);
     await page.getByRole('button',{name:'Registar entrega inicial',exact:true}).click();
+    assert.equal(await page.locator('[data-giver]').inputValue(),'Empresa / parque');
+    assert.equal(await page.locator('[name="driver.from.name"]').inputValue(),'');assert.equal(await page.locator('[name="driver.to.name"]').inputValue(),'Gestor A');
+    await page.locator('[name=kind]').selectOption('temporary');
+    assert.equal(await page.locator('[data-giver]').inputValue(),'Gestor A');assert.equal(await page.locator('[name="driver.from.name"]').inputValue(),'Gestor A');
+    assert.match(await page.locator('[data-giver-status]').innerText(),/sem entrega inicial registada/);assert.equal((await query('select * from rh_fleet_custody')).length,0);
+    await page.setViewportSize({width:390,height:900});await page.locator('.fleet-dialog').screenshot({path:path.join(output,'nome-associado-390.png')});
+    await page.setViewportSize({width:1440,height:1000});await page.locator('[name=kind]').selectOption('initial');
     await page.locator('[name="driver.from.name"]').fill('Manuel de Entrega Teste');await page.locator('[name="driver.to.name"]').fill('Gestor A Nome Completo');
     await page.locator('[name=at_input]').fill('2026-11-01T09:00');await page.locator('[name=odometer]').fill('120');await page.locator('[name=fuel]').selectOption('Cheio');
     await page.getByRole('button',{name:'Confirmar entrega',exact:true}).click();assert.match(await page.locator('[data-fleet-message]').last().textContent(),/inspeção/);
@@ -92,7 +99,7 @@ const server=http.createServer(async(req,res)=>{
     await page.locator('[data-action=page][data-page=vehicles]').click();await page.getByRole('button',{name:'Passar ou devolver viatura',exact:true}).click();
     await page.locator('[name="driver.to.name"]').fill('Nome que nao deve transitar');
     await page.locator('[name=to_person_id]').selectOption('b');await page.locator('[name=at_input]').fill('2026-11-10T09:00');await page.locator('[name=expected_input]').fill('2026-12-01T09:00');
-    assert.equal(await page.locator('[name="driver.to.name"]').inputValue(),'');
+    assert.equal(await page.locator('[name="driver.to.name"]').inputValue(),'Colaborador B');
     await page.locator('[name=odometer]').fill('180');await page.locator('[name=fuel]').selectOption('3/4');await complete();
     await page.locator('[data-damage-details] summary').click();await page.waitForFunction(()=>document.querySelector('.fleet-damage-canvas')?.onclick);
     const damage=page.locator('.fleet-damage-canvas');const box=await damage.boundingBox();await damage.click({position:{x:box.width*100/595,y:box.height*335/842}});
@@ -111,6 +118,8 @@ const server=http.createServer(async(req,res)=>{
       await page.getByRole('button',{name:'Passar ou devolver viatura',exact:true}).click();
       assert.equal(await page.locator('.fleet-dialog').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
       await page.locator('[name=kind]').selectOption('return');assert.equal(await page.locator('[data-receiver]').isVisible(),false);
+      assert.equal(await page.locator('[data-giver]').inputValue(),'Colaborador B');assert.equal(await page.locator('[name="driver.from.name"]').inputValue(),'Colaborador B');
+      assert.equal(await page.locator('[name="driver.to.name"]').inputValue(),'');assert.equal(await page.locator('[data-giver-status]').innerText(),'');
       await page.locator('.fleet-dialog').screenshot({path:path.join(output,`frota-form-${width}.png`)});
       await page.getByRole('button',{name:'Fechar',exact:true}).click();
       await page.screenshot({path:path.join(output,`frota-site-${width}.png`),fullPage:true});

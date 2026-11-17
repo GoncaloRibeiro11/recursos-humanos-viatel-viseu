@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createRequire} from 'node:module';
-import {INSPECTION_ITEMS,INSPECTION_GROUPS,inspectionProgress,validateHandover,fromLisbonInput,lisbonInput,custodyAt,driverName} from '../src/rh-fleet-model.mjs';
+import {INSPECTION_ITEMS,INSPECTION_GROUPS,inspectionProgress,validateHandover,fromLisbonInput,lisbonInput,custodyAt,driverName,handoverOrigin} from '../src/rh-fleet-model.mjs';
 const require=createRequire(import.meta.url);
 const {renderFleetPdf}=require('../lib/fleet-pdf.cjs');
 const {createFleetApi}=require('../api/fleet-auto.js');
@@ -35,6 +35,15 @@ test('nomes completos no auto distinguem condutores da empresa e do nome abrevia
   assert.equal(driverName({},'to',{id:'a',name:'Ana Teste'}),'Ana Teste');
   assert.equal(driverName({signature_receipts:{to:{signer_name:'Recebe na empresa'}}},'to',{name:'Empresa / parque'}),'Recebe na empresa');
   assert.equal(op.driver_fields.from.name,'  Manuel de Entrega Teste  ');
+});
+test('origem usa entrega real antes do habitual sem inventar periodos de utilizacao',()=>{
+  const vehicle={habitual_person_id:'a'},persons=[{id:'a',name:'Gestor A'},{id:'b',name:'Colaborador B'}];
+  assert.deepEqual(handoverOrigin(vehicle,null,'initial',persons),{id:null,name:'Empresa / parque',source:'company'});
+  assert.deepEqual(handoverOrigin(vehicle,null,'temporary',persons),{id:'a',name:'Gestor A',source:'habitual'});
+  const current={person_id:'b',person_name:'Nome guardado B'};
+  assert.deepEqual(handoverOrigin(vehicle,current,'return',persons),{id:'b',name:'Colaborador B',source:'custody'});
+  assert.equal(handoverOrigin({},null,'temporary',persons).source,'company');
+  assert.equal(current.person_id,'b');assert.equal(vehicle.habitual_person_id,'a');
 });
 test('auto mantem duas paginas e suporta acentos, observacoes extensas e modelo versionado',async()=>{
   const bytes=await renderFleetPdf(fixture);assert.equal(bytes.subarray(0,4).toString(),'%PDF');

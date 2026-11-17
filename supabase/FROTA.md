@@ -40,6 +40,13 @@ pagina remota. Empresa / parque identifica a origem/destino, nao um condutor:
 sem nome indicado, o campo do condutor fica vazio (ou usa o nome da assinatura
 remota quando disponivel). Mudar quem recebe limpa o nome manual anterior.
 Autos ja confirmados e PDFs arquivados nao sao reescritos.
+Os nomes sao preenchidos automaticamente: o responsavel com entrega real tem
+prioridade; sem entrega registada, uma passagem/devolucao sugere o responsavel
+habitual com essa falta de registo assinalada. A entrega inicial mantem a
+empresa como origem e sugere o habitual em Recebe. As sugestoes nao criam
+posses nem dispensam o registo inicial para confirmar uma passagem temporaria.
+Nomes indicados manualmente sao preservados; pedidos de assinatura ativos nao
+recebem alteracoes automaticas aos nomes. Trocar Recebe sugere o novo nome.
 
 Os itens da inspecao comecam por verificar. Aplicar um estado a itens vazios e
 uma acao explicita do utilizador. Mau exige justificacao. Assinaturas sao

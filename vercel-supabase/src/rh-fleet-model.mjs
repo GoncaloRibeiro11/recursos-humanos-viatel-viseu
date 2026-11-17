@@ -17,6 +17,13 @@ const columns=[[209.21,227.81,246.41,265.01,283.61],[456.65,474.65,491.21,509.81
 for(const group of INSPECTION_GROUPS)group.columns=group.page===1?(group.id==='body'?[215.81,233.21,250.61,268.01]:[448.25,468.65,489.05,509.45]):columns[['glass','int','level'].includes(group.id)?1:0];
 export const INSPECTION_ITEMS=INSPECTION_GROUPS.flatMap(group=>group.items);
 export const TEMPLATE_VERSION=1;
+export function handoverOrigin(vehicle,current,kind,persons=[]){
+  const id=current?.person_id || (kind!=='initial'?vehicle.habitual_person_id:null);
+  const person=id?persons.find(p=>p.id===id):null;
+  if(current)return {id,name:person?.name || current.person_name,source:'custody'};
+  if(person)return {id,name:person.name,source:'habitual'};
+  return {id:null,name:'Empresa / parque',source:'company'};
+}
 export function driverName(operation,kind,person={}){
   const value=operation.driver_fields?.[kind]?.name;
   if(typeof value==='string' && value.trim())return value.trim();
