@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createRequire} from 'node:module';
-import {INSPECTION_ITEMS,INSPECTION_GROUPS,inspectionProgress,validateHandover,fromLisbonInput,lisbonInput,custodyAt} from '../src/rh-fleet-model.mjs';
+import {INSPECTION_ITEMS,INSPECTION_GROUPS,inspectionProgress,validateHandover,fromLisbonInput,lisbonInput,custodyAt,driverName} from '../src/rh-fleet-model.mjs';
 const require=createRequire(import.meta.url);
 const {renderFleetPdf}=require('../lib/fleet-pdf.cjs');
 const {createFleetApi}=require('../api/fleet-auto.js');
@@ -26,6 +26,15 @@ test('datas de frota seguem Lisboa e recusam horas inexistentes ou ambiguas',()=
   assert.equal(lisbonInput('2026-07-17T08:00:00Z'),'2026-07-17T09:00');
   const rows=[{vehicle_id:'v',person_id:'a',from_at:'2026-11-01T09:00:00Z',to_at:'2026-11-02T09:00:00Z'},{vehicle_id:'v',person_id:'b',from_at:'2026-11-02T09:00:00Z',to_at:null}];
   assert.equal(custodyAt(rows,'v','2026-11-02T09:00:00Z').person_id,'b');
+});
+test('nomes completos no auto distinguem condutores da empresa e do nome abreviado RH',()=>{
+  const op={driver_fields:{from:{name:'  Manuel de Entrega Teste  '},to:{name:'Ana de Rececao Teste'}}};
+  assert.equal(driverName(op,'from',{name:'Empresa / parque'}),'Manuel de Entrega Teste');
+  assert.equal(driverName(op,'to',{id:'a',name:'Ana Teste'}),'Ana de Rececao Teste');
+  assert.equal(driverName({},'from',{name:'Empresa / parque'}),'');
+  assert.equal(driverName({},'to',{id:'a',name:'Ana Teste'}),'Ana Teste');
+  assert.equal(driverName({signature_receipts:{to:{signer_name:'Recebe na empresa'}}},'to',{name:'Empresa / parque'}),'Recebe na empresa');
+  assert.equal(op.driver_fields.from.name,'  Manuel de Entrega Teste  ');
 });
 test('auto mantem duas paginas e suporta acentos, observacoes extensas e modelo versionado',async()=>{
   const bytes=await renderFleetPdf(fixture);assert.equal(bytes.subarray(0,4).toString(),'%PDF');

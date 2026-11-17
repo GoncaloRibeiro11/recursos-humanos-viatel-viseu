@@ -70,6 +70,7 @@ const server=http.createServer(async(req,res)=>{
     await page.locator('[data-fleet-vehicle]').waitFor();assert.match(await page.locator('#fleetRoot').textContent(),/000145/);
     assert.equal((await query('select * from rh_fleet_custody')).length,0);
     await page.getByRole('button',{name:'Registar entrega inicial',exact:true}).click();
+    await page.locator('[name="driver.from.name"]').fill('Manuel de Entrega Teste');await page.locator('[name="driver.to.name"]').fill('Gestor A Nome Completo');
     await page.locator('[name=at_input]').fill('2026-11-01T09:00');await page.locator('[name=odometer]').fill('120');await page.locator('[name=fuel]').selectOption('Cheio');
     await page.getByRole('button',{name:'Confirmar entrega',exact:true}).click();assert.match(await page.locator('[data-fleet-message]').last().textContent(),/inspeção/);
     const complete=async()=>{
@@ -86,8 +87,12 @@ const server=http.createServer(async(req,res)=>{
     await page.getByRole('button',{name:'Confirmar entrega',exact:true}).click();
     await page.waitForFunction(()=>!document.querySelector('.fleet-dialog'));
     assert.equal((await query('select * from rh_fleet_custody where to_at is null'))[0].person_id,'a');
+    const initial=(await query("select snapshot from rh_fleet_handovers where status='confirmed'"))[0].snapshot;
+    assert.equal(initial.operation.driver_fields.from.name,'Manuel de Entrega Teste');assert.equal(initial.operation.driver_fields.to.name,'Gestor A Nome Completo');
     await page.locator('[data-action=page][data-page=vehicles]').click();await page.getByRole('button',{name:'Passar ou devolver viatura',exact:true}).click();
+    await page.locator('[name="driver.to.name"]').fill('Nome que nao deve transitar');
     await page.locator('[name=to_person_id]').selectOption('b');await page.locator('[name=at_input]').fill('2026-11-10T09:00');await page.locator('[name=expected_input]').fill('2026-12-01T09:00');
+    assert.equal(await page.locator('[name="driver.to.name"]').inputValue(),'');
     await page.locator('[name=odometer]').fill('180');await page.locator('[name=fuel]').selectOption('3/4');await complete();
     await page.locator('[data-damage-details] summary').click();await page.waitForFunction(()=>document.querySelector('.fleet-damage-canvas')?.onclick);
     const damage=page.locator('.fleet-damage-canvas');const box=await damage.boundingBox();await damage.click({position:{x:box.width*100/595,y:box.height*335/842}});

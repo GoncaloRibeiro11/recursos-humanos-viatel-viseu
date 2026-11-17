@@ -17,6 +17,12 @@ const columns=[[209.21,227.81,246.41,265.01,283.61],[456.65,474.65,491.21,509.81
 for(const group of INSPECTION_GROUPS)group.columns=group.page===1?(group.id==='body'?[215.81,233.21,250.61,268.01]:[448.25,468.65,489.05,509.45]):columns[['glass','int','level'].includes(group.id)?1:0];
 export const INSPECTION_ITEMS=INSPECTION_GROUPS.flatMap(group=>group.items);
 export const TEMPLATE_VERSION=1;
+export function driverName(operation,kind,person={}){
+  const value=operation.driver_fields?.[kind]?.name;
+  if(typeof value==='string' && value.trim())return value.trim();
+  if(person?.id)return String(person.name || '').trim();
+  return String(operation.signature_receipts?.[kind]?.signer_name || '').trim();
+}
 export function inspectionProgress(inspection={}){
   return {complete:INSPECTION_ITEMS.filter(item=>CONDITIONS.includes(inspection[item.key])).length,total:INSPECTION_ITEMS.length};
 }

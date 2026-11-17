@@ -5,7 +5,7 @@ const fontkit=require('@pdf-lib/fontkit');
 const asset=name=>path.join(__dirname,'../assets/fleet',name);
 const clean=value=>String(value ?? '').replace(/[\u0000-\u0009\u000b-\u001f]/g,' ').slice(0,8000);
 async function renderFleetPdf(handover){
-  const {INSPECTION_GROUPS,CONDITIONS,OPERATIONS}=await import('../src/rh-fleet-model.mjs');
+  const {INSPECTION_GROUPS,CONDITIONS,OPERATIONS,driverName}=await import('../src/rh-fleet-model.mjs');
   const s=handover.snapshot;if(!s || s.template_version!==1)throw new Error('Versão do modelo de auto indisponível.');
   const op=s.operation,v=s.vehicle;
   const pdf=await PDFDocument.load(await fs.readFile(asset('modri-94-01-v1.pdf')));
@@ -27,7 +27,7 @@ async function renderFleetPdf(handover){
   text(pages[0],v.plate,99,146,62,8.5,true);text(pages[0],v.make_model,228,147,143,8.5,true);text(pages[0],op.odometer==='' || op.odometer==null?'':Number(op.odometer).toLocaleString('pt-PT'),424,147,103,8.5,true);
   for(const [kind,person,top] of [['from',s.from_person,190],['to',s.to_person,222.4]]){
     const fields=op.driver_fields?.[kind] || {};
-    text(pages[0],person.name,129,top,216,8,true);text(pages[0],fields.number || person.number,362,top,47,8,true);text(pages[0],fields.phone || person.phone,444,top,81,8,true);
+    text(pages[0],driverName(op,kind,person),129,top,216,8,true);text(pages[0],fields.number || person.number,362,top,47,8,true);text(pages[0],fields.phone || person.phone,444,top,81,8,true);
     text(pages[0],fields.bi,82,top+14,129,8,true);text(pages[0],fields.nif,240,top+14,115,8,true);text(pages[0],fields.license,406,top+14,119,8,true);
   }
   for(const group of INSPECTION_GROUPS){
@@ -58,7 +58,7 @@ async function renderFleetPdf(handover){
   }
   const noteLines=wrap(note,468,7);
   noteLines.slice(0,6).forEach((line,index)=>text(pages[1],line,65,643+index*7.5,465,7));
-  const names={from:s.from_person.id?s.from_person.name:op.signature_receipts?.from?.signer_name || s.from_person.name,to:s.to_person.id?s.to_person.name:op.signature_receipts?.to?.signer_name || s.to_person.name,zone:op.zone_name};
+  const names={from:driverName(op,'from',s.from_person),to:driverName(op,'to',s.to_person),zone:op.zone_name};
   for(const [index,key] of ['from','to','zone'].entries()){
     const top=701+index*26;text(pages[1],names[key],154,top,200,8,true);
     const signature=op.signatures?.[key];

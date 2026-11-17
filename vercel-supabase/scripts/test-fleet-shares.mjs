@@ -46,3 +46,10 @@ test('pedido publico nao pode escolher outro auto, alterar intervenientes ou inj
   await assert.rejects(service.remote({action:'upload',token,image:'invalid'}),error=>error.status===403);
   await assert.rejects(service.remote({action:'file',token,name:'../../private.pdf'}),error=>error.status===404);
 });
+test('preenchimento remoto preserva os dois nomes completos sem inventar nomes antigos',async()=>{
+  const patch=await safePatch({driver_fields:{from:{name:'  Manuel de Entrega Teste  '},to:{name:'Ana de Rececao Teste'}}});
+  assert.equal(patch.driver_fields.from.name,'Manuel de Entrega Teste');assert.equal(patch.driver_fields.to.name,'Ana de Rececao Teste');
+  assert.equal(Object.hasOwn((await safePatch({driver_fields:{from:{},to:{}}})).driver_fields.from,'name'),false);
+  await assert.rejects(safePatch({driver_fields:{from:{name:'A'.repeat(121)}}}),/condutor/);
+  await assert.rejects(safePatch({driver_fields:{from:{name:'Nome\nerrado'}}}),/condutor/);
+});

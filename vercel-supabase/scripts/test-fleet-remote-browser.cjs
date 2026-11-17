@@ -3,6 +3,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const createDb=require('./fleet-share-test-db.cjs');const {createFleetShares}=require('../lib/fleet-shares.cjs');const {createFleetApi}=require('../api/fleet-auto.js');
 const {PDFDocument}=require('pdf-lib');const {createCanvas}=require('@napi-rs/canvas');
 const root=path.resolve(__dirname,'../public'),output=path.resolve(__dirname,'../../../../recovery/fleet-remote-tests');
+const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
 (async()=>{
  const t=await createDb(),objects=new Map(),secret='local-test-server-key';let base,archived;
  const h=await t.draft(2);
@@ -69,11 +70,14 @@ const root=path.resolve(__dirname,'../public'),output=path.resolve(__dirname,'..
   await editor.goto(base+'/auto-viatura.html'+editorHash);await editor.locator('[name=odometer]').waitFor();
   assert.equal(await editor.locator('[name=kind]').isDisabled(),true);assert.equal(await editor.locator('[data-sharing]').count(),0);assert.equal(await editor.locator('[data-signature]').count(),0);
   await editor.locator('[name=odometer]').fill('145');await editor.locator('[name=notes]').fill('Preenchido no telemovel.');
+  await editor.locator('[name="driver.from.name"]').fill(fromName);await editor.locator('[name="driver.to.name"]').fill(toName);
   await editor.getByRole('button',{name:'Guardar',exact:true}).click();await editor.getByText('Rascunho guardado no servidor',{exact:true}).waitFor();
   const photo=createCanvas(100,80);photo.getContext('2d').fillRect(0,0,100,80);
   await editor.locator('[data-fleet-upload]').setInputFiles({name:'viatura-teste.jpg',mimeType:'image/jpeg',buffer:photo.toBuffer('image/jpeg')});
   await editor.locator('[data-fleet-files] li').waitFor();assert.equal(objects.size,1);
   await editor.reload();assert.equal(await editor.locator('[name=odometer]').inputValue(),'145');
+  assert.equal(await editor.locator('[name="driver.from.name"]').inputValue(),fromName);assert.equal(await editor.locator('[name="driver.to.name"]').inputValue(),toName);
+  await editor.locator('[data-driver=name]').first().locator('xpath=../..').screenshot({path:path.join(output,'nomes-condutores-390.png')});
   await editor.screenshot({path:path.join(output,'preencher-390.png'),fullPage:true});
   await editor.getByRole('button',{name:'Concluir preenchimento',exact:true}).click();await editor.getByRole('heading',{name:'Preenchimento enviado ao RH',exact:true}).waitFor();
   assert.ok(requestUrls.every(url=>!url.includes(editorHash.slice(1))));
@@ -84,7 +88,8 @@ const root=path.resolve(__dirname,'../public'),output=path.resolve(__dirname,'..
   await admin.locator('[data-sharing]').screenshot({path:path.join(output,'rh-ligacoes.png')});
   async function sign(fragment,name,width){
    const page=await mobile.newPage();page.on('pageerror',error=>errors.push(error.message));await page.setViewportSize({width,height:900});await page.goto(base+'/auto-viatura.html'+fragment);
-   await page.locator('#remoteSignerName').fill(name);assert.equal(await page.locator('#remoteSign').isDisabled(),true);
+   await page.locator('#remoteSignerName').waitFor();assert.equal(await page.locator('#remoteSignerName').inputValue(),name);assert.equal(await page.locator('#remoteSign').isDisabled(),true);
+   assert.match(await page.locator('.remote-facts').innerText(),new RegExp(fromName));assert.match(await page.locator('.remote-facts').innerText(),new RegExp(toName));
    await page.waitForFunction(()=>document.querySelector('#remotePhotos img')?.naturalWidth>0);
    if(width===320){await page.emulateMedia({colorScheme:'dark'});assert.equal(await page.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(20, 25, 31)');}
    const canvas=page.locator('#remoteSignature');await canvas.scrollIntoViewIfNeeded();const box=await canvas.boundingBox(),cdp=await mobile.newCDPSession(page);
@@ -98,15 +103,16 @@ const root=path.resolve(__dirname,'../public'),output=path.resolve(__dirname,'..
    await page.locator('#remoteSign').click();await page.getByRole('heading',{name:'Assinatura registada',exact:true}).waitFor();
    await page.reload();await page.getByRole('heading',{name:'Assinatura registada',exact:true}).waitFor();return page;
   }
-  await sign(fromHash,'Entrega Teste',390);await sign(toHash,'Recebe Teste',320);
-  await admin.getByRole('button',{name:'Atualizar assinaturas',exact:true}).click();await admin.locator('[data-share-status]').getByText(/Entrega Teste/).waitFor();
+  await sign(fromHash,fromName,390);await sign(toHash,toName,320);
+  await admin.getByRole('button',{name:'Atualizar assinaturas',exact:true}).click();await admin.locator('[data-share-status]').getByText(new RegExp(fromName)).waitFor();
   await admin.getByRole('button',{name:'Confirmar entrega',exact:true}).click();await admin.waitForFunction(()=>!document.querySelector('.fleet-dialog'));
   const final=(await t.query('select * from rh_fleet_handovers where id=$1',[h.id]))[0];assert.equal(final.status,'confirmed');assert.ok(final.snapshot.operation.signatures.from);assert.ok(final.snapshot.operation.signatures.to);
+  assert.equal(final.snapshot.operation.driver_fields.from.name,fromName);assert.equal(final.snapshot.operation.driver_fields.to.name,toName);assert.equal(final.snapshot.to_person.id,'a');
   for(let i=0;i<50 && !archived;i++)await new Promise(resolve=>setTimeout(resolve,100));
   assert.ok(archived);assert.equal((await PDFDocument.load(archived)).getPageCount(),3);
   fs.writeFileSync(path.join(output,'auto-assinado-teste.pdf'),archived);
   assert.equal(await admin.evaluate(()=>JSON.stringify(state)===window.hrBefore),true);assert.deepEqual(errors,[]);
   const expired=await mobile.newPage();await expired.goto(base+'/auto-viatura.html#'+'x'.repeat(43));await expired.getByRole('heading',{name:'Ligação indisponível',exact:true}).waitFor();
-  console.log(JSON.stringify({editorWithoutRhAccess:true,mobileDraftSurvivesReload:true,privatePhotoUpload:true,scopedLinks:true,signWithFinger390:true,signWithFinger320:true,darkTheme:true,oneTimeReceipt:true,bothSignaturesRequired:true,pdfHasImagesAndReceipts:true,serverArchive:true,tokensNotInRequestUrls:true,hrUnchanged:true,pageErrors:errors}));
+  console.log(JSON.stringify({editorWithoutRhAccess:true,mobileDraftSurvivesReload:true,driverNamesSaved:true,sameNamesForSigning:true,privatePhotoUpload:true,scopedLinks:true,signWithFinger390:true,signWithFinger320:true,darkTheme:true,oneTimeReceipt:true,bothSignaturesRequired:true,pdfHasImagesAndReceipts:true,serverArchive:true,tokensNotInRequestUrls:true,hrUnchanged:true,pageErrors:errors}));
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve));await t.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

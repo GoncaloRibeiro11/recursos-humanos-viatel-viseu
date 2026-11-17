@@ -33,6 +33,14 @@ Depois executar `migrations/20261117_fleet_shares.sql` para as ligacoes privadas
    arquiva `auto-v1.pdf` sem sobrescrever. Em falha, a entrega fica guardada e o
    administrador pode repetir Auto PDF. Nao e utilizada a service-role key.
 
+No rascunho, os campos Nome completo de quem entrega / recebe permitem indicar
+os nomes para o documento sem renomear colaboradores nem mudar a posse da
+viatura. Sao usados nos Dados dos Condutores, junto das assinaturas e na
+pagina remota. Empresa / parque identifica a origem/destino, nao um condutor:
+sem nome indicado, o campo do condutor fica vazio (ou usa o nome da assinatura
+remota quando disponivel). Mudar quem recebe limpa o nome manual anterior.
+Autos ja confirmados e PDFs arquivados nao sao reescritos.
+
 Os itens da inspecao comecam por verificar. Aplicar um estado a itens vazios e
 uma acao explicita do utilizador. Mau exige justificacao. Assinaturas sao
 opcionais, manuscritas no ecra, ou recolhidas em papel e anexadas depois; PDF
