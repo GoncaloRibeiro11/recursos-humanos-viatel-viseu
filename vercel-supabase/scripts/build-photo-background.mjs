@@ -103,3 +103,8 @@ await build({
   entryPoints:['src/anniversary-card.mjs'], outfile:'public/rh-anniversaries.js',
   bundle:true,minify:true,format:'iife',globalName:'RhAnniversaries',platform:'browser',target:['chrome100','safari16']
 });
+await build({
+  absWorkingDir:fileURLToPath(new URL('../',import.meta.url)),
+  entryPoints:['src/rh-fleet.mjs'],outfile:'public/rh-fleet.js',
+  bundle:true,minify:true,format:'iife',globalName:'RhFleet',platform:'browser',target:['chrome100','safari16']
+});

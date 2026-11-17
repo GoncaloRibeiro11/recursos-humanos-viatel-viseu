@@ -1,0 +1,62 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const {PGlite}=require(process.env.PGLITE_MODULE || '@electric-sql/pglite');
+(async()=>{
+  const db=new PGlite();const query=async(sql,args=[])=>(await db.query(sql,args)).rows;
+  const admin='00000000-0000-4000-8000-000000000001',manager='00000000-0000-4000-8000-000000000002';
+  const uuid=n=>'10000000-0000-4000-8000-'+String(n).padStart(12,'0');
+  try{
+    await db.exec(`create role anon;create role authenticated;create schema auth;create schema storage;
+      create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('app.user',true),'')::uuid $$;
+      create function public.is_rh_admin() returns boolean language sql security definer as $$ select auth.uid()='${admin}'::uuid $$;
+      create table rh_persons(id text primary key,name text,entrada date,saida date,ativo boolean default true,data jsonb default '{}');
+      insert into rh_persons(id,name,data) values('a','Gestor A','{"telefone":"900100200"}'),('b','Gestor B','{}'),('c','Gestor C','{}');
+      create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+      create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text);alter table storage.objects enable row level security;
+      grant usage on schema public,auth,storage to authenticated;grant select,insert on storage.objects to authenticated;`);
+    const sql=fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261117_fleet.sql'),'utf8');await db.exec(sql);
+    await db.exec(`select set_config('app.user','${admin}',false);set role authenticated;`);
+    const call=async(name,args)=>(await query(`select to_jsonb(public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')})) as result`,args))[0].result;
+    const vehicle=await call('rh_fleet_save_vehicle',[uuid(1),0,{plate:' ab-12-cd ',make_model:'Renault Clio',cartrack_number:'000145',odometer:100,habitual_person_id:'a',active:true}]);
+    assert.equal(vehicle.plate,'AB-12-CD');assert.equal(vehicle.cartrack_number,'000145');
+    const {INSPECTION_ITEMS}=await import('../src/rh-fleet-model.mjs');
+    const when=days=>new Date(Date.now()-days*86400000).toISOString();
+    const data=(overrides={})=>({kind:'initial',reason:'Entrega',at:when(10),to_person_id:'a',place:'Viseu',odometer:120,fuel:'Cheio',zone_name:'Admin',inspection:Object.fromEntries(INSPECTION_ITEMS.map(item=>[item.key,'NA'])),checked:true,...overrides});
+    const draft=async(id,values,expected=null)=>call('rh_fleet_save_handover',[uuid(id),uuid(1),0,expected,values]);
+    const first=await draft(2,data());
+    assert.equal((await query('select * from rh_fleet_custody')).length,0,'draft never changes custody');
+    const confirmed=await call('rh_fleet_confirm_handover',[first.id,first.version]);
+    assert.equal(confirmed.status,'confirmed');assert.equal(confirmed.snapshot.to_person.name,'Gestor A');
+    let custody=(await query('select * from rh_fleet_custody where to_at is null'))[0];assert.equal(custody.person_id,'a');
+    assert.equal((await call('rh_fleet_confirm_handover',[first.id,first.version])).id,first.id,'confirmation retry is idempotent');
+    assert.equal((await query('select * from rh_fleet_custody')).length,1);
+    const transfer=await draft(3,data({kind:'temporary',at:when(5),expected_return:when(-5),to_person_id:'b',odometer:180}),custody.id);
+    const stale=await draft(4,data({kind:'permanent',at:when(4),to_person_id:'c',odometer:190}),custody.id);
+    const moved=await call('rh_fleet_confirm_handover',[transfer.id,transfer.version]);
+    assert.equal(moved.snapshot.from_person.name,'Gestor A');assert.equal(moved.snapshot.from_person.phone,'900100200');
+    assert.equal((await query('select habitual_person_id from rh_fleet_vehicles'))[0].habitual_person_id,'a');
+    await assert.rejects(call('rh_fleet_confirm_handover',[stale.id,stale.version]),/outra pessoa/);
+    custody=(await query('select * from rh_fleet_custody where to_at is null'))[0];assert.equal(custody.person_id,'b');
+    for(const [index,overrides,pattern] of [[10,{at:when(-1)},/futuras/],[11,{odometer:1},/quilómetros/],[12,{inspection:{}},/inspeção/],[13,{inspection:{...data().inspection,doc_dua:'Mau'}},/anomalias/],[14,{at:when(8)},/histórico/],[15,{checked:false},/entrega real/]]){
+      const h=await draft(index,data({kind:'permanent',to_person_id:'c',at:when(3),odometer:190,...overrides}),custody.id);
+      await assert.rejects(call('rh_fleet_confirm_handover',[h.id,h.version]),pattern);
+    }
+    await assert.rejects(call('rh_fleet_save_handover',[first.id,uuid(1),confirmed.version,null,data()]),/mudou/);
+    await assert.rejects(query('update rh_fleet_handovers set snapshot=\'{}\''),/permission denied/);
+    const back=await draft(20,data({kind:'return',at:when(1),to_person_id:'',odometer:220}),custody.id);
+    await call('rh_fleet_confirm_handover',[back.id,back.version]);
+    assert.equal((await query('select * from rh_fleet_custody where to_at is null')).length,0);
+    assert.equal((await query('select * from rh_fleet_custody')).length,2);
+    await db.exec(`select set_config('app.user','${manager}',false)`);
+    assert.equal((await query('select * from rh_fleet_vehicles')).length,0);assert.equal((await query('select * from rh_fleet_handovers')).length,0);
+    await assert.rejects(call('rh_fleet_save_vehicle',[uuid(99),0,{plate:'bad'}]),/administrador/);
+    await assert.rejects(query("insert into storage.objects(bucket_id,name) values('rh-fleet',$1)",[first.id+'/test.pdf']),/row-level security/);
+    await db.exec(`select set_config('app.user','${admin}',false)`);
+    await query("insert into storage.objects(bucket_id,name) values('rh-fleet',$1)",[first.id+'/test.pdf']);
+    await assert.rejects(query("update storage.objects set name='tampered'"),/permission denied/);
+    const before=(await query('select count(*)::int as n from rh_fleet_custody'))[0].n;
+    await db.exec('reset role');await db.exec(sql);assert.equal((await query('select count(*)::int as n from rh_fleet_custody'))[0].n,before);
+    console.log(JSON.stringify({draftDoesNotAssign:true,atomicCustody:true,noOverlaps:true,staleTabRejected:true,immutableConfirmed:true,privateStorage:true,managerDenied:true,confirmationIdempotent:true,temporaryKeepsHabitual:true,returnClosesCustody:true,reinstallPreservesHistory:true}));
+  }finally{await db.close();}
+})().catch(error=>{console.error(error);process.exitCode=1;});

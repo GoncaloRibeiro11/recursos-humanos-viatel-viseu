@@ -1504,6 +1504,8 @@
 <script src="rh-team-history.js"></script>
 <script src="rh-analytics.js"></script>
 <script src="rh-anniversaries.js"></script>
+<link rel="stylesheet" href="rh-fleet.css">
+<script src="rh-fleet.js"></script>
 </head>
 <body>
 
@@ -1537,6 +1539,7 @@
     <button class="tab" id="tab-dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
     <button class="tab" id="tab-assid" onclick="switchTab('assid')">🗓️ Assiduidade</button>
     <button class="tab" id="tab-ferias" onclick="switchTab('ferias')">🏖️ Férias</button>
+    <button class="tab admin-only" id="tab-fleet" onclick="switchTab('fleet')">Frota</button>
   </div>
   <div class="header-actions">
     <span id="syncStatus" class="admin-only" role="status" aria-live="polite" style="font-size:11px;color:var(--text-muted);max-width:150px"></span>
@@ -1634,6 +1637,7 @@
 </div>
 
 <!-- ===================== RH VIEW ===================== -->
+<div class="view" id="viewFleet"><div class="main"><div id="fleetRoot"></div></div></div>
 <div class="view active" id="viewRH">
   <div class="main">
     <div class="instructions">
@@ -4062,6 +4066,7 @@ async function supabaseLogin(){
   }
 }
 async function supabaseLogout(){
+  fleetApp?.reset();
   if (rhSync){ await rhSync.flush(); rhSync.stop(); rhSync = null; }
   if (supabaseClient) await supabaseClient.auth.signOut();
   try {
@@ -4232,16 +4237,29 @@ async function fetchVisibleVacations(){
 }
 
 // ===================== TABS =====================
+let fleetApp=null;
+function renderFleet(){
+  if(!isAdminUser()) return;
+  if(!fleetApp) fleetApp=RhFleet.mount({root:document.getElementById('fleetRoot'),getClient:()=>supabaseClient,getPersons:()=>state.persons,getProfile:()=>currentProfile,getUserId:()=>currentUserId,isAdmin:isAdminUser,getToken:authAccessToken});
+  fleetApp.open();
+}
+function openPersonFleet(id){
+  if(!isAdminUser()) return;
+  switchTab('fleet');fleetApp?.open(id);
+}
 function switchTab(tab){
+  if(tab==='fleet' && !isAdminUser()) tab='rh';
   activeTab = tab;
   document.getElementById('viewDashboard').classList.toggle('active', tab==='dashboard');
   document.getElementById('viewFerias').classList.toggle('active', tab==='ferias');
   document.getElementById('viewAssid').classList.toggle('active', tab==='assid');
   document.getElementById('viewRH').classList.toggle('active', tab==='rh');
+  document.getElementById('viewFleet').classList.toggle('active', tab==='fleet');
   document.getElementById('tab-dashboard').classList.toggle('active', tab==='dashboard');
   document.getElementById('tab-ferias').classList.toggle('active', tab==='ferias');
   document.getElementById('tab-assid').classList.toggle('active', tab==='assid');
   document.getElementById('tab-rh').classList.toggle('active', tab==='rh');
+  document.getElementById('tab-fleet').classList.toggle('active', tab==='fleet');
   document.getElementById('btnVerFerias').style.display = tab==='ferias' ? '' : 'none';
   try { localStorage.setItem('mapa-coordenacao-tab', tab); } catch(e){}
   renderAll();
@@ -5290,6 +5308,8 @@ function renderAll(){
     renderAssidPeriodButtons(); renderAssidFilters(); renderPaintModes(); renderSheet(); renderAssidLegend(); renderAssidStats();
   } else if (activeTab === 'rh'){
     renderRH(); renderColorPicker();
+  } else if (activeTab === 'fleet'){
+    renderFleet();
   }
   if (isAdminUser()) setTimeout(checkBolsaFormacaoOutcomes, 0);
 }
@@ -5686,7 +5706,7 @@ function renderRH(){
         <td data-label="Saída">${saidaField}</td>
         <td data-label="Tempo"><span class="${tempoClass}">${escHtml(tempoCasa)}</span></td>
         <td data-label="Ativo">${isEditing ? `<div class="ativo-cell"><label class="switch"><input type="checkbox" ${ativo?'checked':''} onchange="rhUpdate('${p.id}','ativo',this.checked)"><span class="slider"></span></label><span class="ativo-txt">${ativo?'Ativo':'Inativo'}</span></div>` : rhRead(ativo ? 'Ativo' : 'Inativo')}</td>
-        <td data-label="Ações">${actionButtons}${hallPhotoAction(p, 'rh-card-btn')}</td>
+        <td data-label="Ações">${actionButtons}${hallPhotoAction(p, 'rh-card-btn')}${isAdminUser()?`<button class="rh-card-btn" data-fleet-person="${escHtml(p.id)}" onclick="openPersonFleet(this.dataset.fleetPerson)">Viaturas</button>`:''}</td>
       </tr>`;
     });
     body += `<tr id="rhNoResults" style="display:none"><td colspan="13"><div class="empty-state">Sem resultados para os filtros atuais.</div></td></tr>`;

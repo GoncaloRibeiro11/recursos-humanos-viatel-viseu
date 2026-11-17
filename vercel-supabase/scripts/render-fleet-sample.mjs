@@ -1,0 +1,10 @@
+import {writeFile,mkdir} from 'node:fs/promises';
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
+import {fixture} from './test-fleet.mjs';
+const require=createRequire(import.meta.url);
+const {renderFleetPdf}=require('../lib/fleet-pdf.cjs');
+const output=fileURLToPath(new URL('../../../../recovery/viaturas-implementacao/',import.meta.url));
+await mkdir(output,{recursive:true});
+await writeFile(output+'/auto-teste.pdf',await renderFleetPdf(fixture));
+console.log('PDF de teste criado com dados ficticios.');
