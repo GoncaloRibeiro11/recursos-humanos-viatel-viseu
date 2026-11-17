@@ -1,17 +1,26 @@
-import {createIcons,Car,Plus,Pencil,ArrowRightLeft,History,FileText,RefreshCw,X,Check,Save,Download,Archive,Lock,Undo2,Trash2,Paperclip} from 'lucide';
+import {createIcons,Car,Plus,Pencil,ArrowRightLeft,History,FileText,RefreshCw,X,Check,Save,Download,Archive,Lock,Undo2,Trash2,Paperclip,Link,Copy,Share2} from 'lucide';
+import {signaturePad} from './fleet-signature-pad.mjs';
 import {fetchAllRows} from './rh-sync.mjs';
 import {OPERATIONS,CONDITIONS,INSPECTION_GROUPS,inspectionProgress,validateHandover,lisbonInput,fromLisbonInput} from './rh-fleet-model.mjs';
-const icons={Car,Plus,Pencil,ArrowRightLeft,History,FileText,RefreshCw,X,Check,Save,Download,Archive,Lock,Undo2,Trash2,Paperclip};
+const icons={Car,Plus,Pencil,ArrowRightLeft,History,FileText,RefreshCw,X,Check,Save,Download,Archive,Lock,Undo2,Trash2,Paperclip,Link,Copy,Share2};
 const esc=value=>String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clone=value=>JSON.parse(JSON.stringify(value));
 const canonical=value=>value && typeof value==='object'?(Array.isArray(value)?value.map(canonical):Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])]))):value;
 const equal=(a,b)=>JSON.stringify(canonical(a))===JSON.stringify(canonical(b));
+const core=value=>{const result={...value};delete result.signatures;delete result.signature_receipts;delete result.checked;return result;};
 const date=value=>value?new Intl.DateTimeFormat('pt-PT',{timeZone:'Europe/Lisbon',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(value)):'—';
 const day=value=>value?value.split('-').reverse().join('/'):'—';
 const icon=name=>`<i data-lucide="${name}" aria-hidden="true"></i>`;
 const button=(name,title,action,extra='')=>`<button type="button" class="btn fleet-icon" data-action="${action}" title="${esc(title)}" aria-label="${esc(title)}" ${extra}>${icon(name)}</button>`;
 const statusLabel={draft:'Rascunho',confirmed:'Confirmado',cancelled:'Cancelado'};
 export function mount(options){return new Fleet(options);}
+export function mountRemoteEditor(options,payload){
+  const v=payload.payload.vehicle,h=payload.handover,from=payload.payload.from_person,to=payload.payload.to_person;
+  const app=new Fleet({...options,remote:true,isAdmin:()=>true,getUserId:()=>payload.link_id,getPersons:()=>[from,to].filter(p=>p.id).map(p=>({...p,ativo:true})),getProfile:()=>({display_name:h.data.zone_name})});
+  app.vehicles=[v];app.handovers=[h];app.custody=from.id?[{id:h.expected_custody_id,vehicle_id:v.id,person_id:from.id,person_name:from.name,from_at:''}]:[];app.loaded=true;
+  const local=app.localDraft();const resume=local?.id===h.id && local.version===h.version?local:null;
+  app.openHandover(v,h,resume);return app;
+}
 class Fleet {
   constructor(options){
     Object.assign(this,options);this.vehicles=[];this.handovers=[];this.custody=[];this.page='vehicles';this.search='';this.personFilter='';this.vehicleFilter='';this.showArchived=false;this.loaded=false;this.loading=false;this.dialog=null;this.busy=false;this.draftSaving=null;this.dirty=false;
@@ -54,6 +63,7 @@ class Fleet {
     finally{this.loading=false;this.render();}
   }
   render(){
+    if(this.remote){this.panel.innerHTML='';return;}
     if(!this.isAdmin()){this.panel.innerHTML='';this.host.innerHTML='';return;}
     const data=this.vehicles.filter(v=>(this.showArchived || v.active) && (!this.personFilter || v.habitual_person_id===this.personFilter || this.holder(v.id)?.person_id===this.personFilter) && (!this.vehicleFilter || v.id===this.vehicleFilter) && [v.plate,v.make_model,v.cartrack_number,this.person(this.holder(v.id)?.person_id,'').name].join(' ').toLocaleLowerCase('pt').includes(this.search.toLocaleLowerCase('pt')));
     const available=this.vehicles.filter(v=>v.active && !this.holder(v.id)).length;
@@ -106,6 +116,12 @@ class Fleet {
       if(action==='close')await this.close();
       if(action==='save-vehicle')await this.saveVehicle();
       if(action==='save-draft'){await this.saveDraft();this.status('Rascunho guardado no servidor');}
+      if(action==='remote-submit'){await this.saveDraft();await this.onRemoteSubmit(this.dialog.version,this.dialog.data);this.clearStash();this.dirty=false;this.dialog=null;this.host.innerHTML='';}
+      if(action==='create-link')await this.createShare(control.dataset.purpose);
+      if(action==='refresh-shares')await this.refreshShares();
+      if(action==='revoke-links' && confirm('Cancelar as ligações e invalidar as assinaturas remotas recolhidas neste auto?')){await this.shareApi({action:'revoke',id:this.dialog.id});await this.refreshShares();}
+      if(action==='copy-share'){await navigator.clipboard.writeText(this.host.querySelector('[data-share-url]').value);this.status('Ligação copiada');}
+      if(action==='send-share'){const url=this.host.querySelector('[data-share-url]').value;if(navigator.share)await navigator.share({title:'Auto de viatura',text:'Ligação privada para o auto de viatura',url});else window.open('https://wa.me/?text='+encodeURIComponent('Auto de viatura: '+url),'_blank','noopener,noreferrer');}
       if(action==='confirm')await this.confirmHandover();
       if(action==='pdf')await this.downloadPdf(id);
       if(action==='draft-pdf'){await this.saveDraft();await this.downloadPdf(this.dialog.id);}
@@ -149,7 +165,16 @@ class Fleet {
   bindForm(){
     const form=this.host.querySelector('[data-fleet-form]');
     form.addEventListener('submit',event=>event.preventDefault());
-    form.addEventListener('input',()=>{this.capture();if(this.dialog.type==='handover'){this.scheduleSave();this.updateProgress();}});
+    form.addEventListener('input',()=>{
+      const before=clone(this.dialog.data);this.capture();
+      if(this.dialog.type==='handover'){
+        if(Object.keys(before.signature_receipts || {}).length && !equal(core(before),core(this.dialog.data)) && !this.dialog.invalidatingApproved){
+          if(!confirm('Alterar o conteúdo invalida as assinaturas recolhidas. Continuar e pedir novas assinaturas?')){const previous={...this.dialog,data:before};this.stash();this.openHandover(this.vehicle(previous.vehicleId),null,previous);return;}
+          this.dialog.invalidatingApproved=true;
+        }
+        this.scheduleSave();this.updateProgress();
+      }
+    });
     form.addEventListener('change',event=>{this.capture();if(this.dialog.type==='handover'){this.updateKind();this.scheduleSave();this.updateProgress();}});
   }
   async saveVehicle(){
@@ -175,6 +200,14 @@ class Fleet {
     this.bindForm();this.updateKind();this.updateProgress();this.setupSignatures();this.setupFiles();this.loadFiles();
     this.host.querySelector('[data-damage-details]').addEventListener('toggle',event=>{if(event.target.open)this.loadDamage();});
     this.stash();this.status(this.dialog.version?'Rascunho guardado no servidor':'Rascunho local');
+    if(this.remote){
+      this.host.querySelector('.fleet-dialog-head [data-action=close]')?.remove();
+      for(const name of ['kind','to_person_id','reason','zone_name'])this.host.querySelector(`[name="${name}"]`).disabled=true;
+      this.host.querySelector('.fleet-signatures')?.closest('section').remove();
+      this.host.querySelector('[data-fleet-upload]').accept='image/jpeg,image/png,image/webp';
+      this.host.querySelector('.fleet-dialog-footer').innerHTML='<span data-fleet-status class="fleet-status" role="status" aria-live="polite"></span><button class="btn" type="button" data-action="save-draft">'+icon('save')+'Guardar</button><button class="btn" type="button" data-action="draft-pdf">'+icon('file-text')+'Consultar PDF</button><button class="btn btn-primary" type="button" data-action="remote-submit">'+icon('check')+'Concluir preenchimento</button>';
+      this.drawIcons();
+    }else this.setupSharing();
   }
   updateKind(){
     const form=this.host.querySelector('[data-fleet-form]');if(!form)return;const kind=form.elements.kind.value;
@@ -199,7 +232,12 @@ class Fleet {
           const result=await this.rpc('rh_fleet_save_handover',{p_id:current.id,p_vehicle_id:current.vehicleId,p_version:current.version,p_expected_custody_id:current.expectedCustodyId,p_data:sent});
           if(result.status!=='draft')throw new Error('Este auto já foi confirmado ou cancelado. Fecha e atualiza a frota.');
           current.version=result.version;
-          if(!equal(result.data,sent))this.dirty=true;
+          if(!equal(core(result.data),core(sent)))this.dirty=true;
+          if(sent.signature_receipts && !equal(result.data.signature_receipts || {},sent.signature_receipts)){
+            current.data.signatures=result.data.signatures || {};current.data.signature_receipts=result.data.signature_receipts || {};
+            for(const canvas of this.host.querySelectorAll('[data-signature]'))canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
+            this.message('O conteúdo foi alterado. É necessário recolher novas assinaturas.',true);
+          }
           this.stash();this.status(this.dirty?'A guardar rascunho…':'Rascunho guardado no servidor');
         }catch(error){this.dirty=true;throw error;}
       }
@@ -224,17 +262,42 @@ class Fleet {
   }
   setupSignatures(){
     for(const canvas of this.host.querySelectorAll('[data-signature]')){
-      const key=canvas.dataset.signature,ctx=canvas.getContext('2d');ctx.lineWidth=2.8;ctx.strokeStyle='#17212c';ctx.lineCap='round';
-      if(this.dialog.data.signatures[key]){const image=new Image();image.onload=()=>ctx.drawImage(image,0,0,canvas.width,canvas.height);image.src=this.dialog.data.signatures[key];}
-      let drawing=false,moved=false;
-      const point=event=>{const box=canvas.getBoundingClientRect();return [(event.clientX-box.left)*canvas.width/box.width,(event.clientY-box.top)*canvas.height/box.height];};
-      canvas.addEventListener('pointerdown',event=>{event.preventDefault();drawing=true;moved=false;canvas.setPointerCapture(event.pointerId);ctx.beginPath();ctx.moveTo(...point(event));});
-      canvas.addEventListener('pointermove',event=>{if(drawing){moved=true;ctx.lineTo(...point(event));ctx.stroke();}});
-      const end=()=>{if(!drawing)return;drawing=false;if(moved){this.dialog.data.signatures[key]=canvas.toDataURL('image/png');this.stash();this.scheduleSave();}};
-      canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);
+      const key=canvas.dataset.signature;
+      signaturePad(canvas,{initial:this.dialog.data.signatures[key],onChange:value=>{this.dialog.data.signatures[key]=value;this.stash();this.scheduleSave();}});
     }
   }
+  async shareApi(value){const response=await this.authFetch('/api/fleet-share',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});return response.json();}
+  setupSharing(){
+    const footer=this.host.querySelector('.fleet-dialog-footer');
+    footer.insertAdjacentHTML('beforebegin',`<section class="fleet-section" data-sharing><h3>Ligações privadas · preenchimento e assinaturas</h3><div class="fleet-bar">${[['editor','Enviar para preencher'],['from','Assinatura de quem entrega / devolve'],['to','Assinatura de quem recebe']].map(([key,label])=>`<button type="button" class="btn" data-action="create-link" data-purpose="${key}">${icon('link')}${label}</button>`).join('')}</div><div data-share-status class="fleet-small" role="status" aria-live="polite"></div><div data-share-output hidden><label class="fleet-small">Ligação privada<input readonly data-share-url aria-label="Ligação privada gerada"></label><div class="fleet-bar"><button type="button" class="btn" data-action="copy-share">${icon('copy')}Copiar</button><button type="button" class="btn" data-action="send-share">${icon('share-2')}Partilhar</button><span class="fleet-small" data-share-expiry></span></div></div><div class="fleet-bar"><button type="button" class="btn" data-action="refresh-shares">${icon('refresh-cw')}Atualizar assinaturas</button><button type="button" class="btn" data-action="revoke-links">${icon('x')}Cancelar ligações</button></div></section>`);
+    this.drawIcons();
+    if(this.dialog.version)this.shareApi({action:'status',id:this.dialog.id}).then(value=>this.showShareStatus(value)).catch(error=>{const target=this.host.querySelector('[data-share-status]');if(target)target.textContent=error.message;});
+  }
+  showShareStatus(value){
+    const target=this.host.querySelector('[data-share-status]');if(!target)return;
+    const labels={editor:'Preenchimento',from:'Entrega / devolve',to:'Recebe'};
+    const receipts=(value.receipts || []).filter(r=>!r.invalidated_at);
+    target.innerHTML=['from','to'].map(role=>{const receipt=receipts.find(r=>r.purpose===role);return `<div>${labels[role]}: ${receipt?esc(receipt.signer_name)+' · '+date(receipt.signed_at):'Por assinar'}</div>`;}).join('')+(value.links || []).filter(l=>!l.revoked_at && !l.used_at).map(l=>`<div>${labels[l.purpose]} · ligação ${+new Date(l.expires_at)<Date.now()?'expirada':'válida até '+date(l.expires_at)}</div>`).join('');
+    if(value.handover?.version>this.dialog?.version)this.status('Há alterações noutro dispositivo. Atualiza as assinaturas.');
+  }
+  async refreshShares(){
+    if(this.dirty && !confirm('Recarregar os dados do servidor e substituir o rascunho aberto nesta janela?'))return;
+    if(this.draftSaving)try{await this.draftSaving;}catch{}
+    const id=this.dialog.id,value=await this.shareApi({action:'status',id});
+    if(value.handover){this.dirty=false;clearTimeout(this.saveTimer);this.openHandover(this.vehicle(value.handover.vehicle_id),value.handover);this.showShareStatus(value);}
+  }
+  async createShare(purpose){
+    if(this.busy)return;this.busy=true;const fieldset=this.host.querySelector('fieldset');fieldset.disabled=true;
+    try{
+      await this.saveDraft();this.status('A criar ligação privada…');
+      const result=await this.shareApi({action:'create',id:this.dialog.id,purpose});
+      if(result.handover)this.openHandover(this.vehicle(result.handover.vehicle_id),result.handover);
+      const output=this.host.querySelector('[data-share-output]');output.hidden=false;output.querySelector('[data-share-url]').value=result.url;output.querySelector('[data-share-expiry]').textContent='Válida até '+date(result.expires_at);
+      this.status('Ligação privada criada');
+    }finally{this.busy=false;if(fieldset.isConnected)fieldset.disabled=false;}
+  }
   async authFetch(url,options={}){
+    if(this.remote)return this.remoteFetch(url,options);
     const token=await this.getToken();const response=await fetch(url,{...options,headers:{Authorization:'Bearer '+token,...options.headers}});
     if(!response.ok){let value;try{value=await response.json();}catch{}throw new Error(value?.error || 'Pedido indisponível. Tenta novamente.');}return response;
   }
@@ -275,6 +338,7 @@ class Fleet {
   downloadBlob(blob,name){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
   async downloadPdf(id){this.message('A preparar o auto PDF…');const response=await this.authFetch('/api/fleet-auto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});this.downloadBlob(await response.blob(),'auto-'+(this.handovers.find(h=>h.id===id)?.number || 'rascunho')+'.pdf');this.message('Auto PDF preparado.');if(this.dialog?.id===id)this.loadFiles();}
   async close(){
+    if(this.remote)return;
     if(this.busy)return;
     if(this.dialog?.type==='handover' && !this.dialog.readOnly){try{await this.saveDraft();}catch(error){if(!confirm('O rascunho ficou apenas neste navegador. Fechar e manter o rascunho local?'))return;}}
     else if(this.dialog?.type==='vehicle'){this.capture();if(!confirm('Fechar a ficha e manter o rascunho neste navegador?'))return;}

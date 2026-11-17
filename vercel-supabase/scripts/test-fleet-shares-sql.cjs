@@ -1,0 +1,65 @@
+const assert=require('node:assert/strict');const createTestDb=require('./fleet-share-test-db.cjs');
+(async()=>{
+ const t=await createTestDb();const {call,query,draft,link,uuid,manager}=t;
+ const service=(name,args)=>call(name,args,'service_role');
+ const signature='data:image/png;base64,'+'A'.repeat(160);
+ try{
+  let h=await draft(2);
+  const editor=await link(h.id,'editor','1'.repeat(64));
+  await assert.rejects(call('rh_fleet_read_share',['1'.repeat(64)],'anon'),/permission denied/);
+  await assert.rejects(call('rh_fleet_read_share',['1'.repeat(64)]),/permission denied/);
+  await assert.rejects(call('rh_fleet_share_status',[h.id],'authenticated',manager),/administrador/);
+  await assert.rejects(call('rh_fleet_confirm_handover_v1',[h.id,h.version]),/permission denied/);
+  let read=await service('rh_fleet_read_share',['1'.repeat(64)]);assert.equal(read.purpose,'editor');assert.equal(read.handover.id,h.id);
+  assert.equal(read.payload.from_person.name,'Empresa / parque');assert.equal(read.payload.to_person.name,'Gestor A');assert.equal(read.payload.vehicle.cartrack_number,'000145');
+  let saved=await service('rh_fleet_remote_save',['1'.repeat(64),h.version,{odometer:140,kind:'return',to_person_id:'b',signatures:{from:signature}},false]);
+  assert.equal(saved.data.odometer,140);assert.equal(saved.data.kind,'initial');assert.equal(saved.data.to_person_id,'a');assert.equal(saved.data.signatures,undefined);
+  await assert.rejects(service('rh_fleet_remote_save',['1'.repeat(64),h.version,{odometer:150},false]),/mudou/);
+  assert.equal((await query('select * from rh_fleet_custody')).length,0);
+  await service('rh_fleet_remote_save',['1'.repeat(64),saved.version,{},true]);read=await service('rh_fleet_read_share',['1'.repeat(64)]);assert.equal(read.status,'submitted');assert.equal(read.handover,undefined);
+  await assert.rejects(service('rh_fleet_remote_sign',['1'.repeat(64),'Wrong',signature,'x',true]),/inválida/);
+  const first=await link(h.id,'from','2'.repeat(64));const second=await link(h.id,'to','3'.repeat(64));assert.equal(first.content_hash,second.content_hash);
+  await assert.rejects(t.run('authenticated',t.admin,()=>t.db.query('insert into storage.objects(bucket_id,name) values($1,$2)',['rh-fleet',h.id+'/late.jpg'])),/row-level security/);
+  await assert.rejects(link(h.id,'editor','4'.repeat(64)),/primeiro/);
+  read=await service('rh_fleet_read_share',['2'.repeat(64)]);assert.equal(read.content_hash,first.content_hash);assert.equal(read.handover.data.signatures,undefined);
+  const originalVersion=read.handover.version;
+  await assert.rejects(service('rh_fleet_remote_save',['2'.repeat(64),originalVersion,{notes:'hacked'},false]),/preenchimento/);
+  await assert.rejects(service('rh_fleet_remote_sign',['2'.repeat(64),'Entrega',signature,'wrong-hash',true]),/alterado/);
+  await assert.rejects(service('rh_fleet_remote_sign',['2'.repeat(64),'Entrega',signature,first.content_hash,false]),/aceitação/);
+  const signed=await service('rh_fleet_remote_sign',['2'.repeat(64),'Entrega Teste',signature,first.content_hash,true]);assert.equal(signed.status,'signed');
+  assert.equal((await service('rh_fleet_remote_sign',['2'.repeat(64),'Entrega Teste',signature,first.content_hash,true])).signed_at,signed.signed_at);
+  await assert.rejects(service('rh_fleet_remote_sign',['2'.repeat(64),'Different',signature,first.content_hash,true]),/utilizada/);
+  read=await service('rh_fleet_read_share',['2'.repeat(64)]);assert.equal(read.status,'signed');assert.equal(read.payload,undefined);
+  h=(await call('rh_fleet_share_status',[h.id])).handover;
+  await assert.rejects(call('rh_fleet_save_handover',[h.id,uuid(1),originalVersion,null,t.data]),/mudou/);
+  await assert.rejects(call('rh_fleet_confirm_handover',[h.id,h.version]),/Faltam/);
+  await service('rh_fleet_remote_sign',['3'.repeat(64),'Recebe Teste',signature,first.content_hash,true]);
+  h=(await call('rh_fleet_share_status',[h.id])).handover;
+  assert.equal(h.data.signature_receipts.from.method,'screen');assert.equal(h.data.signature_receipts.to.signer_name,'Recebe Teste');
+  // Editing changes the content and invalidates both signatures and links.
+  h=await call('rh_fleet_save_handover',[h.id,uuid(1),h.version,null,{...h.data,notes:'Nova observacao'}]);
+  assert.deepEqual(h.data.signatures,{});assert.deepEqual(h.data.signature_receipts,{});
+  assert.equal((await query('select count(*)::int as n from rh_fleet_signature_receipts where invalidated_at is not null'))[0].n,2);
+  await assert.rejects(service('rh_fleet_read_share',['3'.repeat(64)]),/cancelada/);
+  await assert.rejects(call('rh_fleet_confirm_handover',[h.id,h.version]),/Faltam/);
+  const renewed=await link(h.id,'from','5'.repeat(64));await link(h.id,'to','6'.repeat(64));assert.notEqual(renewed.content_hash,first.content_hash);
+  await service('rh_fleet_remote_sign',['5'.repeat(64),'Entrega Teste',signature,renewed.content_hash,true]);
+  await service('rh_fleet_remote_sign',['6'.repeat(64),'Recebe Teste',signature,renewed.content_hash,true]);
+  h=(await call('rh_fleet_share_status',[h.id])).handover;
+  const tampered=await call('rh_fleet_save_handover',[h.id,uuid(1),h.version,null,{...h.data,signatures:{...h.data.signatures,to:signature+'AAAA'}}]);
+  await assert.rejects(call('rh_fleet_confirm_handover',[h.id,tampered.version]),/imagem/);
+  h=await call('rh_fleet_save_handover',[h.id,uuid(1),tampered.version,null,h.data]);
+  h=await call('rh_fleet_confirm_handover',[h.id,h.version]);assert.equal(h.status,'confirmed');assert.equal(h.snapshot.operation.signature_receipts.to.signer_name,'Recebe Teste');
+  assert.equal((await query('select * from rh_fleet_custody'))[0].person_id,'a');
+  let other=await draft(7,{kind:'temporary',to_person_id:'b'});
+  // A new draft requires the actual current holder; create it explicitly.
+  const holder=(await query('select * from rh_fleet_custody where to_at is null'))[0];
+  other=await call('rh_fleet_save_handover',[other.id,uuid(1),other.version,holder.id,{...other.data,expected_return:new Date(Date.now()+86400000).toISOString()}]);
+  const exp=await link(other.id,'editor','7'.repeat(64));await query("update rh_fleet_share_links set expires_at=now()-interval '1 minute' where id=$1",[exp.id]);
+  await assert.rejects(service('rh_fleet_read_share',['7'.repeat(64)]),/expirada/);
+  await link(other.id,'editor','8'.repeat(64));await call('rh_fleet_revoke_shares',[other.id]);await assert.rejects(service('rh_fleet_read_share',['8'.repeat(64)]),/cancelada/);
+  const before=(await query('select count(*)::int as n from rh_fleet_signature_receipts'))[0].n;
+  await t.run('postgres',t.admin,()=>t.db.exec(t.migration));assert.equal((await query('select count(*)::int as n from rh_fleet_signature_receipts'))[0].n,before);
+  console.log(JSON.stringify({tokenHashesPrivate:true,scopePerAuto:true,roleRestricted:true,versionConflict:true,expiresAndRevokes:true,signOnce:true,retryIdempotent:true,bindsExactContent:true,changesInvalidateSignatures:true,signatureTamperingRejected:true,bothRequired:true,immutableArchive:true,hrUntouched:true}));
+ }finally{await t.close();}
+})().catch(error=>{console.error(error);process.exitCode=1;});

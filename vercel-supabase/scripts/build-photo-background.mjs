@@ -108,3 +108,8 @@ await build({
   entryPoints:['src/rh-fleet.mjs'],outfile:'public/rh-fleet.js',
   bundle:true,minify:true,format:'iife',globalName:'RhFleet',platform:'browser',target:['chrome100','safari16']
 });
+await build({
+  absWorkingDir:fileURLToPath(new URL('../',import.meta.url)),
+  entryPoints:['src/fleet-remote.mjs'],outfile:'public/fleet-remote.js',
+  bundle:true,minify:true,format:'iife',platform:'browser',target:['chrome100','safari16']
+});

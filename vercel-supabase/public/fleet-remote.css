@@ -1,0 +1,42 @@
+:root { color-scheme:light dark; --text:light-dark(#19252f,#edf1f5); --text-muted:light-dark(#576675,#a8b7c5); --surface:light-dark(#fff,#20262d); --border:light-dark(#dbe2e8,#3d4854); --accent:light-dark(#0769b1,#8bcaf4); --danger:light-dark(#aa2424,#ffb4b4); --page:light-dark(#f4f6f8,#14191f); }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--page); color:var(--text); font:15px/1.5 Arial,sans-serif; letter-spacing:0; }
+.remote-header { background:var(--surface); padding:16px 24px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
+.remote-header img { width:90px; height:36px; object-fit:contain; }
+#remotePurpose { color:var(--text-muted); margin-left:auto; font-size:13px; }
+main { max-width:1000px; margin:0 auto; padding:24px; }
+footer { text-align:center; font-size:12px; color:var(--text-muted); padding:20px; border-top:1px solid var(--border); }
+h1 { font-size:24px; line-height:1.25; margin:0 0 8px; }
+h2 { font-size:18px; margin:0 0 16px; }
+p { margin:8px 0; }
+.remote-muted { color:var(--text-muted); font-size:13px; }
+.remote-error { color:var(--danger); white-space:pre-line; }
+button,.btn { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:40px; padding:8px 12px; border:1px solid var(--border); border-radius:5px; background:var(--surface); color:var(--text); font:inherit; cursor:pointer; }
+button:disabled { opacity:.55; cursor:default; }
+.btn-primary { color:light-dark(#fff,#142431); background:var(--accent); border-color:var(--accent); }
+button svg { width:18px; height:18px; flex:none; }
+input,select,textarea { padding:10px; border:1px solid var(--border); border-radius:4px; color:var(--text); background:var(--surface); font:inherit; width:100%; min-width:0; }
+label { display:flex; flex-direction:column; gap:7px; font-size:13px; }
+.remote-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:18px 0; }
+.remote-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px 28px; margin:24px 0; }
+.remote-facts dt { font-size:12px; color:var(--text-muted); }
+.remote-facts dd { margin:5px 0 0; overflow-wrap:anywhere; }
+.remote-section { padding-top:24px; margin-top:24px; border-top:1px solid var(--border); }
+.remote-inspection details { padding:12px 0; border-bottom:1px solid var(--border); }
+.remote-inspection summary { cursor:pointer; font-weight:600; }
+.remote-inspection ul { list-style:none; margin:12px 0; padding:0; }
+.remote-inspection li { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:5px 0; font-size:13px; }
+.remote-signature { display:block; width:100%; height:auto; aspect-ratio:2.5/1; background:#fff; border:1px solid var(--border); border-radius:5px; touch-action:none; }
+.remote-check { display:flex; flex-direction:row; align-items:flex-start; gap:10px; margin:18px 0; }
+.remote-check input { width:20px; height:20px; flex:none; }
+.remote-photos { display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-top:18px; }
+.remote-photos img { width:180px; max-width:100%; height:140px; object-fit:contain; background:var(--surface); border:1px solid var(--border); border-radius:4px; }
+.remote-notes { white-space:pre-wrap; overflow-wrap:anywhere; }
+#remoteMessage:not(:empty) { margin-bottom:18px; }
+#fleetRoot .fleet-backdrop { position:static; inset:auto; background:none; display:block; padding:0; }
+#fleetRoot .fleet-dialog { width:100%; max-height:none; overflow:visible; padding:0; box-shadow:none; background:transparent; }
+#fleetRoot .fleet-dialog-footer { justify-content:flex-start; }
+#fleetRoot .fleet-dialog input,#fleetRoot .fleet-dialog select,#fleetRoot .fleet-dialog textarea { font-size:16px; }
+#fleetRoot .fleet-workspace { display:none; }
+[hidden] { display:none !important; }
+@media(max-width:600px) { main { padding:20px 12px; }.remote-header { padding:12px; gap:12px; }#remotePurpose { width:100%; margin-left:0; }.remote-facts { gap:14px; }.remote-row button { min-height:44px; }input { font-size:16px; } }

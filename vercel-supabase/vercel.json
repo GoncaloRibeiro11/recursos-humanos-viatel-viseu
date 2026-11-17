@@ -3,7 +3,9 @@
   "crons": [{"path":"/api/telegram-anniversaries","schedule":"0 9 * * *"}],
   "functions": {
     "api/telegram-*.js": {"includeFiles":"{assets/fonts/**,public/viatel.svg,public/Logo_MEO.svg.webp,src/anniversary-card.mjs}","maxDuration":300},
-    "api/fleet-auto.js": {"includeFiles":"{assets/fleet/**,assets/fonts/Roboto.ttf,src/rh-fleet-model.mjs}","maxDuration":60}
+    "api/fleet-auto.js": {"includeFiles":"{assets/fleet/**,assets/fonts/Roboto.ttf,src/rh-fleet-model.mjs}","maxDuration":60},
+    "api/fleet-share.js": {"includeFiles":"{assets/fleet/**,assets/fonts/Roboto.ttf,src/rh-fleet-model.mjs}","maxDuration":60},
+    "api/fleet-remote.js": {"includeFiles":"{assets/fleet/**,assets/fonts/Roboto.ttf,src/rh-fleet-model.mjs}","maxDuration":60}
   },
   "headers": [
     {

@@ -1,0 +1,32 @@
+const fs=require('node:fs');const path=require('node:path');
+const {PGlite}=require(process.env.PGLITE_MODULE || '@electric-sql/pglite');
+const admin='00000000-0000-4000-8000-000000000001';
+const manager='00000000-0000-4000-8000-000000000002';
+const uuid=n=>'10000000-0000-4000-8000-'+String(n).padStart(12,'0');
+module.exports=async function createTestDb(){
+  const db=new PGlite();
+  await db.exec(`create role anon;create role authenticated;create role service_role;create schema auth;create schema storage;
+    create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('app.user',true),'')::uuid $$;
+    create function public.is_rh_admin() returns boolean language sql security definer as $$ select auth.uid()='${admin}'::uuid $$;
+    create table rh_persons(id text primary key,name text,entrada date,saida date,ativo boolean default true,data jsonb default '{}');
+    insert into rh_persons(id,name,entrada,data) values('a','Gestor A','2020-01-01','{"telefone":"900100200"}'),('b','Colaborador B','2020-01-01','{"telefone":"900300400"}');
+    create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+    create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text);alter table storage.objects enable row level security;
+    grant usage on schema public,auth,storage to authenticated,service_role;grant select,insert on storage.objects to authenticated;`);
+  const base=fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261117_fleet.sql'),'utf8');
+  const migration=fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261117_fleet_shares.sql'),'utf8');
+  await db.exec(base);await db.exec(migration);
+  let pending=Promise.resolve();
+  const run=(role,user,fn)=>{
+    const job=pending.catch(()=>{}).then(async()=>{await db.exec('reset role');await db.query("select set_config('app.user',$1,false)",[user]);await db.exec('set role '+role);return fn();});
+    pending=job;return job;
+  };
+  const call=(name,args=[],role='authenticated',user=admin)=>run(role,user,async()=>(await db.query(`select to_jsonb(public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')})) as value`,args)).rows[0].value);
+  const query=(sql,args=[])=>run('postgres',admin,async()=>(await db.query(sql,args)).rows);
+  const {INSPECTION_ITEMS}=await import('../src/rh-fleet-model.mjs');
+  const data={kind:'initial',reason:'Entrega de teste',at:new Date(Date.now()-86400000).toISOString(),to_person_id:'a',place:'Viseu',odometer:120,fuel:'Cheio',zone_name:'Admin de teste',inspection:Object.fromEntries(INSPECTION_ITEMS.map(item=>[item.key,'NA'])),checked:true,damage_markers:[],notes:'Dados ficticios',damage_notes:'',driver_fields:{from:{},to:{}},signatures:{}};
+  await call('rh_fleet_save_vehicle',[uuid(1),0,{plate:'AB-12-CD',make_model:'Renault Clio',cartrack_number:'000145',odometer:100,habitual_person_id:'a',active:true}]);
+  const draft=async(n,patch={})=>call('rh_fleet_save_handover',[uuid(n),uuid(1),0,null,{...structuredClone(data),...patch}]);
+  const link=async(id,purpose,tokenHash)=>call('rh_fleet_create_share',[id,purpose,tokenHash,new Date(Date.now()+3600000).toISOString()]);
+  return {db,query,call,run,draft,link,data,uuid,admin,manager,migration,async close(){await pending.catch(()=>{});await db.close();}};
+};

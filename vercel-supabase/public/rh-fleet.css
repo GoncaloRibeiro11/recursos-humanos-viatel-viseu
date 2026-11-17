@@ -60,6 +60,8 @@
 #fleetRoot .fleet-damage-canvas { display:block; width:100%; max-width:595px; height:auto; background:#fff; touch-action:manipulation; border:1px solid var(--border); margin:12px 0; }
 #fleetRoot .fleet-file-list { list-style:none; padding:0; }
 #fleetRoot .fleet-file-list li { display:flex; align-items:center; gap:10px; margin:8px 0; flex-wrap:wrap; }
+#fleetRoot [data-share-output] input { display:block; width:100%; margin:8px 0; }
+#fleetRoot [data-share-status] { line-height:1.8; margin:12px 0; }
 #fleetRoot .fleet-read-data { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
 #fleetRoot .fleet-read-data dt { color:var(--text-muted); font-size:12px; }
 #fleetRoot .fleet-read-data dd { margin:5px 0 0; overflow-wrap:anywhere; }

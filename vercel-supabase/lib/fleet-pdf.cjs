@@ -58,7 +58,7 @@ async function renderFleetPdf(handover){
   }
   const noteLines=wrap(note,468,7);
   noteLines.slice(0,6).forEach((line,index)=>text(pages[1],line,65,643+index*7.5,465,7));
-  const names={from:s.from_person.name,to:s.to_person.name,zone:op.zone_name};
+  const names={from:s.from_person.id?s.from_person.name:op.signature_receipts?.from?.signer_name || s.from_person.name,to:s.to_person.id?s.to_person.name:op.signature_receipts?.to?.signer_name || s.to_person.name,zone:op.zone_name};
   for(const [index,key] of ['from','to','zone'].entries()){
     const top=701+index*26;text(pages[1],names[key],154,top,200,8,true);
     const signature=op.signatures?.[key];
@@ -78,6 +78,20 @@ async function renderFleetPdf(handover){
       if(top>770){page=pdf.addPage([595,842]);top=58;}
       text(page,line,52,top,490,9);top+=13;
     }
+  }
+  const receipts=Object.entries(op.signature_receipts || {}).filter(([role,value])=>['from','to'].includes(role) && value?.signed_at);
+  if(receipts.length){
+    const page=pdf.addPage([595,842]);text(page,number+' - Registo de assinaturas',52,55,490,14);
+    text(page,v.plate+' | '+time,52,82,490,10);let top=118;
+    for(const [role,receipt] of receipts){
+      text(page,role==='from'?'Quem entrega / devolve':'Quem recebe',52,top,490,11);top+=24;
+      text(page,'Nome indicado: '+receipt.signer_name,52,top,490,10);top+=20;
+      text(page,'Assinado em: '+new Intl.DateTimeFormat('pt-PT',{timeZone:'Europe/Lisbon',dateStyle:'long',timeStyle:'medium'}).format(new Date(receipt.signed_at)),52,top,490,9);top+=20;
+      text(page,'Metodo: assinatura manuscrita em ecra',52,top,490,9);top+=20;
+      text(page,'Referencia do registo: '+receipt.id,52,top,490,8);top+=20;
+      text(page,'Versao do conteudo (SHA-256):',52,top,490,9);top+=16;text(page,receipt.content_hash,52,top,490,8);top+=45;
+    }
+    text(page,'As assinaturas correspondem ao conteudo identificado acima.',52,top,490,9);
   }
   const captured=new Date(s.captured_at || handover.created_at);
   pdf.setTitle(number+' - '+v.plate);pdf.setAuthor('RH Viatel Viseu');pdf.setCreationDate(captured);pdf.setModificationDate(captured);
