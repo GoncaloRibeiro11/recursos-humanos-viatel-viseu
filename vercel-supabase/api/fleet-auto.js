@@ -7,6 +7,7 @@ function createFleetApi({env=process.env,fetcher=fetch,render=renderFleetPdf}={}
   return async function handler(req,res){
     res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');
     try{
+      require('../lib/preview-env.cjs').assertSafePreview(env);
       if(!['GET','POST'].includes(req.method)){res.setHeader('Allow','GET, POST');throw fail('Método não permitido.',405);}
       const token=String(req.headers.authorization || '');if(!/^Bearer \S+$/.test(token))throw fail('Inicia sessão no RH.',401);
       const url=(env.SUPABASE_URL || DEFAULT_URL).replace(/\/$/,''),headers={apikey:env.SUPABASE_ANON_KEY || DEFAULT_ANON,Authorization:token};

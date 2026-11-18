@@ -1506,6 +1506,8 @@
 <script src="rh-anniversaries.js"></script>
 <link rel="stylesheet" href="rh-fleet.css">
 <script src="rh-fleet.js"></script>
+<link rel="stylesheet" href="rh-oop.css">
+<script src="rh-oop.js"></script>
 </head>
 <body>
 
@@ -1540,6 +1542,7 @@
     <button class="tab" id="tab-assid" onclick="switchTab('assid')">🗓️ Assiduidade</button>
     <button class="tab" id="tab-ferias" onclick="switchTab('ferias')">🏖️ Férias</button>
     <button class="tab admin-only" id="tab-fleet" onclick="switchTab('fleet')">Frota</button>
+    <button class="tab" id="tab-oop" onclick="switchTab('oop')">OOP Comercial</button>
   </div>
   <div class="header-actions">
     <span id="syncStatus" class="admin-only" role="status" aria-live="polite" style="font-size:11px;color:var(--text-muted);max-width:150px"></span>
@@ -1638,6 +1641,7 @@
 
 <!-- ===================== RH VIEW ===================== -->
 <div class="view" id="viewFleet"><div class="main"><div id="fleetRoot"></div></div></div>
+<div class="view" id="viewOop"><div class="main"><div id="oopRoot"></div></div></div>
 <div class="view active" id="viewRH">
   <div class="main">
     <div class="instructions">
@@ -4003,6 +4007,7 @@ async function initSupabaseApp(){
   try {
     const cfgRes = await fetch('/api/config', { cache: 'no-store' });
     const cfg = await cfgRes.json();
+    if(!cfgRes.ok){showAuth(cfg.error || 'Configuração indisponível neste ambiente.');return;}
     if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) {
       showAuth('Supabase ainda não está configurado nesta versão.');
       return;
@@ -4067,6 +4072,7 @@ async function supabaseLogin(){
 }
 async function supabaseLogout(){
   fleetApp?.reset();
+  oopApp?.reset();
   if (rhSync){ await rhSync.flush(); rhSync.stop(); rhSync = null; }
   if (supabaseClient) await supabaseClient.auth.signOut();
   try {
@@ -4238,6 +4244,12 @@ async function fetchVisibleVacations(){
 
 // ===================== TABS =====================
 let fleetApp=null;
+let oopApp=null;
+function renderOop(){
+  if(!currentProfile || !supabaseReady) return;
+  if(!oopApp) oopApp=RhOop.mount({root:document.getElementById('oopRoot'),getClient:()=>supabaseClient,getProfile:()=>currentProfile,getUserId:()=>currentUserId,getProjectId:()=>supabaseProjectId});
+  void oopApp.open();
+}
 function renderFleet(){
   if(!isAdminUser()) return;
   if(!fleetApp) fleetApp=RhFleet.mount({root:document.getElementById('fleetRoot'),getClient:()=>supabaseClient,getPersons:()=>state.persons,getProfile:()=>currentProfile,getUserId:()=>currentUserId,isAdmin:isAdminUser,getToken:authAccessToken});
@@ -4255,11 +4267,15 @@ function switchTab(tab){
   document.getElementById('viewAssid').classList.toggle('active', tab==='assid');
   document.getElementById('viewRH').classList.toggle('active', tab==='rh');
   document.getElementById('viewFleet').classList.toggle('active', tab==='fleet');
+  document.getElementById('viewOop').classList.toggle('active', tab==='oop');
   document.getElementById('tab-dashboard').classList.toggle('active', tab==='dashboard');
   document.getElementById('tab-ferias').classList.toggle('active', tab==='ferias');
   document.getElementById('tab-assid').classList.toggle('active', tab==='assid');
   document.getElementById('tab-rh').classList.toggle('active', tab==='rh');
   document.getElementById('tab-fleet').classList.toggle('active', tab==='fleet');
+  document.getElementById('tab-oop').classList.toggle('active', tab==='oop');
+  const printButton = document.querySelector('button[onclick="openPrint()"]');
+  if(printButton) printButton.style.display = tab==='oop' ? 'none' : '';
   document.getElementById('btnVerFerias').style.display = tab==='ferias' ? '' : 'none';
   try { localStorage.setItem('mapa-coordenacao-tab', tab); } catch(e){}
   renderAll();
@@ -5310,6 +5326,8 @@ function renderAll(){
     renderRH(); renderColorPicker();
   } else if (activeTab === 'fleet'){
     renderFleet();
+  } else if (activeTab === 'oop'){
+    renderOop();
   }
   if (isAdminUser()) setTimeout(checkBolsaFormacaoOutcomes, 0);
 }

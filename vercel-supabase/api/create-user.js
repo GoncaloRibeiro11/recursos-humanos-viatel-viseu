@@ -69,6 +69,7 @@ module.exports = async function handler(req, res) {
     return send(res, 500, { error: 'SUPABASE_SERVICE_ROLE_KEY nao configurada no Vercel.' });
   }
   try {
+    require('../lib/preview-env.cjs').assertSafePreview();
     const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     if (!token) return send(res, 401, { error: 'Sessao em falta.' });
 

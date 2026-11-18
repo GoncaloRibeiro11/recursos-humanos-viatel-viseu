@@ -113,3 +113,8 @@ await build({
   entryPoints:['src/fleet-remote.mjs'],outfile:'public/fleet-remote.js',
   bundle:true,minify:true,format:'iife',platform:'browser',target:['chrome100','safari16']
 });
+await build({
+  absWorkingDir:fileURLToPath(new URL('../',import.meta.url)),
+  entryPoints:['src/rh-oop.mjs'],outfile:'public/rh-oop.js',
+  bundle:true,minify:true,format:'iife',globalName:'RhOop',platform:'browser',target:['chrome100','safari16']
+});
