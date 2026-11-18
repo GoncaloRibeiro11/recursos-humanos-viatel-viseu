@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createRequire} from 'node:module';
-import {INSPECTION_ITEMS,INSPECTION_GROUPS,inspectionProgress,validateHandover,fromLisbonInput,lisbonInput,custodyAt,driverName,handoverOrigin,adoptInitialDraftVersion} from '../src/rh-fleet-model.mjs';
+import {INSPECTION_ITEMS,INSPECTION_GROUPS,inspectionProgress,validateHandover,fromLisbonInput,lisbonInput,custodyAt,driverName,handoverOrigin,adoptInitialDraftVersion,handoverLabel} from '../src/rh-fleet-model.mjs';
 const require=createRequire(import.meta.url);
 const {renderFleetPdf}=require('../lib/fleet-pdf.cjs');
 const {createFleetApi}=require('../api/fleet-auto.js');
@@ -54,6 +54,13 @@ test('situacao inicial nao inventa uma data nem atribui utilizacao em datas anti
   assert.equal(custodyAt([baseline],'v','2026-01-01T09:00:00Z'),null);
   const data={...structuredClone(fixture.snapshot.operation),to_person_id:'b'};
   assert.deepEqual(validateHandover(data,{odometer:0},baseline,new Date('2026-11-18')),[]);
+});
+test('entrega externa exige estrutura e pessoa sem escolher um colaborador do RH',()=>{
+  const data={...structuredClone(fixture.snapshot.operation),kind:'return',destination:'external_structure',to_person_id:'',external_structure:'Estrutura de teste',driver_fields:{to:{name:'Pessoa Externa de Teste'}}};
+  const current={person_id:'a',from_at:null};assert.deepEqual(validateHandover(data,{odometer:0},current,new Date('2026-11-18')),[]);assert.equal(handoverLabel(data),'Entrega a outra estrutura');
+  assert.ok(validateHandover({...data,external_structure:''},{odometer:0},current).some(message=>message.includes('estrutura de destino')));
+  assert.ok(validateHandover({...data,driver_fields:{to:{}}},{odometer:0},current).some(message=>message.includes('nome de quem recebe')));
+  assert.ok(validateHandover({...data,kind:'temporary'},{odometer:0},current).some(message=>message.includes('encerrar')));
 });
 test('rascunho local conserva os campos ao adotar apenas a versao administrativa do arranque',()=>{
   const d={type:'handover',id:'h',vehicleId:'v',version:1,expectedCustodyId:null,data:{notes:'Alteracao local ainda nao enviada'}};

@@ -1,4 +1,5 @@
 export const OPERATIONS={initial:'Entrega inicial',temporary:'Passagem temporária',permanent:'Atribuição permanente',return:'Devolução à empresa'};
+export function handoverLabel(data){return data.kind==='return' && data.destination==='external_structure'?'Entrega a outra estrutura':OPERATIONS[data.kind];}
 export const CONDITIONS=['Bom','Suf','Mau','NE','NA'];
 const group=(id,label,page,top,step,columns,items)=>({id,label,page,columns,items:items.map(([key,label],index)=>({key,label,top:top+index*step}))});
 export const INSPECTION_GROUPS=[
@@ -54,6 +55,11 @@ export function validateHandover(data,vehicle,current,now=new Date()){
   if(data.kind==='initial' && current)errors.push('A viatura já tem um responsável.');
   if(['temporary','return'].includes(data.kind) && !current)errors.push('A viatura não tem uma utilização em curso. Se já está em uso e ainda não existe histórico, regista a situação inicial; caso contrário, faz uma entrega inicial.');
   if(data.kind==='temporary' && (!data.expected_return || +new Date(data.expected_return)<=+at || !Number.isFinite(+new Date(data.expected_return))))errors.push('Indica a devolução prevista posterior à entrega.');
+  if(data.destination==='external_structure'){
+    if(data.kind!=='return')errors.push('A entrega a outra estrutura tem de encerrar a utilização atual.');
+    if(typeof data.external_structure!=='string' || data.external_structure.trim().length<2 || data.external_structure.length>120)errors.push('Indica a estrutura de destino.');
+    const name=data.driver_fields?.to?.name;if(typeof name!=='string' || name.trim().length<2 || name.length>120)errors.push('Indica o nome de quem recebe noutra estrutura.');
+  }
   for(const group of INSPECTION_GROUPS)for(const item of group.items){
     const value=data.inspection?.[item.key];
     if(!CONDITIONS.includes(value) || (group.page===1 && value==='NE')){errors.push('Completa todos os itens da inspeção.');break;}

@@ -8,6 +8,9 @@ Depois executar `migrations/20261117_fleet_initial_state.sql` para o arranque
 de viaturas ja em uso. So a primeira instalacao assume as associacoes existentes
 sem historico e sem assinaturas em curso. Repetir a migracao nao inclui carros
 adicionados depois nem reabre periodos ja terminados.
+Depois executar `migrations/20261118_fleet_external.sql` para entregas a outra
+estrutura e eliminacao protegida de viaturas sem autos. Nao altera registos
+existentes nem abre acesso anonimo.
 
 ## Acesso e dados
 
@@ -69,6 +72,26 @@ recebem alteracoes automaticas aos nomes. Trocar Recebe sugere o novo nome.
   explicita do administrador e so funciona uma vez, antes do primeiro auto.
 - Depois de uma devolucao nao e possivel usar o arranque para saltar um auto.
 
+## Saida para outra estrutura e testes
+
+- A operacao Entrega a outra estrutura pede o destino e o nome completo de
+  quem recebe. A pessoa externa nao e criada como colaborador nem recebe
+  conta/acesso ao RH. Pode preencher e assinar apenas esse auto por ligacao
+  privada, tal como os restantes intervenientes.
+- Confirmar fecha a utilizacao local e arquiva a viatura na mesma transacao.
+  O destino e o destinatario ficam no snapshot e no PDF. Nao se inicia uma
+  posse interna em nome da pessoa externa. O auto e o historico continuam
+  acessiveis com Incluir arquivadas; o responsavel habitual fica vazio.
+- Depois de devolvida a empresa, uma viatura real tambem pode ser arquivada
+  na ficha desmarcando Viatura ativa. Arquivar nao elimina autos nem datas
+  de utilizacao; nao e permitido ocultar uma entrega ainda em curso.
+- Eliminar viatura de teste so aparece na ficha de viaturas sem qualquer
+  auto, mesmo cancelado. Exige escrever a matricula e confirmar a eliminacao
+  definitiva. O servidor verifica administrador, versao e ausencia de autos
+  e historico real antes de apagar. Uma situacao inicial sem auto pode ser
+  eliminada com a viatura; registos reais devem ser arquivados.
+- Nao se renumeram autos nem se reutilizam numeros eliminados.
+
 Os itens da inspecao comecam por verificar. Aplicar um estado a itens vazios e
 uma acao explicita do utilizador. Mau exige justificacao. Assinaturas sao
 opcionais, manuscritas no ecra, ou recolhidas em papel e anexadas depois; PDF
@@ -120,3 +143,7 @@ Arranque: `node scripts/test-fleet-initial-state-sql.cjs`; executar o teste de
 browser remoto tambem com `TEST_INITIAL_STATE=1` verifica a primeira passagem
 com as duas assinaturas, o registo manual por viatura e o historico sem datas
 de inicio inventadas.
+Entregas externas: `node scripts/test-fleet-external-sql.cjs` e o teste de
+browser remoto com `TEST_EXTERNAL=1`. Verificam destinatario sem conta RH,
+assinaturas, arquivo atomico, PDF e eliminacao com matricula de uma viatura
+ficticia sem autos, mantendo bloqueada a eliminacao de viaturas com historico.

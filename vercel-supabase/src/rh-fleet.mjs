@@ -1,7 +1,7 @@
 import {createIcons,Car,Plus,Pencil,ArrowRightLeft,History,FileText,RefreshCw,X,Check,Save,Download,Archive,Lock,Undo2,Trash2,Paperclip,Link,Copy,Share2} from 'lucide';
 import {signaturePad} from './fleet-signature-pad.mjs';
 import {fetchAllRows} from './rh-sync.mjs';
-import {OPERATIONS,CONDITIONS,INSPECTION_GROUPS,inspectionProgress,validateHandover,lisbonInput,fromLisbonInput,handoverOrigin,DAMAGE_VIEW,adoptInitialDraftVersion} from './rh-fleet-model.mjs';
+import {OPERATIONS,CONDITIONS,INSPECTION_GROUPS,inspectionProgress,validateHandover,lisbonInput,fromLisbonInput,handoverOrigin,DAMAGE_VIEW,adoptInitialDraftVersion,handoverLabel,driverName} from './rh-fleet-model.mjs';
 const icons={Car,Plus,Pencil,ArrowRightLeft,History,FileText,RefreshCw,X,Check,Save,Download,Archive,Lock,Undo2,Trash2,Paperclip,Link,Copy,Share2};
 const esc=value=>String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clone=value=>JSON.parse(JSON.stringify(value));
@@ -37,6 +37,7 @@ class Fleet {
   personHtml(id,name){const person=this.person(id,name),p=name?{...person,name}:person;return `<span class="fleet-person">${p.photo?`<img src="${esc(p.photo)}" alt="">`:''}<span>${esc(p.name)}</span></span>`;}
   holder(id){return this.custody.find(item=>item.vehicle_id===id && !item.to_at);}
   canRegisterInitial(v){return v.active && v.habitual_person_id && !this.custody.some(c=>c.vehicle_id===v.id) && !this.handovers.some(h=>h.vehicle_id===v.id && h.status==='confirmed');}
+  canDeleteVehicle(v){return !this.handovers.some(h=>h.vehicle_id===v.id) && !this.custody.some(c=>c.vehicle_id===v.id && c.origin!=='initial_state');}
   vehicle(id){return this.vehicles.find(v=>v.id===id);}
   localDraft(){try{return JSON.parse(localStorage.getItem(this.storageKey) || 'null');}catch{return null;}}
   stash(){
@@ -66,7 +67,7 @@ class Fleet {
   render(){
     if(this.remote){this.panel.innerHTML='';return;}
     if(!this.isAdmin()){this.panel.innerHTML='';this.host.innerHTML='';return;}
-    const data=this.vehicles.filter(v=>(this.showArchived || v.active) && (!this.personFilter || v.habitual_person_id===this.personFilter || this.holder(v.id)?.person_id===this.personFilter) && (!this.vehicleFilter || v.id===this.vehicleFilter) && [v.plate,v.make_model,v.cartrack_number,this.person(this.holder(v.id)?.person_id,'').name].join(' ').toLocaleLowerCase('pt').includes(this.search.toLocaleLowerCase('pt')));
+    const data=this.vehicles.filter(v=>(this.showArchived || v.active) && (!this.personFilter || v.habitual_person_id===this.personFilter || this.holder(v.id)?.person_id===this.personFilter || ((this.showArchived || this.page==='history') && this.custody.some(c=>c.vehicle_id===v.id && c.person_id===this.personFilter))) && (!this.vehicleFilter || v.id===this.vehicleFilter) && [v.plate,v.make_model,v.cartrack_number,this.person(this.holder(v.id)?.person_id,'').name].join(' ').toLocaleLowerCase('pt').includes(this.search.toLocaleLowerCase('pt')));
     const available=this.vehicles.filter(v=>v.active && !this.holder(v.id)).length;
     const late=this.handovers.filter(h=>h.status==='confirmed' && h.data.kind==='temporary' && h.data.expected_return && +new Date(h.data.expected_return)<Date.now() && this.holder(h.vehicle_id)?.handover_id===h.id).length;
     const personOptions=this.persons.filter(p=>!p.historyOnly).sort((a,b)=>a.name.localeCompare(b.name,'pt')).map(p=>`<option value="${esc(p.id)}" ${this.personFilter===p.id?'selected':''}>${esc(p.name)}</option>`).join('');
@@ -94,7 +95,7 @@ class Fleet {
   }
   handoversHtml(vehicles){
     const ids=new Set(vehicles.map(v=>v.id));const rows=this.handovers.filter(h=>ids.has(h.vehicle_id)).sort((a,b)=>b.number-a.number);
-    return rows.length?`<div class="fleet-table-wrap"><table><thead><tr><th>Auto</th><th>Viatura</th><th>Operação</th><th>Data / hora</th><th>Recebe</th><th>Estado</th><th>Ações</th></tr></thead><tbody>${rows.map(h=>`<tr><td>FRO-${String(h.number).padStart(5,'0')}</td><td>${esc(h.snapshot?.vehicle?.plate || this.vehicle(h.vehicle_id)?.plate)}</td><td>${esc(OPERATIONS[h.data.kind])}</td><td>${date(h.data.at)}</td><td>${h.snapshot?esc(h.snapshot.to_person.name):this.personHtml(h.data.to_person_id)}</td><td>${statusLabel[h.status]}</td><td><div class="fleet-actions">${button(h.status==='draft'?'pencil':'file-text',h.status==='draft'?'Editar rascunho':'Consultar auto','edit-handover',`data-id="${h.id}"`)}${h.status!=='cancelled'?button('download','Descarregar auto PDF','pdf',`data-id="${h.id}"`):''}${h.status==='draft'?button('x','Cancelar rascunho','cancel-handover',`data-id="${h.id}"`):''}</div></td></tr>`).join('')}</tbody></table></div>`:'<div class="fleet-empty">Sem autos nesta seleção.</div>';
+    return rows.length?`<div class="fleet-table-wrap"><table><thead><tr><th>Auto</th><th>Viatura</th><th>Operação</th><th>Data / hora</th><th>Recebe</th><th>Estado</th><th>Ações</th></tr></thead><tbody>${rows.map(h=>`<tr><td>FRO-${String(h.number).padStart(5,'0')}</td><td>${esc(h.snapshot?.vehicle?.plate || this.vehicle(h.vehicle_id)?.plate)}</td><td>${esc(handoverLabel(h.data))}</td><td>${date(h.data.at)}</td><td>${h.data.destination==='external_structure'?esc(driverName(h.data,'to',h.snapshot?.to_person)):h.snapshot?esc(h.snapshot.to_person.name):this.personHtml(h.data.to_person_id)}</td><td>${statusLabel[h.status]}</td><td><div class="fleet-actions">${button(h.status==='draft'?'pencil':'file-text',h.status==='draft'?'Editar rascunho':'Consultar auto','edit-handover',`data-id="${h.id}"`)}${h.status!=='cancelled'?button('download','Descarregar auto PDF','pdf',`data-id="${h.id}"`):''}${h.status==='draft'?button('x','Cancelar rascunho','cancel-handover',`data-id="${h.id}"`):''}</div></td></tr>`).join('')}</tbody></table></div>`:'<div class="fleet-empty">Sem autos nesta seleção.</div>';
   }
   historyHtml(vehicles){
     const ids=new Set(vehicles.map(v=>v.id));const rows=this.custody.filter(c=>ids.has(c.vehicle_id)).sort((a,b)=>+new Date(b.from_at)-+new Date(a.from_at));
@@ -110,6 +111,8 @@ class Fleet {
       if(action==='template'){const response=await this.authFetch('/api/fleet-auto?template=1');this.downloadBlob(await response.blob(),'modelo-auto-viaturas.pdf');}
       if(action==='new-vehicle')this.openVehicle();
       if(action==='edit-vehicle')this.openVehicle(this.vehicle(id));
+      if(action==='delete-vehicle')this.openDeleteVehicle(this.vehicle(id));
+      if(action==='confirm-delete-vehicle')await this.deleteVehicle();
       if(action==='handover')this.openHandover(this.vehicle(id));
       if(action==='initial-state')this.openInitialState(this.vehicle(id));
       if(action==='register-initial-state')await this.registerInitialState();
@@ -145,6 +148,18 @@ class Fleet {
     this.host.querySelector('.fleet-dialog').addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();this.close();}if(event.key==='Tab'){const items=[...this.host.querySelectorAll('button,input,select,textarea,summary')].filter(el=>!el.disabled && el.getClientRects().length);const index=items.indexOf(document.activeElement);if(event.shiftKey && index===0){event.preventDefault();items.at(-1)?.focus();}else if(!event.shiftKey && index===items.length-1){event.preventDefault();items[0]?.focus();}}});
   }
   field(label,name,value='',type='text',extra=''){return `<label>${esc(label)}<input type="${type}" name="${name}" value="${esc(value)}" ${extra}></label>`;}
+  openDeleteVehicle(vehicle){
+    if(!this.canDeleteVehicle(vehicle))throw new Error('Viaturas com autos não podem ser eliminadas. A saída para outra estrutura preserva o histórico.');
+    this.dialog={type:'delete-vehicle',vehicleId:vehicle.id,version:vehicle.version};
+    this.showDialog(vehicle.plate+' · Eliminar viatura',`<dl class="fleet-read-data"><div><dt>Viatura</dt><dd>${esc(vehicle.make_model)}</dd></div><div><dt>Autos</dt><dd>0</dd></div></dl><label>Confirmar matrícula<input data-delete-plate autocomplete="off" placeholder="${esc(vehicle.plate)}"></label><label class="fleet-check"><input type="checkbox" data-delete-confirm>Eliminar definitivamente esta viatura e a sua situação inicial.</label>`,`<button type="button" class="btn fleet-error" data-action="confirm-delete-vehicle">${icon('trash-2')}Eliminar definitivamente</button>`);
+  }
+  async deleteVehicle(){
+    if(this.busy)return;const v=this.vehicle(this.dialog.vehicleId),plate=this.host.querySelector('[data-delete-plate]').value;
+    if(plate.trim().toUpperCase()!==v.plate || !this.host.querySelector('[data-delete-confirm]').checked)throw new Error('Confirma a matrícula e a eliminação definitiva.');
+    this.busy=true;const control=this.host.querySelector('[data-action=confirm-delete-vehicle]');control.disabled=true;
+    try{await this.rpc('rh_fleet_delete_unused_vehicle',{p_id:v.id,p_version:this.dialog.version,p_plate:plate});if(this.localDraft()?.vehicleId===v.id || this.localDraft()?.id===v.id)this.clearStash();this.dialog=null;this.host.innerHTML='';await this.load();}
+    finally{this.busy=false;if(control.isConnected)control.disabled=false;}
+  }
   openInitialState(vehicle){
     if(!this.canRegisterInitial(vehicle))throw new Error('Esta viatura já tem histórico ou falta o responsável habitual.');
     this.dialog={type:'initial-state',vehicleId:vehicle.id,version:vehicle.version};
@@ -161,14 +176,17 @@ class Fleet {
     const d=this.dialog.data;
     this.showDialog(this.dialog.version?'Editar viatura':'Adicionar viatura',`<form data-fleet-form><fieldset><div class="fleet-form-grid">${this.field('Matrícula','plate',d.plate,'text','required maxlength="20"')}${this.field('Marca / modelo','make_model',d.make_model,'text','required maxlength="120"')}${this.field('N.º Cartrack','cartrack_number',d.cartrack_number,'text','maxlength="80"')}${this.field('Empresa','company',d.company,'text','maxlength="120"')}<label>Responsável habitual<select name="habitual_person_id">${this.peopleOptions(d.habitual_person_id,true)}</select></label>${this.field('Quilómetros','odometer',d.odometer,'number','min="0" max="99999999" step="1" required')}${this.field('Seguro válido até','insurance_until',d.insurance_until,'date')}${this.field('Inspeção válida até','inspection_until',d.inspection_until,'date')}${this.field('Licença transporte postes até','transport_until',d.transport_until,'date')}<label class="fleet-check"><input type="checkbox" name="active" ${d.active?'checked':''}>Viatura ativa</label></div></fieldset></form>`, `<button class="btn btn-primary" type="button" data-action="save-vehicle">${icon('save')}Guardar viatura</button>`);
     this.bindForm();
+    if(vehicle && this.canDeleteVehicle(vehicle)){const footer=this.host.querySelector('.fleet-dialog-footer');footer.insertAdjacentHTML('afterbegin',`<button type="button" class="btn fleet-error" data-action="delete-vehicle" data-id="${vehicle.id}">${icon('trash-2')}Eliminar viatura de teste</button>`);this.drawIcons();}
   }
   peopleOptions(selected,empty=false){return `<option value="">${empty?'Sem atribuição':'Selecionar…'}</option>`+this.persons.filter(p=>!p.historyOnly && p.ativo!==false || p.id===selected).sort((a,b)=>a.name.localeCompare(b.name,'pt')).map(p=>`<option value="${esc(p.id)}" ${p.id===selected?'selected':''}>${esc(p.name)}</option>`).join('');}
   capture(){
     const form=this.host.querySelector('[data-fleet-form]');if(!form || !this.dialog || this.dialog.readOnly)return;
-    const d=this.dialog.data,previousReceiver=d.to_person_id;
+    const d=this.dialog.data,previousReceiver=d.to_person_id,previousDestination=d.destination;
     for(const [key,value] of new FormData(form))if(!(value instanceof File) && !key.startsWith('inspection.') && !key.startsWith('driver.'))d[key]=value;
     if(this.dialog.type==='vehicle')d.active=form.elements.active.checked;
     else{
+      const choice=form.elements.kind.value;d.kind=choice==='external'?'return':choice;
+      if(choice==='external')d.destination='external_structure';else if(previousDestination==='external_structure'){delete d.destination;delete d.external_structure;}
       d.checked=form.elements.checked.checked;d.at=fromLisbonInput(form.elements.at_input.value);d.expected_return=fromLisbonInput(form.elements.expected_input.value);
       delete d.at_input;delete d.expected_input;
       d.inspection={};for(const input of form.querySelectorAll('[data-inspection]'))d.inspection[input.dataset.inspection]=input.value;
@@ -179,7 +197,7 @@ class Fleet {
         d.driver_fields[kind][driver]=input.value;
       }
       if(d.kind==='return')d.to_person_id='';
-      if(previousReceiver!==d.to_person_id){delete d.driver_fields.to.name;const input=form.querySelector('[data-kind=to][data-driver=name]');input.value='';input.dataset.autoName='1';}
+      if(previousReceiver!==d.to_person_id || previousDestination!==d.destination){d.driver_fields.to={};for(const input of form.querySelectorAll('[data-kind=to][data-driver]')){input.value='';if(input.dataset.driver==='name')input.dataset.autoName='1';}}
     }
     this.stash();
   }
@@ -222,13 +240,15 @@ class Fleet {
     const driverNames=`<div class="fleet-form-grid">${[['from','Nome completo de quem entrega'],['to','Nome completo de quem recebe']].map(([kind,label])=>`<label>${label}<input name="driver.${kind}.name" data-kind="${kind}" data-driver="name" maxlength="120" value="${esc(d.driver_fields?.[kind]?.name || '')}"></label>`).join('')}</div>`;
     const driverFields=driverNames+['from','to'].map(kind=>`<details><summary>${kind==='from'?'Quem entrega':'Quem recebe'} · Dados para o auto</summary><div class="fleet-form-grid" style="margin-top:14px">${[['number','N.º interno'],['phone','Telefone'],['bi','BI / CC (opcional)'],['nif','NIF (opcional)'],['license','Carta de condução (opcional)']].map(([key,label])=>`<label>${label}<input name="driver.${kind}.${key}" data-kind="${kind}" data-driver="${key}" maxlength="80" value="${esc(d.driver_fields?.[kind]?.[key] || '')}"></label>`).join('')}</div></details>`).join('');
     this.showDialog(`${vehicle.plate} · ${handover?'Editar auto':'Nova entrega / devolução'}`,`<form data-fleet-form><fieldset><div class="fleet-form-grid"><label>Operação<select name="kind">${Object.entries(OPERATIONS).map(([key,label])=>`<option value="${key}" ${d.kind===key?'selected':''}>${label}</option>`).join('')}</select></label>${this.field('Motivo','reason',d.reason,'text','maxlength="120" required')}<label>Entrega<input value="${esc(giver)}" readonly></label><label data-receiver>Recebe<select name="to_person_id">${this.peopleOptions(d.to_person_id)}</select></label>${this.field('Data / hora (Portugal)','at_input',lisbonInput(d.at),'datetime-local','required')}<label data-expected>Devolução prevista<input type="datetime-local" name="expected_input" value="${esc(lisbonInput(d.expected_return))}"></label>${this.field('Quilómetros atuais','odometer',d.odometer,'number',`min="${vehicle.odometer}" max="99999999" step="1" placeholder="Última leitura: ${vehicle.odometer}" required`)}<label>Combustível<select name="fuel"><option value="">Por confirmar</option>${['Reserva','1/4','1/2','3/4','Cheio'].map(value=>`<option ${d.fuel===value?'selected':''}>${value}</option>`).join('')}</select></label>${this.field('Local','place',d.place,'text','maxlength="120" required')}${this.field('Responsável de zona','zone_name',d.zone_name,'text','maxlength="100" required')}</div><div class="fleet-section">${driverFields}</div><section class="fleet-section"><h3>Inspeção <span data-progress-total class="fleet-small"></span></h3>${groups}</section><details class="fleet-section" data-damage-details><summary>Danos · R Risco / A Amolgadela / P Partido</summary><div class="fleet-bar" style="margin-top:14px"><select aria-label="Tipo de dano" data-damage-type><option>R</option><option>A</option><option>P</option></select>${button('undo-2','Retirar último dano','undo-damage')}</div><div data-damage-error class="fleet-small"></div><canvas class="fleet-damage-canvas" width="595" height="842" aria-label="Esquema do auto para assinalar danos" role="img"></canvas></details><div class="fleet-form-grid fleet-section"><label class="fleet-wide">Observações / justificação dos danos<textarea name="damage_notes" rows="3" maxlength="3000">${esc(d.damage_notes)}</textarea></label><label class="fleet-wide">Outras observações<textarea name="notes" rows="2" maxlength="2000">${esc(d.notes)}</textarea></label></div><section class="fleet-section"><h3>Assinaturas (opcional)</h3><div class="fleet-signatures">${[['from','Entrega'],['to','Recebe'],['zone','Responsável de zona']].map(([key,label])=>`<figure><figcaption>${label}${button('trash-2','Limpar assinatura de '+label,'clear-signature',`data-kind="${key}"`)}</figcaption><canvas width="600" height="200" data-signature="${key}" aria-label="Assinatura de ${label}"></canvas></figure>`).join('')}</div></section><label class="fleet-check"><input type="checkbox" name="checked" ${d.checked?'checked':''}>Confirmei a entrega real, os quilómetros e a inspeção desta operação.</label></fieldset></form><section class="fleet-section"><h3>Fotografias / documentos</h3><input type="file" data-fleet-upload accept="image/jpeg,image/png,image/webp,application/pdf" multiple aria-label="Anexar fotografias ou documentos"><ul class="fleet-file-list" data-fleet-files></ul></section>`, `<button class="btn" type="button" data-action="save-draft">${icon('save')}Guardar rascunho</button><button class="btn" type="button" data-action="draft-pdf">${icon('file-text')}Pré-visualizar PDF</button><button class="btn btn-primary" type="button" data-action="confirm">${icon('check')}Confirmar entrega</button>`);
+    const operation=this.host.querySelector('[name=kind]');operation.insertAdjacentHTML('beforeend','<option value="external">Entrega a outra estrutura</option>');if(d.destination==='external_structure' && d.kind==='return')operation.value='external';
+    this.host.querySelector('.fleet-form-grid').insertAdjacentHTML('beforeend',`<label data-external-destination>Estrutura de destino<input name="external_structure" maxlength="120" value="${esc(d.external_structure || '')}"></label>`);
     const giverInput=this.host.querySelector('.fleet-form-grid input[readonly]');giverInput.dataset.giver='';giverInput.insertAdjacentHTML('afterend','<span data-giver-status class="fleet-small"></span>');
     this.bindForm();this.updateKind();this.updateProgress();this.setupSignatures();this.setupFiles();this.loadFiles();
     this.host.querySelector('[data-damage-details]').addEventListener('toggle',event=>{if(event.target.open)this.loadDamage();});
     this.stash();this.status(this.dialog.version?'Rascunho guardado no servidor':'Rascunho local');
     if(this.remote){
       this.host.querySelector('.fleet-dialog-head [data-action=close]')?.remove();
-      for(const name of ['kind','to_person_id','reason','zone_name'])this.host.querySelector(`[name="${name}"]`).disabled=true;
+      for(const name of ['kind','to_person_id','reason','zone_name','external_structure'])this.host.querySelector(`[name="${name}"]`).disabled=true;
       this.host.querySelector('.fleet-signatures')?.closest('section').remove();
       this.host.querySelector('[data-fleet-upload]').accept='image/jpeg,image/png,image/webp';
       this.host.querySelector('.fleet-dialog-footer').innerHTML='<span data-fleet-status class="fleet-status" role="status" aria-live="polite"></span><button class="btn" type="button" data-action="save-draft">'+icon('save')+'Guardar</button><button class="btn" type="button" data-action="draft-pdf">'+icon('file-text')+'Consultar PDF</button><button class="btn btn-primary" type="button" data-action="remote-submit">'+icon('check')+'Concluir preenchimento</button>';
@@ -237,11 +257,12 @@ class Fleet {
   }
   updateKind(){
     const form=this.host.querySelector('[data-fleet-form]');if(!form)return;const kind=form.elements.kind.value;
-    this.host.querySelector('[data-expected]').hidden=kind!=='temporary';this.host.querySelector('[data-receiver]').hidden=kind==='return';
+    this.host.querySelector('[data-expected]').hidden=kind!=='temporary';this.host.querySelector('[data-receiver]').hidden=['return','external'].includes(kind);
+    const external=this.host.querySelector('[data-external-destination]');external.hidden=kind!=='external';external.querySelector('input').disabled=kind!=='external' || !!this.remote;
     const d=this.dialog.data,origin=handoverOrigin(this.vehicle(this.dialog.vehicleId),this.holder(this.dialog.vehicleId),kind,this.persons);
     form.querySelector('[data-giver]').value=origin.name;
     form.querySelector('[data-giver-status]').textContent=origin.source==='habitual'?(this.custody.some(c=>c.vehicle_id===this.dialog.vehicleId)?'Sem utilização em curso':'Responsável habitual · situação inicial por registar'):'';
-    const defaults={from:origin.id?origin.name:'',to:kind==='return'?'':this.person(form.elements.to_person_id.value,'').name};
+    const defaults={from:origin.id?origin.name:'',to:['return','external'].includes(kind)?'':this.person(form.elements.to_person_id.value,'').name};
     for(const role of ['from','to']){
       const input=form.querySelector(`[data-kind=${role}][data-driver=name]`);
       input.placeholder=defaults[role] || (role==='from'?'Indicar quem entrega':'Indicar quem recebe');
@@ -282,17 +303,18 @@ class Fleet {
   async confirmHandover(){
     if(this.busy)return;this.capture();const vehicle=this.vehicle(this.dialog.vehicleId),errors=validateHandover(this.dialog.data,vehicle,this.holder(vehicle.id));
     if(errors.length){this.message(errors.join('\n'),true);return;}
-    if(!confirm(`Confirmar a ${OPERATIONS[this.dialog.data.kind].toLowerCase()} da viatura ${vehicle.plate}? O histórico e este auto ficam fechados para edição.`))return;
+    if(!confirm(`Confirmar a ${handoverLabel(this.dialog.data).toLowerCase()} da viatura ${vehicle.plate}? O histórico e este auto ficam fechados para edição.${this.dialog.data.destination==='external_structure'?' A viatura será retirada da frota ativa.':''}`))return;
     this.busy=true;const form=this.host.querySelector('fieldset');form.disabled=true;
     try{
       await this.saveDraft();this.status('A confirmar no servidor…');
       const h=await this.rpc('rh_fleet_confirm_handover',{p_id:this.dialog.id,p_version:this.dialog.version});
+      if(h.data.destination==='external_structure')this.showArchived=true;
       this.clearStash();this.dirty=false;this.host.innerHTML='';this.dialog=null;await this.load();this.page='handovers';this.render();
       try{await this.downloadPdf(h.id);}catch(error){this.message('Entrega confirmada. '+error.message,true);}
     }finally{this.busy=false;if(form.isConnected)form.disabled=false;}
   }
   readHandover(h,vehicle){
-    const s=h.snapshot;this.showDialog(`${vehicle.plate} · FRO-${String(h.number).padStart(5,'0')}`,`<p class="fleet-locked">${icon('lock')}${esc(statusLabel[h.status])} · histórico preservado</p><dl class="fleet-read-data"><div><dt>Operação</dt><dd>${esc(OPERATIONS[h.data.kind])}</dd></div><div><dt>Data / hora</dt><dd>${date(h.data.at)}</dd></div><div><dt>Entrega</dt><dd>${esc(s?.from_person.name || '—')}</dd></div><div><dt>Recebe</dt><dd>${esc(s?.to_person.name || '—')}</dd></div><div><dt>N.º Cartrack</dt><dd>${esc(s?.vehicle.cartrack_number || vehicle.cartrack_number || '—')}</dd></div><div><dt>Quilómetros</dt><dd>${esc(h.data.odometer)}</dd></div><div><dt>Motivo</dt><dd>${esc(h.data.reason)}</dd></div><div><dt>Devolução prevista</dt><dd>${date(h.data.expected_return)}</dd></div></dl><div class="fleet-section"><h3>Observações</h3><p style="white-space:pre-wrap">${esc(h.data.damage_notes)}${h.data.notes?'\n'+esc(h.data.notes):''}</p></div><section class="fleet-section"><h3>Fotografias / documentos / auto assinado</h3>${h.status==='confirmed'?'<input type="file" data-fleet-upload accept="image/jpeg,image/png,image/webp,application/pdf" multiple aria-label="Anexar auto assinado ou fotografias">':''}<ul class="fleet-file-list" data-fleet-files></ul></section>`, h.status==='confirmed'?`<button class="btn btn-primary" data-action="pdf" data-id="${h.id}">${icon('download')}Auto PDF</button>`:'');
+    const s=h.snapshot;this.showDialog(`${vehicle.plate} · FRO-${String(h.number).padStart(5,'0')}`,`<p class="fleet-locked">${icon('lock')}${esc(statusLabel[h.status])} · histórico preservado</p><dl class="fleet-read-data"><div><dt>Operação</dt><dd>${esc(handoverLabel(h.data))}</dd></div><div><dt>Data / hora</dt><dd>${date(h.data.at)}</dd></div><div><dt>Entrega</dt><dd>${esc(driverName(s?.operation || h.data,'from',s?.from_person) || '—')}</dd></div><div><dt>Recebe</dt><dd>${esc(driverName(s?.operation || h.data,'to',s?.to_person) || '—')}</dd></div>${h.data.destination==='external_structure'?'<div><dt>Estrutura de destino</dt><dd>'+esc(h.data.external_structure)+'</dd></div>':''}<div><dt>N.º Cartrack</dt><dd>${esc(s?.vehicle.cartrack_number || vehicle.cartrack_number || '—')}</dd></div><div><dt>Quilómetros</dt><dd>${esc(h.data.odometer)}</dd></div><div><dt>Motivo</dt><dd>${esc(h.data.reason)}</dd></div><div><dt>Devolução prevista</dt><dd>${date(h.data.expected_return)}</dd></div></dl><div class="fleet-section"><h3>Observações</h3><p style="white-space:pre-wrap">${esc(h.data.damage_notes)}${h.data.notes?'\n'+esc(h.data.notes):''}</p></div><section class="fleet-section"><h3>Fotografias / documentos / auto assinado</h3>${h.status==='confirmed'?'<input type="file" data-fleet-upload accept="image/jpeg,image/png,image/webp,application/pdf" multiple aria-label="Anexar auto assinado ou fotografias">':''}<ul class="fleet-file-list" data-fleet-files></ul></section>`, h.status==='confirmed'?`<button class="btn btn-primary" data-action="pdf" data-id="${h.id}">${icon('download')}Auto PDF</button>`:'');
     this.setupFiles();this.loadFiles();
   }
   setupSignatures(){

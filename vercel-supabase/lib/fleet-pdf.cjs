@@ -5,7 +5,7 @@ const fontkit=require('@pdf-lib/fontkit');
 const asset=name=>path.join(__dirname,'../assets/fleet',name);
 const clean=value=>String(value ?? '').replace(/[\u0000-\u0009\u000b-\u001f]/g,' ').slice(0,8000);
 async function renderFleetPdf(handover){
-  const {INSPECTION_GROUPS,CONDITIONS,OPERATIONS,driverName}=await import('../src/rh-fleet-model.mjs');
+  const {INSPECTION_GROUPS,CONDITIONS,handoverLabel,driverName}=await import('../src/rh-fleet-model.mjs');
   const s=handover.snapshot;if(!s || s.template_version!==1)throw new Error('Versão do modelo de auto indisponível.');
   const op=s.operation,v=s.vehicle;
   const pdf=await PDFDocument.load(await fs.readFile(asset('modri-94-01-v1.pdf')));
@@ -46,7 +46,7 @@ async function renderFleetPdf(handover){
   }
   const missingSignatures=['from','to','zone'].filter(key=>!op.signatures?.[key]);
   const number='FRO-'+String(handover.number || 'RASCUNHO').padStart(5,'0');
-  const metadata=[number,OPERATIONS[op.kind],time,'Cartrack: '+(v.cartrack_number || '—'),'Combustível: '+(op.fuel || '—')].join(' | ');
+  const metadata=[number,handoverLabel(op),time,'Cartrack: '+(v.cartrack_number || '—'),'Combustível: '+(op.fuel || '—'),op.destination==='external_structure'?'Estrutura de destino: '+op.external_structure:''].filter(Boolean).join(' | ');
   const note=[metadata,op.reason,op.damage_notes,op.notes,...overflow.map(value=>'Dados completos: '+value)].filter(Boolean).join('\n');
   function wrap(value,maxWidth,size){
     const lines=[];for(const paragraph of clean(value).split(/\n/)){
