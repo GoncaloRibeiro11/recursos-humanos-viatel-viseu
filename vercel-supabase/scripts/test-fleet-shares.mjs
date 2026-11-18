@@ -53,3 +53,30 @@ test('preenchimento remoto preserva os dois nomes completos sem inventar nomes a
   await assert.rejects(safePatch({driver_fields:{from:{name:'A'.repeat(121)}}}),/condutor/);
   await assert.rejects(safePatch({driver_fields:{from:{name:'Nome\nerrado'}}}),/condutor/);
 });
+test('eliminacao exige admin e confirmacao, limpa apenas anexos do auto e permite repetir uma falha',async()=>{
+  const deleted={id,entity:'handover',number:1,version:3,files_pending:true},objects=new Set([id+'/photo.jpg',id+'/auto-v1.pdf','other-auto/keep.jpg']);
+  let failDelete=true,deleteCalls=0;const requests=[];
+  const service=createFleetShares({env:{SUPABASE_SERVICE_ROLE_KEY:secret},fetcher:async(url,options={})=>{
+    const value=options.body?JSON.parse(options.body):null;requests.push({url,method:options.method,value});
+    if(url.endsWith('/auth/v1/user'))return Response.json({id:'admin'});
+    if(url.includes('/user_profiles?'))return Response.json([{role:'admin'}]);
+    if(url.endsWith('/rh_fleet_delete_handover')){deleteCalls++;if(value.p_number!=='FRO-00001')return Response.json({code:'P0001',message:'O número indicado não corresponde ao auto.'},{status:400});return Response.json(deleted);}
+    if(url.endsWith('/rh_fleet_deleted_info'))return Response.json(deleted);
+    if(url.endsWith('/rh_fleet_pending_deletions'))return Response.json({items:[deleted]});
+    if(url.endsWith('/storage/v1/object/list/rh-fleet')){assert.equal(value.prefix,id);return Response.json([...objects].filter(key=>key.startsWith(id+'/')).map(key=>({name:key.slice(id.length+1)})));}
+    if(options.method==='DELETE'){
+      if(failDelete)return Response.json({error:'temporarily unavailable'},{status:503});
+      for(const name of value.prefixes){assert.ok(name.startsWith(id+'/'));objects.delete(name);}return Response.json({});
+    }
+    if(url.endsWith('/rh_fleet_mark_deleted_files')){assert.ok(![...objects].some(key=>key.startsWith(id+'/')));return Response.json(true);}
+    throw new Error('Unexpected request '+url);
+  }}),req={headers:{authorization:'Bearer admin'}};
+  await assert.rejects(service.manage({headers:{}},{action:'delete',id,version:3,number:'FRO-00001',test:true}),error=>error.status===401);
+  await assert.rejects(service.manage(req,{action:'delete',id,version:3,number:'FRO-00001',test:false}),error=>error.status===400);assert.equal(deleteCalls,0);
+  await assert.rejects(service.manage(req,{action:'delete',id,version:3,number:'FRO-99999',test:true}),error=>error.status===409);assert.equal(objects.size,3);
+  const pending=await service.manage(req,{action:'delete',id,version:3,number:'FRO-00001',test:true});assert.equal(pending.deleted,true);assert.equal(pending.filesPending,true);
+  failDelete=false;const done=await service.manage(req,{action:'cleanup-deleted',id});assert.equal(done.filesPending,false);assert.deepEqual([...objects],['other-auto/keep.jpg']);
+  assert.equal((await service.manage(req,{action:'pending-deletions'})).items[0].id,id);
+  const denied=createFleetShares({env:{SUPABASE_SERVICE_ROLE_KEY:secret},fetcher:async url=>Response.json(url.endsWith('/auth/v1/user')?{id:'manager'}:[{role:'gestor'}])});
+  await assert.rejects(denied.manage({headers:{authorization:'Bearer manager'}},{action:'cleanup-deleted',id}),error=>error.status===403);
+});

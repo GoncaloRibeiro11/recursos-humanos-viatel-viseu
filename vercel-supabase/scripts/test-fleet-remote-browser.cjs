@@ -6,7 +6,8 @@ const root=path.resolve(__dirname,'../public'),output=path.resolve(__dirname,'..
 const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
 (async()=>{
  const t=await createDb(),objects=new Map(),secret='local-test-server-key';let base,archived;
- const initialState=process.env.TEST_INITIAL_STATE==='1',external=process.env.TEST_EXTERNAL==='1';
+ const deleteMode=process.env.TEST_DELETE==='1',initialState=process.env.TEST_INITIAL_STATE==='1' || deleteMode,external=process.env.TEST_EXTERNAL==='1';
+ let failStorageDeletion=deleteMode;
  let h=await t.draft(2,external?{kind:'return',destination:'external_structure',external_structure:'Estrutura de Teste',driver_fields:{from:{name:fromName},to:{name:toName}}}:initialState?{kind:'temporary',to_person_id:'b',expected_return:new Date(Date.now()+86400000).toISOString()}:{});
  if(initialState || external){
   await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261117_fleet_initial_state.sql'),'utf8')));
@@ -15,6 +16,7 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
   await t.call('rh_fleet_save_vehicle',[t.uuid(99),0,{plate:'EF-34-GH',make_model:'Teste inicial',habitual_person_id:'b',odometer:0,active:true}]);
  }
  await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261118_fleet_external.sql'),'utf8')));
+ await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261118_fleet_deletions.sql'),'utf8')));
  const fetcher=async(url,options={})=>{
   const u=new URL(url),body=options.body && !Buffer.isBuffer(options.body)?JSON.parse(options.body):null;
   if(u.pathname==='/auth/v1/user')return Response.json({id:t.admin});
@@ -24,6 +26,10 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
    catch(error){return Response.json({code:error.code || 'P0001',message:error.message},{status:400});}
   }
   if(u.pathname==='/storage/v1/object/list/rh-fleet')return Response.json([...objects.keys()].filter(key=>key.startsWith(body.prefix+'/')).map(key=>({name:key.split('/').pop()})));
+  if(u.pathname==='/storage/v1/object/rh-fleet' && options.method==='DELETE'){
+   if(failStorageDeletion){failStorageDeletion=false;return Response.json({error:'Falha temporaria simulada'},{status:503});}
+   for(const key of body.prefixes){objects.delete(key);await t.query('delete from storage.objects where bucket_id=$1 and name=$2',['rh-fleet',key]);}return Response.json({});
+  }
   if(u.pathname.startsWith('/storage/v1/object/')){
    const objectPath=decodeURIComponent(u.pathname.split('/rh-fleet/')[1]);
    if(options.method==='POST'){
@@ -73,10 +79,11 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
   await admin.goto(base+'/test.html');
   if(external){
    await admin.locator('[data-action=edit-vehicle][data-id="'+t.uuid(1)+'"]').click();
-   assert.equal(await admin.locator('[data-action=delete-vehicle]').count(),0);
+   await admin.locator('.fleet-dialog [data-action=delete-vehicle]').click();
+   await admin.getByText('Para eliminar uma viatura de teste, elimina primeiro os seus autos. Para uma viatura real, mantém o histórico e arquiva-a.',{exact:true}).waitFor();
    await admin.locator('.fleet-dialog [data-action=close]').click();
    await admin.locator('[data-action=edit-vehicle][data-id="'+t.uuid(99)+'"]').click();
-   await admin.locator('[data-action=delete-vehicle]').click();
+   await admin.locator('.fleet-dialog [data-action=delete-vehicle]').click();
    await admin.locator('[data-action=confirm-delete-vehicle]').click();
    await admin.getByText('Confirma a matrícula e a eliminação definitiva.',{exact:true}).waitFor();
    assert.equal((await t.query('select * from rh_fleet_vehicles where id=$1',[t.uuid(99)])).length,1);
@@ -94,7 +101,7 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
    const dialog=admin.locator('.fleet-dialog');await dialog.getByRole('button',{name:'Registar situação inicial',exact:true}).click();await dialog.getByText('Confirma a situação inicial da viatura.',{exact:true}).waitFor();
    await admin.setViewportSize({width:390,height:844});await dialog.screenshot({path:path.join(output,'situacao-inicial-390.png')});
    await dialog.locator('[data-initial-confirm]').check();await dialog.getByRole('button',{name:'Registar situação inicial',exact:true}).click();await admin.waitForFunction(()=>!document.querySelector('.fleet-dialog'));
-   await admin.setViewportSize({width:1440,height:1000});assert.equal(await admin.locator('[data-action=initial-state][data-id="'+t.uuid(99)+'"]').count(),0);
+   await admin.setViewportSize({width:1440,height:1000});await admin.locator('[data-action=initial-state][data-id="'+t.uuid(99)+'"]').waitFor({state:'detached'});
    await admin.locator('[data-action=page][data-page=history]').click();await admin.getByText('Início desconhecido',{exact:true}).first().waitFor();await admin.screenshot({path:path.join(output,'situacao-inicial-historico.png'),fullPage:true});
   }
   await admin.locator('[data-action=page][data-page=handovers]').click();await admin.locator('[data-action=edit-handover]').click();
@@ -166,7 +173,39 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
   assert.ok(archived);assert.equal((await PDFDocument.load(archived)).getPageCount(),3);
   fs.writeFileSync(path.join(output,'auto-assinado-teste.pdf'),archived);
   assert.equal(await admin.evaluate(()=>JSON.stringify(state)===window.hrBefore),true);assert.deepEqual(errors,[]);
+  if(deleteMode){
+   const holder=(await t.query('select * from rh_fleet_custody where handover_id=$1',[h.id]))[0];
+   let child=await t.call('rh_fleet_save_handover',[t.uuid(70),t.uuid(1),0,holder.id,{...t.data,kind:'return'}]);await t.call('rh_fleet_cancel_handover',[child.id,child.version]);
+   child=(await t.query('select * from rh_fleet_handovers where id=$1',[child.id]))[0];
+   await admin.locator('[data-action=reload]').click();
+   await admin.locator('[data-action=delete-handover][data-id="'+h.id+'"]').click();
+   await admin.locator('[data-action=confirm-delete-handover]').click();await admin.getByText('Escreve o número do auto e confirma a eliminação do teste.',{exact:true}).waitFor();
+   await admin.locator('[data-delete-number]').fill('FRO-'+String(final.number).padStart(5,'0'));await admin.locator('[data-delete-confirm]').check();
+   await admin.locator('[data-action=confirm-delete-handover]').click();await admin.getByText('Elimina primeiro os autos de teste dependentes: FRO-'+String(child.number).padStart(5,'0')+'.',{exact:true}).waitFor();
+   await admin.setViewportSize({width:390,height:844});await admin.locator('.fleet-dialog').screenshot({path:path.join(output,'eliminar-auto-bloqueio-390.png')});
+   await admin.locator('.fleet-dialog [data-action=close]').click();
+   for(const item of [child,final]){
+    await admin.locator('[data-action=delete-handover][data-id="'+item.id+'"]').click();
+    await admin.locator('[data-delete-number]').fill('FRO-'+String(item.number).padStart(5,'0'));await admin.locator('[data-delete-confirm]').check();
+    await admin.locator('.fleet-dialog').screenshot({path:path.join(output,'eliminar-auto-'+item.status+'-390.png')});
+    await admin.locator('[data-action=confirm-delete-handover]').click();
+    if(item.id===final.id){
+     await admin.getByText('Auto eliminado. Os anexos aguardam limpeza; podes repetir no aviso acima.',{exact:true}).waitFor();assert.equal(objects.size,2);
+     await admin.reload();await admin.getByRole('button',{name:'Tentar limpar anexos',exact:true}).waitFor();
+     await admin.screenshot({path:path.join(output,'eliminacao-anexos-pendentes-390.png'),fullPage:true});
+     await admin.getByRole('button',{name:'Tentar limpar anexos',exact:true}).click();await admin.getByRole('button',{name:'Tentar limpar anexos',exact:true}).waitFor({state:'detached'});
+    }else await admin.getByText('Auto eliminado.',{exact:true}).waitFor();
+   }
+   assert.equal(objects.size,0);assert.equal((await t.query('select * from rh_fleet_handovers')).length,0);assert.equal((await t.call('rh_fleet_pending_deletions')).items.length,0);
+   assert.equal((await t.query('select * from rh_fleet_custody where vehicle_id=$1 and to_at is null',[t.uuid(1)]))[0].person_id,'a');
+   await admin.locator('[data-action=page][data-page=vehicles]').click();await admin.locator('[data-action=delete-vehicle][data-id="'+t.uuid(1)+'"]').click();
+   await admin.locator('[data-delete-plate]').fill('AB-12-CD');await admin.locator('[data-delete-confirm]').check();
+   await admin.locator('[data-action=confirm-delete-vehicle]').click();await admin.waitForFunction(()=>!document.querySelector('.fleet-dialog'));
+   assert.equal((await t.query('select * from rh_fleet_vehicles where id=$1',[t.uuid(1)])).length,0);
+   assert.equal((await t.query('select * from rh_fleet_vehicles where id=$1',[t.uuid(99)])).length,1);
+   assert.equal(await admin.evaluate(()=>JSON.stringify(state)===window.hrBefore),true);assert.deepEqual(errors,[]);
+  }
   const expired=await mobile.newPage();await expired.goto(base+'/auto-viatura.html#'+'x'.repeat(43));await expired.getByRole('heading',{name:'Ligação indisponível',exact:true}).waitFor();
-  console.log(JSON.stringify({initialState,external,editorWithoutRhAccess:true,mobileDraftSurvivesReload:true,driverNamesSaved:true,sameNamesForSigning:true,privatePhotoUpload:true,scopedLinks:true,signWithFinger390:true,signWithFinger320:true,darkTheme:true,oneTimeReceipt:true,bothSignaturesRequired:true,pdfHasImagesAndReceipts:true,serverArchive:true,tokensNotInRequestUrls:true,hrUnchanged:true,pageErrors:errors}));
+  console.log(JSON.stringify({initialState,external,deleteMode,editorWithoutRhAccess:true,mobileDraftSurvivesReload:true,driverNamesSaved:true,sameNamesForSigning:true,privatePhotoUpload:true,scopedLinks:true,signWithFinger390:true,signWithFinger320:true,darkTheme:true,oneTimeReceipt:true,bothSignaturesRequired:true,pdfHasImagesAndReceipts:true,serverArchive:true,tokensNotInRequestUrls:true,hrUnchanged:true,pageErrors:errors}));
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve));await t.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

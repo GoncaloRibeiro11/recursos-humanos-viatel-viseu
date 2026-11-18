@@ -24,6 +24,9 @@
 #fleetRoot .fleet-late { color:var(--danger,#c23131); font-weight:650; }
 #fleetRoot .fleet-empty { padding:35px 0; color:var(--text-muted); }
 #fleetRoot .fleet-notice { padding:12px 0; color:var(--text-muted); font-size:13px; }
+#fleetRoot .fleet-delete p { margin:12px 0; line-height:1.5; }
+#fleetRoot .fleet-delete>label:not(.fleet-check) { display:grid; gap:6px; margin:14px 0; }
+#fleetRoot .fleet-delete>label input:not([type=checkbox]) { width:100%; box-sizing:border-box; }
 #fleetRoot .fleet-status { font-size:12px; color:var(--text-muted); white-space:normal; }
 #fleetRoot .fleet-error { color:var(--danger,#c23131); font-size:13px; white-space:pre-line; margin:12px 0; }
 #fleetRoot .fleet-person { display:flex; align-items:center; gap:8px; }

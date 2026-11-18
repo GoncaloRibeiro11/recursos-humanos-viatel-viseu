@@ -23,7 +23,7 @@ export function mountRemoteEditor(options,payload){
 }
 class Fleet {
   constructor(options){
-    Object.assign(this,options);this.vehicles=[];this.handovers=[];this.custody=[];this.page='vehicles';this.search='';this.personFilter='';this.vehicleFilter='';this.showArchived=false;this.loaded=false;this.loading=false;this.dialog=null;this.busy=false;this.draftSaving=null;this.dirty=false;
+    Object.assign(this,options);this.vehicles=[];this.handovers=[];this.custody=[];this.pendingDeletes=[];this.page='vehicles';this.search='';this.personFilter='';this.vehicleFilter='';this.showArchived=false;this.loaded=false;this.loading=false;this.dialog=null;this.busy=false;this.draftSaving=null;this.dirty=false;
     this.root.innerHTML='<div class="fleet-workspace"></div><div class="fleet-modal-host"></div>';
     this.panel=this.root.querySelector('.fleet-workspace');this.host=this.root.querySelector('.fleet-modal-host');
     this.root.addEventListener('click',event=>this.click(event));
@@ -61,6 +61,7 @@ class Fleet {
       this.handovers=await fetchAllRows(this.client,'rh_fleet_handovers',['number']);
       this.custody=await fetchAllRows(this.client,'rh_fleet_custody',['from_at','id']);
       this.loaded=true;this.error='';
+      try{this.pendingDeletes=(await this.rpc('rh_fleet_pending_deletions',{})).items || [];}catch{this.pendingDeletes=[];}
     }catch(error){this.error=error.message.includes('rh_fleet_version')?'A configuração da frota ainda não está instalada no servidor.':error.message;}
     finally{this.loading=false;this.render();}
   }
@@ -83,7 +84,11 @@ class Fleet {
       const key=input.dataset.filter,value=input.value;
       if(key==='search')this.search=value;if(key==='person')this.personFilter=value;if(key==='vehicle')this.vehicleFilter=value;if(key==='archived')this.showArchived=input.checked;
       const cursor=input.selectionStart;this.render();if(key==='search'){const next=this.panel.querySelector('[data-filter=search]');next.focus();next.setSelectionRange(cursor,cursor);}
-    }));this.drawIcons();
+    }));
+    if(this.pendingDeletes.length)this.panel.querySelector('.fleet-tabs').insertAdjacentHTML('beforebegin',`<div class="fleet-bar fleet-error" role="status">${this.pendingDeletes.length} auto(s) eliminado(s) com anexos por limpar.<button class="btn" type="button" data-action="cleanup-deleted">${icon('refresh-cw')}Tentar limpar anexos</button></div>`);
+    for(const row of this.panel.querySelectorAll('[data-fleet-vehicle]'))row.querySelector('.fleet-actions').insertAdjacentHTML('beforeend',button('trash-2','Eliminar viatura','delete-vehicle',`data-id="${row.dataset.fleetVehicle}"`));
+    if(this.page==='handovers')for(const row of this.panel.querySelectorAll('tbody tr')){const id=row.querySelector('[data-action=edit-handover]').dataset.id;row.querySelector('.fleet-actions').insertAdjacentHTML('beforeend',button('trash-2','Eliminar auto','delete-handover',`data-id="${id}"`));}
+    this.drawIcons();
   }
   vehiclesHtml(vehicles){
     if(!vehicles.length)return '<div class="fleet-empty">Sem viaturas nesta seleção.</div>';
@@ -113,6 +118,10 @@ class Fleet {
       if(action==='edit-vehicle')this.openVehicle(this.vehicle(id));
       if(action==='delete-vehicle')this.openDeleteVehicle(this.vehicle(id));
       if(action==='confirm-delete-vehicle')await this.deleteVehicle();
+      if(action==='vehicle-autos'){this.vehicleFilter=id;this.page='handovers';this.personFilter='';this.search='';this.showArchived=true;this.host.innerHTML='';this.dialog=null;this.render();}
+      if(action==='delete-handover')await this.openDeleteHandover(this.handovers.find(h=>h.id===id));
+      if(action==='confirm-delete-handover')await this.deleteHandover();
+      if(action==='cleanup-deleted'){control.disabled=true;try{for(const item of this.pendingDeletes)await this.shareApi({action:'cleanup-deleted',id:item.id});await this.load();}finally{control.disabled=false;}}
       if(action==='handover')this.openHandover(this.vehicle(id));
       if(action==='initial-state')this.openInitialState(this.vehicle(id));
       if(action==='register-initial-state')await this.registerInitialState();
@@ -144,12 +153,17 @@ class Fleet {
   }
   showDialog(title,body,footer){
     this.host.innerHTML=`<div class="fleet-backdrop"><div class="fleet-dialog" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="fleet-dialog-head"><h2>${esc(title)}</h2>${button('x','Fechar','close')}</div><div data-fleet-message role="alert" class="fleet-error"></div>${body}<div class="fleet-dialog-footer"><span data-fleet-status class="fleet-status" role="status" aria-live="polite"></span>${footer}</div></div></div>`;
+    if(this.dialog?.type?.startsWith('delete-'))this.host.querySelector('.fleet-dialog').classList.add('fleet-delete');
     this.drawIcons();this.host.querySelector('input,select,button')?.focus();
     this.host.querySelector('.fleet-dialog').addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();this.close();}if(event.key==='Tab'){const items=[...this.host.querySelectorAll('button,input,select,textarea,summary')].filter(el=>!el.disabled && el.getClientRects().length);const index=items.indexOf(document.activeElement);if(event.shiftKey && index===0){event.preventDefault();items.at(-1)?.focus();}else if(!event.shiftKey && index===items.length-1){event.preventDefault();items[0]?.focus();}}});
   }
   field(label,name,value='',type='text',extra=''){return `<label>${esc(label)}<input type="${type}" name="${name}" value="${esc(value)}" ${extra}></label>`;}
   openDeleteVehicle(vehicle){
-    if(!this.canDeleteVehicle(vehicle))throw new Error('Viaturas com autos não podem ser eliminadas. A saída para outra estrutura preserva o histórico.');
+    if(!this.canDeleteVehicle(vehicle)){
+      const autos=this.handovers.filter(h=>h.vehicle_id===vehicle.id);
+      this.dialog={type:'delete-vehicle-blocked',vehicleId:vehicle.id};
+      this.showDialog(vehicle.plate+' · Eliminar viatura',`<p>Esta viatura tem ${autos.length} auto(s) associado(s) ou histórico de utilização.</p><p>Para eliminar uma viatura de teste, elimina primeiro os seus autos. Para uma viatura real, mantém o histórico e arquiva-a.</p>`,`<button type="button" class="btn btn-primary" data-action="vehicle-autos" data-id="${vehicle.id}">${icon('file-text')}Ver autos desta viatura</button>`);return;
+    }
     this.dialog={type:'delete-vehicle',vehicleId:vehicle.id,version:vehicle.version};
     this.showDialog(vehicle.plate+' · Eliminar viatura',`<dl class="fleet-read-data"><div><dt>Viatura</dt><dd>${esc(vehicle.make_model)}</dd></div><div><dt>Autos</dt><dd>0</dd></div></dl><label>Confirmar matrícula<input data-delete-plate autocomplete="off" placeholder="${esc(vehicle.plate)}"></label><label class="fleet-check"><input type="checkbox" data-delete-confirm>Eliminar definitivamente esta viatura e a sua situação inicial.</label>`,`<button type="button" class="btn fleet-error" data-action="confirm-delete-vehicle">${icon('trash-2')}Eliminar definitivamente</button>`);
   }
@@ -159,6 +173,25 @@ class Fleet {
     this.busy=true;const control=this.host.querySelector('[data-action=confirm-delete-vehicle]');control.disabled=true;
     try{await this.rpc('rh_fleet_delete_unused_vehicle',{p_id:v.id,p_version:this.dialog.version,p_plate:plate});if(this.localDraft()?.vehicleId===v.id || this.localDraft()?.id===v.id)this.clearStash();this.dialog=null;this.host.innerHTML='';await this.load();}
     finally{this.busy=false;if(control.isConnected)control.disabled=false;}
+  }
+  async openDeleteHandover(h){
+    if(!h || this.busy)return;
+    if(this.dialog?.id===h.id && !this.dialog.readOnly){await this.saveDraft();h={...h,version:this.dialog.version,data:clone(this.dialog.data)};}
+    clearTimeout(this.saveTimer);this.dirty=false;
+    const number='FRO-'+String(h.number).padStart(5,'0'),vehicle=this.vehicle(h.vehicle_id);
+    this.dialog={type:'delete-handover',id:h.id,version:h.version,number};
+    const effect=h.status==='confirmed'?`<p>Este auto está confirmado. Se for o último movimento e não existirem autos dependentes, será reposto o estado anterior: ${esc(h.snapshot?.from_person?.name || 'Empresa / parque')} e ${Number(h.snapshot?.vehicle?.odometer || 0).toLocaleString('pt-PT')} km.</p>`:'<p>A eliminação deste rascunho ou auto cancelado não altera a utilização da viatura.</p>';
+    this.showDialog(number+' · Eliminar auto',`<dl class="fleet-read-data"><div><dt>Viatura</dt><dd>${esc(vehicle?.plate)}</dd></div><div><dt>Estado</dt><dd>${statusLabel[h.status]}</dd></div></dl>${effect}<p>O auto, os anexos e as ligações de assinatura serão retirados do site. Fica uma cópia de segurança técnica, sem ligações de acesso ativas.</p><label>Confirmar número do auto<input data-delete-number autocomplete="off" placeholder="${number}"></label><label class="fleet-check"><input type="checkbox" data-delete-confirm>Confirmo que este auto é de teste e que o quero eliminar.</label>`,`<button class="btn fleet-error" type="button" data-action="confirm-delete-handover">${icon('trash-2')}Eliminar auto de teste</button>`);
+  }
+  async deleteHandover(){
+    if(this.busy)return;const d=this.dialog,number=this.host.querySelector('[data-delete-number]').value.trim().toUpperCase();
+    if(number!==d.number || !this.host.querySelector('[data-delete-confirm]').checked)throw new Error('Escreve o número do auto e confirma a eliminação do teste.');
+    this.busy=true;const control=this.host.querySelector('[data-action=confirm-delete-handover]');control.disabled=true;
+    try{
+      const result=await this.shareApi({action:'delete',id:d.id,version:d.version,number,test:true});if(!result.deleted)throw new Error('A eliminação não foi confirmada.');
+      if(this.localDraft()?.id===d.id)this.clearStash();this.dialog=null;this.host.innerHTML='';this.page='handovers';await this.load();
+      this.message(result.filesPending?'Auto eliminado. Os anexos aguardam limpeza; podes repetir no aviso acima.':'Auto eliminado.',!!result.filesPending);
+    }finally{this.busy=false;if(control.isConnected)control.disabled=false;}
   }
   openInitialState(vehicle){
     if(!this.canRegisterInitial(vehicle))throw new Error('Esta viatura já tem histórico ou falta o responsável habitual.');
@@ -176,7 +209,7 @@ class Fleet {
     const d=this.dialog.data;
     this.showDialog(this.dialog.version?'Editar viatura':'Adicionar viatura',`<form data-fleet-form><fieldset><div class="fleet-form-grid">${this.field('Matrícula','plate',d.plate,'text','required maxlength="20"')}${this.field('Marca / modelo','make_model',d.make_model,'text','required maxlength="120"')}${this.field('N.º Cartrack','cartrack_number',d.cartrack_number,'text','maxlength="80"')}${this.field('Empresa','company',d.company,'text','maxlength="120"')}<label>Responsável habitual<select name="habitual_person_id">${this.peopleOptions(d.habitual_person_id,true)}</select></label>${this.field('Quilómetros','odometer',d.odometer,'number','min="0" max="99999999" step="1" required')}${this.field('Seguro válido até','insurance_until',d.insurance_until,'date')}${this.field('Inspeção válida até','inspection_until',d.inspection_until,'date')}${this.field('Licença transporte postes até','transport_until',d.transport_until,'date')}<label class="fleet-check"><input type="checkbox" name="active" ${d.active?'checked':''}>Viatura ativa</label></div></fieldset></form>`, `<button class="btn btn-primary" type="button" data-action="save-vehicle">${icon('save')}Guardar viatura</button>`);
     this.bindForm();
-    if(vehicle && this.canDeleteVehicle(vehicle)){const footer=this.host.querySelector('.fleet-dialog-footer');footer.insertAdjacentHTML('afterbegin',`<button type="button" class="btn fleet-error" data-action="delete-vehicle" data-id="${vehicle.id}">${icon('trash-2')}Eliminar viatura de teste</button>`);this.drawIcons();}
+    if(vehicle){const footer=this.host.querySelector('.fleet-dialog-footer');footer.insertAdjacentHTML('afterbegin',`<button type="button" class="btn fleet-error" data-action="delete-vehicle" data-id="${vehicle.id}">${icon('trash-2')}Eliminar viatura</button>`);this.drawIcons();}
   }
   peopleOptions(selected,empty=false){return `<option value="">${empty?'Sem atribuição':'Selecionar…'}</option>`+this.persons.filter(p=>!p.historyOnly && p.ativo!==false || p.id===selected).sort((a,b)=>a.name.localeCompare(b.name,'pt')).map(p=>`<option value="${esc(p.id)}" ${p.id===selected?'selected':''}>${esc(p.name)}</option>`).join('');}
   capture(){
@@ -406,5 +439,5 @@ class Fleet {
     else if(this.dialog?.type==='vehicle'){this.capture();if(!confirm('Fechar a ficha e manter o rascunho neste navegador?'))return;}
     this.host.innerHTML='';this.dialog=null;clearTimeout(this.saveTimer);this.dirty=false;await this.load();
   }
-  reset(){clearTimeout(this.saveTimer);this.dialog=null;this.dirty=false;this.loaded=false;this.vehicles=[];this.handovers=[];this.custody=[];this.panel.innerHTML='';this.host.innerHTML='';}
+  reset(){clearTimeout(this.saveTimer);this.dialog=null;this.dirty=false;this.loaded=false;this.vehicles=[];this.handovers=[];this.custody=[];this.pendingDeletes=[];this.panel.innerHTML='';this.host.innerHTML='';}
 }

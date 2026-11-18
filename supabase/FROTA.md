@@ -11,6 +11,9 @@ adicionados depois nem reabre periodos ja terminados.
 Depois executar `migrations/20261118_fleet_external.sql` para entregas a outra
 estrutura e eliminacao protegida de viaturas sem autos. Nao altera registos
 existentes nem abre acesso anonimo.
+Depois executar `migrations/20261118_fleet_deletions.sql` para eliminar autos
+de teste e limpar os anexos pelo servidor. A instalacao cria funcoes e
+registos tecnicos privados; nao elimina autos, viaturas nem ficheiros.
 
 ## Acesso e dados
 
@@ -85,11 +88,27 @@ recebem alteracoes automaticas aos nomes. Trocar Recebe sugere o novo nome.
 - Depois de devolvida a empresa, uma viatura real tambem pode ser arquivada
   na ficha desmarcando Viatura ativa. Arquivar nao elimina autos nem datas
   de utilizacao; nao e permitido ocultar uma entrega ainda em curso.
-- Eliminar viatura de teste so aparece na ficha de viaturas sem qualquer
-  auto, mesmo cancelado. Exige escrever a matricula e confirmar a eliminacao
-  definitiva. O servidor verifica administrador, versao e ausencia de autos
-  e historico real antes de apagar. Uma situacao inicial sem auto pode ser
-  eliminada com a viatura; registos reais devem ser arquivados.
+- Eliminar auto esta disponivel na lista Autos. Exige escrever FRO-... e
+  confirmar que se trata de um teste. Rascunhos e cancelados nao mudam posses.
+  Num confirmado, exige o ultimo movimento, sem dependencias e com o estado
+  operacional ainda coerente. Remove apenas o periodo criado por esse
+  teste e reabre o anterior, repondo quilometros e atribuicao afetados pelo
+  auto. Movimentos posteriores e leituras posteriores diferentes bloqueiam.
+  Para testes em sequencia, eliminar primeiro os dependentes/mais recentes.
+- Eliminar viatura aparece na lista e na ficha. Havendo autos, abre uma
+  explicacao e acesso a lista filtrada para os eliminar individualmente.
+  Sem autos nem historico real, exige matricula e confirmacao explicita.
+  Uma situacao inicial sem auto pode ser eliminada com a viatura; registos
+  reais devem ser arquivados, nao assinalados como testes.
+- A eliminacao guarda metadados administrativos e copia tecnica dos dados
+  em tabelas RLS. O navegador so consulta metadados como administrador; as
+  copias de dados nao tem grants para authenticated/anon. Nao se guardam
+  tokens de acesso na copia, e as ligacoes e assinaturas ativas sao removidas.
+- Os anexos sao eliminados pela Storage API, nunca apenas por SQL nos
+  metadados. Uma falha fica registada e pode ser repetida no aviso da Frota,
+  incluindo depois de recarregar. O gatilho no bucket rh-fleet bloqueia
+  anexos de autos inexistentes e serializa uploads com a eliminacao.
+  Rascunhos antigos nao podem recriar IDs de autos ou viaturas eliminados.
 - Nao se renumeram autos nem se reutilizam numeros eliminados.
 
 Os itens da inspecao comecam por verificar. Aplicar um estado a itens vazios e
@@ -147,3 +166,7 @@ Entregas externas: `node scripts/test-fleet-external-sql.cjs` e o teste de
 browser remoto com `TEST_EXTERNAL=1`. Verificam destinatario sem conta RH,
 assinaturas, arquivo atomico, PDF e eliminacao com matricula de uma viatura
 ficticia sem autos, mantendo bloqueada a eliminacao de viaturas com historico.
+Eliminacao: `node scripts/test-fleet-deletions-sql.cjs` e o teste de browser
+remoto com `TEST_DELETE=1`. Usam apenas registos ficticios, testam bloqueios,
+reposicao do estado anterior, anexos, copias privadas, repeticao de pedidos
+e eliminacao de viatura apos eliminar os seus autos, sem alterar o RH.

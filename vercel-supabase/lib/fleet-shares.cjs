@@ -58,7 +58,7 @@ function createFleetShares({env=process.env,fetcher=fetch,now=()=>new Date(),ren
   async function rpc(name,value,bearer){
     const response=await request('/rest/v1/rpc/'+name,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)},bearer);
     let data;try{data=await response.json();}catch{}
-    if(!response.ok){if(['P0001','40001'].includes(data?.code))throw fail(data.message,409);if(['PGRST202','42P01'].includes(data?.code))throw fail('Falta instalar as ligações privadas no servidor.');throw fail('Não foi possível concluir o pedido.');}
+    if(!response.ok){if(['P0001','40001'].includes(data?.code))throw fail(data.message,409);if(['PGRST202','42P01'].includes(data?.code))throw fail('Falta atualizar a configuração da Frota no servidor.');throw fail('Não foi possível concluir o pedido.');}
     return Array.isArray(data)?data[0]:data;
   }
   async function admin(req){
@@ -70,7 +70,20 @@ function createFleetShares({env=process.env,fetcher=fetch,now=()=>new Date(),ren
     return bearer;
   }
   async function manage(req,value){
-    const bearer=await admin(req);if(!idValid(value.id))throw fail('Auto inválido.',400);
+    const bearer=await admin(req);
+    if(value.action==='pending-deletions')return rpc('rh_fleet_pending_deletions',{},bearer);
+    if(!idValid(value.id))throw fail('Auto inválido.',400);
+    if(value.action==='delete' || value.action==='cleanup-deleted'){
+      if(!secret)throw fail('O serviço de eliminação de anexos ainda não está configurado.');
+      let deleted;
+      if(value.action==='delete'){
+        if(!Number.isInteger(value.version) || value.version<1 || typeof value.number!=='string' || value.number.length>30 || value.test!==true)throw fail('Confirma o número do auto e a eliminação do teste.',400);
+        deleted=await rpc('rh_fleet_delete_handover',{p_id:value.id,p_version:value.version,p_number:value.number,p_test:true},bearer);
+      }else deleted=await rpc('rh_fleet_deleted_info',{p_id:value.id},bearer);
+      if(!deleted || deleted.id!==value.id || deleted.entity!=='handover')throw fail('Eliminação não confirmada pelo servidor.');
+      try{await cleanupDeletedFiles(value.id);return {deleted:true,number:deleted.number,filesPending:false};}
+      catch{return {deleted:true,number:deleted.number,filesPending:true};}
+    }
     if(value.action==='status')return rpc('rh_fleet_share_status',{p_id:value.id},bearer);
     if(value.action==='revoke')return {revoked:await rpc('rh_fleet_revoke_shares',{p_id:value.id},bearer)};
     if(value.action!=='create' || !['editor','from','to'].includes(value.purpose))throw fail('Pedido inválido.',400);
@@ -91,6 +104,30 @@ function createFleetShares({env=process.env,fetcher=fetch,now=()=>new Date(),ren
     if(!/^[A-Za-z0-9_-]{43}$/.test(token || ''))throw fail('Ligação inválida ou incompleta.',400);
     return rpc('rh_fleet_read_share',{p_hash:hash(token)});
   };
+  async function cleanupDeletedFiles(id){
+    const names=[];
+    async function list(prefix,depth=0){
+      if(depth>8)throw fail('Pasta de anexos inválida.');
+      for(let offset=0;;offset+=100){
+        const response=await request('/storage/v1/object/list/rh-fleet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prefix,limit:100,offset,sortBy:{column:'name',order:'asc'}})});
+        if(!response.ok)throw fail('Não foi possível consultar os anexos.');
+        const rows=await response.json();if(!Array.isArray(rows))throw fail('Resposta de anexos inválida.');
+        for(const row of rows){
+          if(typeof row.name!=='string' || !row.name || /[\\/\u0000]/.test(row.name) || ['.','..'].includes(row.name))throw fail('Nome de anexo inválido.');
+          const name=prefix+'/'+row.name;
+          if(row.id===null && row.metadata===null)await list(name,depth+1);else names.push(name);
+          if(names.length>10000)throw fail('Demasiados anexos.');
+        }
+        if(rows.length<100)break;
+      }
+    }
+    await list(id);
+    for(let offset=0;offset<names.length;offset+=100){
+      const response=await request('/storage/v1/object/rh-fleet',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({prefixes:names.slice(offset,offset+100)})});
+      if(!response.ok)throw fail('Não foi possível eliminar todos os anexos.');
+    }
+    if(await rpc('rh_fleet_mark_deleted_files',{p_id:id})!==true)throw fail('A limpeza dos anexos não foi confirmada.');
+  }
   async function files(handoverId){
     const response=await request('/storage/v1/object/list/rh-fleet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prefix:handoverId,limit:100,sortBy:{column:'created_at',order:'asc'}})});
     if(!response.ok)throw fail('Não foi possível consultar as fotografias.');
