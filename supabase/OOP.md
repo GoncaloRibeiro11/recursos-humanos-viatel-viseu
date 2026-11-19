@@ -1,4 +1,4 @@
-# Acompanhamento Comercial OOP
+# Análise Vendedor
 
 ## Estado e limites
 
@@ -27,8 +27,11 @@ usa a gravacao integral do estado RH nem interfere na sua fila de sincronizacao.
 5. Testar regras puras, PostgreSQL/RLS e navegador com dados ficticios.
 6. Validar com o responsavel e so depois autorizar migracao e deployment.
 
-Os passos 1-5 estao implementados nesta branch. A aprovacao e publicacao sao
-etapas separadas, ainda nao realizadas. A base real nao foi migrada.
+Os passos 1-5 estao implementados nesta branch. Em 2026-11-19, o responsavel
+autorizou a publicacao no site. A instalacao protegida em Supabase foi concluida
+nesse dia: 18 tabelas pre-existentes foram copiadas e verificadas por contagem
+e digest, sem alteracoes, incluindo 32 colaboradores e 1906 marcacoes.
+O deployment do frontend e verificado separadamente na Vercel.
 
 Verificacao local: build, 76 testes unitarios/regressao, suite SQL com RLS,
 transferencias, falsificacao de autor, idempotencia, conflitos, paginacao e
@@ -131,6 +134,13 @@ ligados a um projeto Supabase de teste. O hostname do projeto de producao e
 bloqueado na configuracao e APIs de servidor em Preview. Notificacoes Telegram
 ficam desativadas em Preview. Nao herdar chaves de servico de producao.
 O SQL nunca e executado pelo build.
+
+`scripts/build-oop-release.mjs` gera um instalador de uso unico que inclui uma
+copia transacional das tabelas RH e perfis em `rh_release_backups`, privada,
+sem grants de cliente e com RLS. A verificacao de integridade e a migracao estao
+na mesma transacao: qualquer falha impede o commit. Os ficheiros gerados ficam
+fora da pasta public e nao sao incluidos no deployment. A copia na propria base
+nao substitui um backup externo para recuperacao da base inteira.
 
 Depois da autorizacao, validar backup e instalar `20261118_oop.sql` primeiro
 num projeto de teste com `schema.sql` e `20261015_team_history.sql` existentes.

@@ -17,7 +17,7 @@ module.exports=async function createOopDb(options={}){
   await db.query('insert into rh_persons(id,name,role_code,chefe_id,entrada,data) values($1,$2,$3,$4,$5,$6)',[id,name,role,ce,'2020-01-01',{photo:'',telefone:'RH-PRIVADO',nascimento:'RH-PRIVADO'}]);
  }
  const install=async file=>db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/'+file),'utf8'));
- await install('20261015_team_history.sql');await install('20261118_oop.sql');
+ await install('20261015_team_history.sql');if(options.installOop!==false)await install('20261118_oop.sql');
  let pending=Promise.resolve();
  const run=(user,fn,role='authenticated')=>{const job=pending.catch(()=>{}).then(async()=>{await db.exec('reset role');await db.query("select set_config('app.user',$1,false)",[users[user] || user || '']);await db.exec('set role '+role);return fn();});pending=job;return job;};
  const rpc=(user,name,input={})=>{const args={...input};if(['rh_oop_save_contact','rh_oop_save_action','rh_oop_void_contact'].includes(name) && !Object.hasOwn(args,'p_actor_id'))args.p_actor_id=users[user] || user;return run(user,async()=>(await db.query(`select public.${name}(${Object.keys(args).map((k,i)=>k+'=>$'+(i+1)).join(',')}) as data`,Object.values(args))).rows[0].data);};
