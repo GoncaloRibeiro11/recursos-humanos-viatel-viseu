@@ -6,7 +6,7 @@ const root=path.resolve(__dirname,'../public'),output=path.resolve(__dirname,'..
 const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
 (async()=>{
  const t=await createDb(),objects=new Map(),secret='local-test-server-key';let base,archived;
- const deleteMode=process.env.TEST_DELETE==='1',initialState=process.env.TEST_INITIAL_STATE==='1' || deleteMode,external=process.env.TEST_EXTERNAL==='1';
+ const deleteMode=process.env.TEST_DELETE==='1',initialState=process.env.TEST_INITIAL_STATE==='1' || deleteMode,external=process.env.TEST_EXTERNAL==='1',signatureOnly=process.env.TEST_SIGNATURE_ONLY==='1';
  let failStorageDeletion=deleteMode;
  let h=await t.draft(2,external?{kind:'return',destination:'external_structure',external_structure:'Estrutura de Teste',driver_fields:{from:{name:fromName},to:{name:toName}}}:initialState?{kind:'temporary',to_person_id:'b',expected_return:new Date(Date.now()+86400000).toISOString()}:{});
  if(initialState || external){
@@ -136,6 +136,11 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
   await admin.getByRole('button',{name:'Atualizar assinaturas',exact:true}).click();await admin.locator('[data-sharing]').waitFor();
   await admin.waitForFunction(()=>document.querySelector('[name=odometer]')?.value==='145');
   assert.equal(await admin.locator('[name=odometer]').inputValue(),'145');
+  if(signatureOnly){
+   for(const name of ['at_input','expected_input','odometer','place','reason','zone_name','damage_notes']){const field=admin.locator('[name='+name+']');assert.equal(await field.getAttribute('required'),null);if(await field.isVisible())await field.fill('');else assert.equal(await field.inputValue(),'');}
+   await admin.locator('[name=fuel]').selectOption('');await admin.locator('[name=checked]').uncheck();
+   const item=admin.locator('[data-inspection=doc_dua]');await item.locator('xpath=ancestor::details').locator('summary').click();await item.selectOption('Mau');
+  }
   const fromHash=await makeLink('from'),toHash=await makeLink('to');
   await admin.locator('[data-sharing]').screenshot({path:path.join(output,'rh-ligacoes.png')});
   async function sign(fragment,name,width){
@@ -143,6 +148,7 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
    await page.locator('#remoteSignerName').waitFor();assert.equal(await page.locator('#remoteSignerName').inputValue(),name);assert.equal(await page.locator('#remoteSign').isDisabled(),true);
    assert.match(await page.locator('.remote-facts').innerText(),new RegExp(fromName));assert.match(await page.locator('.remote-facts').innerText(),new RegExp(toName));
    await page.waitForFunction(()=>document.querySelector('#remotePhotos img')?.naturalWidth>0);
+   if(signatureOnly){const text=await page.locator('.remote-facts').innerText();assert.ok(!text.includes('NaN'));assert.match(text,/Quilómetros\s+—/);const pdf=await page.request.post(base+'/api/fleet-remote',{data:{action:'pdf',token:fragment.slice(1)}});assert.equal(pdf.status(),200);assert.ok((await PDFDocument.load(await pdf.body())).getPageCount()>=2);}
    if(width===320){await page.emulateMedia({colorScheme:'dark'});assert.equal(await page.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(20, 25, 31)');}
    const canvas=page.locator('#remoteSignature');await canvas.scrollIntoViewIfNeeded();const box=await canvas.boundingBox(),cdp=await mobile.newCDPSession(page);
    const point=(x,y)=>({x:box.x+box.width*x,y:box.y+box.height*y});
@@ -157,6 +163,13 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
   }
   await sign(fromHash,fromName,390);await sign(toHash,toName,320);
   await admin.getByRole('button',{name:'Atualizar assinaturas',exact:true}).click();await admin.locator('[data-share-status]').getByText(new RegExp(fromName)).waitFor();
+  if(signatureOnly){
+   assert.equal((await t.query('select * from rh_fleet_signature_receipts where invalidated_at is null')).length,2);
+   assert.equal((await t.query('select * from rh_fleet_custody')).length,0);
+   assert.equal((await t.query('select status from rh_fleet_handovers where id=$1',[h.id]))[0].status,'draft');
+   assert.equal(await admin.evaluate(()=>JSON.stringify(state)===window.hrBefore),true);assert.deepEqual(errors,[]);
+   console.log(JSON.stringify({onlyInspectionAndPhotosRequired:true,emptyOptionalFields:true,missingMetadataPdfWorks:true,realApiToSql:true,bothFingerSignatures:true,noCustodyChange:true,hrUntouched:true,pageErrors:errors}));return;
+  }
   await admin.getByRole('button',{name:'Confirmar entrega',exact:true}).click();await admin.waitForFunction(()=>!document.querySelector('.fleet-dialog'));
   const final=(await t.query('select * from rh_fleet_handovers where id=$1',[h.id]))[0];assert.equal(final.status,'confirmed');assert.ok(final.snapshot.operation.signatures.from);assert.ok(final.snapshot.operation.signatures.to);
   assert.equal(final.snapshot.operation.driver_fields.from.name,fromName);assert.equal(final.snapshot.operation.driver_fields.to.name,toName);assert.equal(final.snapshot.to_person.id,external?null:initialState?'b':'a');

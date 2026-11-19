@@ -47,7 +47,6 @@ function createFleetApi({env=process.env,fetcher=fetch,render=renderFleetPdf}={}
         const all=await persons.json();
         const person=id=>{const p=all.find(p=>p.id===id);return {id,name:p?.name || 'Empresa / parque',phone:p?.data?.telefone || p?.data?.phone || '',number:p?.data?.numero || ''};};
         row.snapshot={template_version:1,vehicle:v,from_person:person(holder?.person_id),to_person:person(row.data.to_person_id),operation:row.data,captured_at:row.created_at};
-        if(!row.data.at || !Number.isFinite(+new Date(row.data.at)))throw fail('Indica a data e hora no rascunho antes de gerar o PDF.',400);
       }
       if(!document){
         document=await render(row);

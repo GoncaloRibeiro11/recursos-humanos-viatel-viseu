@@ -48,6 +48,15 @@ export function driverName(operation,kind,person={}){
 export function inspectionProgress(inspection={}){
   return {complete:INSPECTION_ITEMS.filter(item=>CONDITIONS.includes(inspection[item.key])).length,total:INSPECTION_ITEMS.length};
 }
+export function validateSignatureRequest(data,photoCount=0){
+  const errors=[];
+  for(const group of INSPECTION_GROUPS){
+    const missing=group.items.filter(item=>!CONDITIONS.includes(data.inspection?.[item.key]) || group.page===1 && data.inspection?.[item.key]==='NE').length;
+    if(missing)errors.push(`Completa a avaliação em ${group.label} (${missing} por preencher).`);
+  }
+  if(!Number.isInteger(photoCount) || photoCount<1)errors.push('Anexa pelo menos uma fotografia da viatura (JPG, PNG ou WebP).');
+  return errors;
+}
 export function validateHandover(data,vehicle,current,now=new Date()){
   const errors=[];
   if(!OPERATIONS[data.kind])errors.push('Seleciona a operação.');

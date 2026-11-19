@@ -21,8 +21,9 @@ async function renderFleetPdf(handover){
     if(fitted<5){overflow.push(label);while(label && font.widthOfTextAtSize(label+'...',5)>width)label=label.slice(0,-1);label+='...';fitted=5;}
     page.drawText(label,{x,y:page.getHeight()-top-9,size:Math.max(5,fitted),font,color:ink});
   }
-  const day=new Intl.DateTimeFormat('pt-PT',{timeZone:'Europe/Lisbon',day:'2-digit',month:'2-digit',year:'numeric'}).format(new Date(op.at));
-  const time=new Intl.DateTimeFormat('pt-PT',{timeZone:'Europe/Lisbon',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(op.at));
+  const at=new Date(op.at),hasDate=!!op.at && Number.isFinite(+at);
+  const day=hasDate?new Intl.DateTimeFormat('pt-PT',{timeZone:'Europe/Lisbon',day:'2-digit',month:'2-digit',year:'numeric'}).format(at):'';
+  const time=hasDate?new Intl.DateTimeFormat('pt-PT',{timeZone:'Europe/Lisbon',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(at):'Data / hora não indicada';
   text(pages[0],op.place,83,103,309,8.5,true);text(pages[0],day,426,103,98,8.5,true);
   text(pages[0],v.plate,99,146,62,8.5,true);text(pages[0],v.make_model,228,147,143,8.5,true);text(pages[0],op.odometer==='' || op.odometer==null?'':Number(op.odometer).toLocaleString('pt-PT'),424,147,103,8.5,true);
   for(const [kind,person,top] of [['from',s.from_person,190],['to',s.to_person,222.4]]){
@@ -93,7 +94,7 @@ async function renderFleetPdf(handover){
     }
     text(page,'As assinaturas correspondem ao conteudo identificado acima.',52,top,490,9);
   }
-  const captured=new Date(s.captured_at || handover.created_at);
+  const captured=[s.captured_at,handover.created_at].filter(Boolean).map(value=>new Date(value)).find(value=>Number.isFinite(+value)) || new Date();
   pdf.setTitle(number+' - '+v.plate);pdf.setAuthor('RH Viatel Viseu');pdf.setCreationDate(captured);pdf.setModificationDate(captured);
   return Buffer.from(await pdf.save());
 }

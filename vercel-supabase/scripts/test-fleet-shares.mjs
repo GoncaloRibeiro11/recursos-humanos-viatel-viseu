@@ -3,6 +3,27 @@ const require=createRequire(import.meta.url);
 const {createFleetShares,imageData,hash,safePatch}=require('../lib/fleet-shares.cjs');
 const {createCanvas}=require('@napi-rs/canvas');
 const id='10000000-0000-4000-8000-000000000002',token='a'.repeat(43),secret='server-only-test-key';
+test('assinaturas exigem apenas avaliacao e fotografias, nao os campos da confirmacao de entrega',async()=>{
+  const {INSPECTION_ITEMS,validateSignatureRequest}=await import('../src/rh-fleet-model.mjs');
+  const data={inspection:Object.fromEntries(INSPECTION_ITEMS.map(i=>[i.key,'NA'])),at:'',odometer:'',fuel:'',place:'',reason:'',zone_name:'',expected_return:'',checked:false,damage_notes:''};
+  data.inspection.doc_dua='Mau';assert.deepEqual(validateSignatureRequest(data,1),[]);
+  let photos=[id+'/viatura.jpg'],creates=0;
+  const service=createFleetShares({env:{SUPABASE_SERVICE_ROLE_KEY:secret},fetcher:async(url,options)=>{
+    const body=options.body?JSON.parse(options.body):null;
+    if(url.endsWith('/auth/v1/user'))return Response.json({id:'admin'});
+    if(url.includes('/user_profiles?'))return Response.json([{role:'admin'}]);
+    if(url.endsWith('/rh_fleet_prepare_share'))return Response.json({handover:{id,status:'draft',data},payload:{vehicle:{id:'vehicle'},photos}});
+    if(url.endsWith('/rh_fleet_create_share')){creates++;return Response.json({id:'link',purpose:body.p_purpose,expires_at:body.p_expires});}
+    if(url.endsWith('/rh_fleet_share_status'))return Response.json({handover:{id,status:'draft',data,version:2}});
+    throw new Error('Unexpected request');
+  }}),req={headers:{authorization:'Bearer administrator'}};
+  for(const purpose of ['from','to'])assert.ok((await service.manage(req,{action:'create',id,purpose})).url);
+  assert.equal(creates,2);photos=[id+'/documento.pdf'];
+  await assert.rejects(service.manage(req,{action:'create',id,purpose:'from',photos:[id+'/inventada.jpg']}),/fotografia/);assert.equal(creates,2);
+  photos=[id+'/viatura.jpg'];delete data.inspection.doc_dua;
+  await assert.rejects(service.manage(req,{action:'create',id,purpose:'from'}),/Documentos/);assert.equal(creates,2);
+  assert.ok((await service.manage(req,{action:'create',id,purpose:'editor'})).url,'preenchimento pode ser delegado antes das fotos e avaliacao');
+});
 test('ligacoes opacas de 256 bits so guardam hash e exigem administrador',async()=>{
   const requests=[];
   const service=createFleetShares({env:{SUPABASE_SERVICE_ROLE_KEY:secret},fetcher:async(url,options)=>{

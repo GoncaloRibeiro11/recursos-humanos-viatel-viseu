@@ -61,6 +61,11 @@ function createFleetShares({env=process.env,fetcher=fetch,now=()=>new Date(),ren
     if(!response.ok){if(['P0001','40001'].includes(data?.code))throw fail(data.message,409);if(['PGRST202','42P01'].includes(data?.code))throw fail('Falta atualizar a configuração da Frota no servidor.');throw fail('Não foi possível concluir o pedido.');}
     return Array.isArray(data)?data[0]:data;
   }
+  async function signatureErrors(data,payload){
+    const {validateSignatureRequest}=await import('../src/rh-fleet-model.mjs');
+    const photos=Array.isArray(payload?.photos)?payload.photos.filter(name=>typeof name==='string' && /\.(jpe?g|png|webp)$/i.test(name)):[];
+    return validateSignatureRequest(data,photos.length);
+  }
   async function admin(req){
     const bearer=String(req.headers.authorization || '');if(!/^Bearer \S+$/.test(bearer))throw fail('Inicia sessão no RH.',401);
     const user=await request('/auth/v1/user',{},bearer);if(!user.ok)throw fail('Sessão inválida.',401);
@@ -90,9 +95,8 @@ function createFleetShares({env=process.env,fetcher=fetch,now=()=>new Date(),ren
     const prepared=await rpc('rh_fleet_prepare_share',{p_id:value.id},bearer);
     if(prepared.handover.status!=='draft')throw fail('Só podes partilhar autos em rascunho.',409);
     if(value.purpose!=='editor'){
-      const {validateHandover}=await import('../src/rh-fleet-model.mjs');
-      const errors=validateHandover({...prepared.handover.data,checked:true},prepared.payload.vehicle,prepared.holder?.id?prepared.holder:null,now());
-      if(errors.length)throw fail('Completa o auto antes de pedir assinaturas:\n'+errors.join('\n'),400);
+      const errors=await signatureErrors(prepared.handover.data,prepared.payload);
+      if(errors.length)throw fail('Falta completar o pedido de assinatura:\n'+errors.join('\n'),400);
     }
     const token=randomBytes(32).toString('base64url');
     const expires=new Date(+now()+24*3600000).toISOString();
@@ -147,10 +151,8 @@ function createFleetShares({env=process.env,fetcher=fetch,now=()=>new Date(),ren
       if(!Number.isInteger(value.version) || !value.data || typeof value.data!=='object')throw fail('Dados inválidos.',400);
       const patch=await safePatch(value.data);
       if(value.action==='submit'){
-        const {validateHandover}=await import('../src/rh-fleet-model.mjs');
         const data={...h.data,...patch};
-        const holder=current.payload.from_person.id?{person_id:current.payload.from_person.id}:null;
-        const errors=validateHandover(data,current.payload.vehicle,holder,now());if(errors.length)throw fail(errors.join('\n'),400);
+        const errors=await signatureErrors(data,current.payload);if(errors.length)throw fail(errors.join('\n'),400);
       }
       return rpc('rh_fleet_remote_save',{p_hash:tokenHash,p_version:value.version,p_patch:patch,p_submit:value.action==='submit'});
     }
@@ -160,7 +162,6 @@ function createFleetShares({env=process.env,fetcher=fetch,now=()=>new Date(),ren
     }
     if(value.action==='diagram')return {binary:await fs.readFile(asset('modri-94-01-page2.png')),type:'image/png'};
     if(value.action==='pdf'){
-      if(!current.payload.operation.at || !Number.isFinite(+new Date(current.payload.operation.at)))throw fail('Falta indicar uma data e hora válidas.',400);
       const snapshot={...current.payload,operation:{...current.payload.operation,signatures:{}},captured_at:current.signing_at || h.data.at};
       return {binary:await render({id:h.id,number:current.number,status:'draft',snapshot}),type:'application/pdf'};
     }

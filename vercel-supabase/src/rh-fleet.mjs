@@ -23,7 +23,7 @@ export function mountRemoteEditor(options,payload){
 }
 class Fleet {
   constructor(options){
-    Object.assign(this,options);this.vehicles=[];this.handovers=[];this.custody=[];this.pendingDeletes=[];this.page='vehicles';this.search='';this.personFilter='';this.vehicleFilter='';this.showArchived=false;this.loaded=false;this.loading=false;this.dialog=null;this.busy=false;this.draftSaving=null;this.dirty=false;
+    Object.assign(this,options);this.vehicles=[];this.handovers=[];this.custody=[];this.pendingDeletes=[];this.page='vehicles';this.search='';this.personFilter='';this.vehicleFilter='';this.showArchived=false;this.loaded=false;this.loading=false;this.dialog=null;this.busy=false;this.draftSaving=null;this.dirty=false;this.uploadingCount=0;
     this.root.innerHTML='<div class="fleet-workspace"></div><div class="fleet-modal-host"></div>';
     this.panel=this.root.querySelector('.fleet-workspace');this.host=this.root.querySelector('.fleet-modal-host');
     this.root.addEventListener('click',event=>this.click(event));
@@ -241,6 +241,10 @@ class Fleet {
   }
   bindForm(){
     const form=this.host.querySelector('[data-fleet-form]');
+    if(this.dialog.type==='handover'){
+      for(const input of form.querySelectorAll('[name=reason],[name=at_input],[name=odometer],[name=place],[name=zone_name]'))input.required=false;
+      for(const input of form.querySelectorAll('[data-inspection]'))input.required=true;
+    }
     form.addEventListener('submit',event=>event.preventDefault());
     form.addEventListener('input',event=>{
       if(event.target.matches('[data-driver=name]'))event.target.dataset.autoName='0';
@@ -383,13 +387,18 @@ class Fleet {
     if(value.handover){this.dirty=false;clearTimeout(this.saveTimer);this.openHandover(this.vehicle(value.handover.vehicle_id),value.handover);this.showShareStatus(value);}
   }
   async createShare(purpose){
-    if(this.busy)return;this.busy=true;const fieldset=this.host.querySelector('fieldset');fieldset.disabled=true;
+    if(this.busy)return;
+    if(this.uploadingCount){this.message('Aguarda que as fotografias terminem de carregar antes de criar a ligação.',true);this.status('Fotografias em carregamento',true);return;}
+    this.busy=true;const fieldset=this.host.querySelector('fieldset');
     try{
-      await this.saveDraft();this.status('A criar ligação privada…');
+      await this.saveDraft();fieldset.disabled=true;this.status('A criar ligação privada…');
       const result=await this.shareApi({action:'create',id:this.dialog.id,purpose});
       if(result.handover)this.openHandover(this.vehicle(result.handover.vehicle_id),result.handover);
       const output=this.host.querySelector('[data-share-output]');output.hidden=false;output.querySelector('[data-share-url]').value=result.url;output.querySelector('[data-share-expiry]').textContent='Válida até '+date(result.expires_at);
       this.status('Ligação privada criada');
+    }catch(error){
+      const target=this.host.querySelector('[data-share-status]');if(target){target.textContent=error.message;target.setAttribute('role','alert');target.classList.add('fleet-error');}
+      throw error;
     }finally{this.busy=false;if(fieldset.isConnected)fieldset.disabled=false;}
   }
   async authFetch(url,options={}){
@@ -415,18 +424,24 @@ class Fleet {
     ctx.drawImage(this.damageImage,view.x*this.damageImage.naturalWidth/595,view.y*this.damageImage.naturalHeight/842,view.width*this.damageImage.naturalWidth/595,view.height*this.damageImage.naturalHeight/842,0,0,canvas.width,canvas.height);
     ctx.font='bold 14px Arial';ctx.fillStyle='#b91c1c';for(const marker of this.dialog.data.damage_markers || [])ctx.fillText(marker.type,marker.x-view.x-4,marker.y-view.y+4);
   }
-  setupFiles(){this.host.querySelector('[data-fleet-upload]')?.addEventListener('change',async event=>{
+  setupFiles(){
+    const upload=this.host.querySelector('[data-fleet-upload]');
+    if(this.dialog?.type==='handover' && !this.dialog.readOnly){const heading=upload?.closest('section')?.querySelector('h3');if(heading)heading.textContent='Fotografias da viatura (obrigatórias)';}
+    upload?.addEventListener('change',async event=>{
     const files=[...event.target.files];if(!files.length)return;
+    const autoId=this.dialog.id;
+    this.uploadingCount++;
     try{
       if(!this.dialog.readOnly)await this.saveDraft();
       for(const file of files){
         if(!['image/jpeg','image/png','image/webp','application/pdf'].includes(file.type) || file.size>10*1024*1024)throw new Error('Usa JPG, PNG, WebP ou PDF até 10 MB por ficheiro.');
         const extension={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','application/pdf':'pdf'}[file.type];
-        const objectPath=this.dialog.id+'/'+crypto.randomUUID()+'-'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_').slice(0,80)+'.'+extension;
+        const objectPath=autoId+'/'+crypto.randomUUID()+'-'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_').slice(0,80)+'.'+extension;
         this.status('A anexar '+file.name+'…');const {error}=await this.client.storage.from('rh-fleet').upload(objectPath,file,{cacheControl:'0',upsert:false,contentType:file.type});if(error)throw error;
       }
       this.status('Anexos guardados no servidor');await this.loadFiles();event.target.value='';
     }catch(error){this.message('Anexo não guardado: '+error.message,true);}
+    finally{this.uploadingCount--;}
   });}
   async loadFiles(){
     const id=this.dialog?.id;if(!id)return;const target=this.host.querySelector('[data-fleet-files]');if(!target)return;

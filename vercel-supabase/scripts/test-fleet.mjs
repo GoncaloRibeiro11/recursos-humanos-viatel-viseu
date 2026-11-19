@@ -86,6 +86,9 @@ test('auto mantem duas paginas e suporta acentos, observacoes extensas e modelo 
   const lengthy=structuredClone(fixture);lengthy.snapshot.operation.notes='Observação adicional de teste. '.repeat(100);
   assert.ok((await PDFDocument.load(await renderFleetPdf(lengthy))).getPageCount()>2);
   const unknown=structuredClone(fixture);unknown.snapshot.template_version=9;await assert.rejects(renderFleetPdf(unknown),/modelo/);
+  const optional=structuredClone(fixture);for(const key of ['at','reason','place','odometer','fuel','zone_name','expected_return','damage_notes'])optional.snapshot.operation[key]='';
+  optional.snapshot.captured_at='';delete optional.created_at;
+  assert.equal((await PDFDocument.load(await renderFleetPdf(optional))).getPageCount(),2,'metadados opcionais vazios nao impedem consultar o PDF para assinar');
 });
 function response(){return {headers:{},statusCode:0,setHeader(key,value){this.headers[key]=value;},end(value){this.value=value;}};}
 test('PDF exige sessao e administrador; nao usa chave de servico e arquiva sem substituir',async()=>{
