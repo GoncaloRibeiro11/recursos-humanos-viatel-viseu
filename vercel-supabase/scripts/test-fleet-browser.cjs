@@ -47,7 +47,7 @@ const server=http.createServer(async(req,res)=>{
 });
 (async()=>{
   fs.mkdirSync(output,{recursive:true});
-  await db.exec(`create role anon;create role authenticated;create schema auth;create schema storage;
+  await db.exec(`create role anon;create role authenticated;create role service_role;create schema auth;create schema storage;
     create function auth.uid() returns uuid language sql as $$ select '${admin}'::uuid $$;
     create function public.is_rh_admin() returns boolean language sql as $$ select true $$;
     create table rh_persons(id text primary key,name text,entrada date,saida date,ativo boolean default true,data jsonb default '{}');
@@ -55,6 +55,7 @@ const server=http.createServer(async(req,res)=>{
     create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
     create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text);alter table storage.objects enable row level security;`);
   await db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261117_fleet.sql'),'utf8'));
+  await db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261119_fleet_condition.sql'),'utf8'));
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const browser=await chromium.launch({headless:true,channel:'chrome'});
   try{
@@ -64,10 +65,21 @@ const server=http.createServer(async(req,res)=>{
     await page.goto(`http://127.0.0.1:${server.address().port}/test.html`);
     await page.getByText('Sem viaturas nesta seleção.',{exact:true}).waitFor();
     await page.getByRole('button',{name:'Adicionar viatura',exact:true}).click();
+    assert.equal(await page.locator('[name=transport_until]').count(),0);
+    await page.getByLabel('Estado da viatura',{exact:true}).selectOption('new');
+    assert.equal(await page.locator('[name=inspection_until]').isVisible(),false);assert.equal(await page.locator('[name=inspection_until]').isDisabled(),true);
     await page.locator('[name=plate]').fill('AB-12-CD');await page.locator('[name=make_model]').fill('Renault Clio');await page.locator('[name=cartrack_number]').fill('000145');
     await page.locator('[name=company]').fill('Viatel');await page.locator('[name=habitual_person_id]').selectOption('a');await page.locator('[name=odometer]').fill('100');
     await page.getByRole('button',{name:'Guardar viatura',exact:true}).click();
     await page.locator('[data-fleet-vehicle]').waitFor();assert.match(await page.locator('#fleetRoot').textContent(),/000145/);
+    assert.equal((await query('select vehicle_condition from rh_fleet_vehicles'))[0].vehicle_condition,'new');
+    await page.getByRole('button',{name:'Editar viatura',exact:true}).click();await page.getByLabel('Estado da viatura',{exact:true}).selectOption('recent');
+    assert.equal(await page.locator('[name=inspection_until]').isVisible(),false);await page.getByRole('button',{name:'Guardar viatura',exact:true}).click();await page.locator('[data-fleet-vehicle]').waitFor();
+    assert.equal((await query('select vehicle_condition from rh_fleet_vehicles'))[0].vehicle_condition,'recent');
+    await page.getByRole('button',{name:'Editar viatura',exact:true}).click();await page.getByLabel('Estado da viatura',{exact:true}).selectOption('used');
+    assert.equal(await page.locator('[name=inspection_until]').isVisible(),true);await page.locator('[name=inspection_until]').fill('2028-01-15');
+    await page.getByLabel('Estado da viatura',{exact:true}).selectOption('new');await page.getByLabel('Estado da viatura',{exact:true}).selectOption('used');assert.equal(await page.locator('[name=inspection_until]').inputValue(),'2028-01-15');
+    await page.getByRole('button',{name:'Guardar viatura',exact:true}).click();await page.locator('[data-fleet-vehicle]').waitFor();
     assert.equal((await query('select * from rh_fleet_custody')).length,0);
     await page.getByRole('button',{name:'Registar entrega inicial',exact:true}).click();
     assert.equal(await page.locator('[data-giver]').inputValue(),'Empresa / parque');

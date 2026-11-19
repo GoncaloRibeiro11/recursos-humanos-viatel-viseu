@@ -1,6 +1,13 @@
 export const OPERATIONS={initial:'Entrega inicial',temporary:'Passagem temporária',permanent:'Atribuição permanente',return:'Devolução à empresa'};
 export function handoverLabel(data){return data.kind==='return' && data.destination==='external_structure'?'Entrega a outra estrutura':OPERATIONS[data.kind];}
 export const CONDITIONS=['Bom','Suf','Mau','NE','NA'];
+export const VEHICLE_STATES={new:'Nova',recent:'Recente',used:'Usada'};
+export const showVehicleInspection=vehicle=>!['new','recent'].includes(vehicle?.vehicle_condition);
+export function vehicleSaveData(vehicle){
+  const keys=['plate','make_model','cartrack_number','company','habitual_person_id','odometer','insurance_until','active','vehicle_condition'];
+  if(showVehicleInspection(vehicle))keys.push('inspection_until');
+  return Object.fromEntries(keys.filter(key=>Object.hasOwn(vehicle,key)).map(key=>[key,vehicle[key]]));
+}
 const group=(id,label,page,top,step,columns,items)=>({id,label,page,columns,items:items.map(([key,label],index)=>({key,label,top:top+index*step}))});
 export const INSPECTION_GROUPS=[
   group('doc','Documentos',0,281.6,13.2,[208.4,227,246.6,265.8,285],[['doc_dua','DUA ou similar'],['doc_contract','Contrato de aluguer'],['doc_manual','Manual de instruções'],['doc_service','Livro de revisões'],['doc_fuel','Cartão de combustível'],['doc_toll','Via Verde'],['doc_cartrack','Sistema Cartrack'],['doc_other1','Outro 1'],['doc_other2','Outro 2']]),

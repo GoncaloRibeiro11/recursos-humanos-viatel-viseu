@@ -5,6 +5,7 @@
     "prepare:team-history": "node scripts/build-team-history-install.mjs",
     "test": "node --test scripts/test-rh-sync.mjs scripts/test-rh-movements.mjs scripts/test-rh-team-history.mjs scripts/test-rh-analytics.mjs scripts/test-telegram.mjs scripts/test-fleet.mjs scripts/test-fleet-shares.mjs scripts/test-oop.mjs",
     "test:fleet:sql": "node scripts/test-fleet-sql.cjs",
+    "test:fleet:condition:sql": "node scripts/test-fleet-condition-sql.cjs",
     "test:oop": "node --test scripts/test-oop.mjs",
     "test:oop:sql": "node scripts/test-oop-sql.cjs",
     "test:oop:browser": "node scripts/test-oop-browser.cjs",

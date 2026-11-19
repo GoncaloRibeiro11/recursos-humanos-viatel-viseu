@@ -1,12 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createRequire} from 'node:module';
-import {INSPECTION_ITEMS,INSPECTION_GROUPS,inspectionProgress,validateHandover,fromLisbonInput,lisbonInput,custodyAt,driverName,handoverOrigin,adoptInitialDraftVersion,handoverLabel} from '../src/rh-fleet-model.mjs';
+import {INSPECTION_ITEMS,INSPECTION_GROUPS,inspectionProgress,validateHandover,fromLisbonInput,lisbonInput,custodyAt,driverName,handoverOrigin,adoptInitialDraftVersion,handoverLabel,VEHICLE_STATES,showVehicleInspection,vehicleSaveData} from '../src/rh-fleet-model.mjs';
 const require=createRequire(import.meta.url);
 const {renderFleetPdf}=require('../lib/fleet-pdf.cjs');
 const {createFleetApi}=require('../api/fleet-auto.js');
 const {PDFDocument}=require('pdf-lib');
 const uuid='10000000-0000-4000-8000-000000000001';
+test('estado da viatura controla a data sem eliminar datas antigas ou enviar licenca de transportes',()=>{
+  assert.deepEqual(Object.values(VEHICLE_STATES),['Nova','Recente','Usada']);
+  for(const vehicle_condition of ['new','recent']){
+    const v={plate:'AB-12-CD',vehicle_condition,inspection_until:'2028-01-15',transport_until:'2027-03-01'};
+    assert.equal(showVehicleInspection(v),false);const payload=vehicleSaveData(v);assert.equal(payload.vehicle_condition,vehicle_condition);assert.ok(!Object.hasOwn(payload,'inspection_until'));assert.ok(!Object.hasOwn(payload,'transport_until'));assert.equal(v.inspection_until,'2028-01-15');
+  }
+  assert.equal(showVehicleInspection({vehicle_condition:'used'}),true);assert.equal(showVehicleInspection({}),true);
+  assert.equal(vehicleSaveData({vehicle_condition:'used',inspection_until:'2028-01-15'}).inspection_until,'2028-01-15');
+});
 export const fixture={id:uuid,number:24,status:'draft',created_at:'2026-11-17T09:00:00Z',snapshot:{template_version:1,captured_at:'2026-11-17T09:00:00Z',vehicle:{plate:'AB-12-CD',make_model:'Renault Clio',cartrack_number:'000145',insurance_until:'2027-01-01',inspection_until:'2027-02-01'},from_person:{id:'a',name:'Gestor A',phone:'900 100 200'},to_person:{id:'b',name:'Colaborador B',phone:'900 300 400'},operation:{kind:'temporary',at:'2026-11-17T09:00:00Z',expected_return:'2026-11-24T09:00:00Z',place:'Viseu',reason:'Substituição durante férias',zone_name:'Responsável de zona',odometer:73680,fuel:'3/4',inspection:Object.fromEntries(INSPECTION_ITEMS.map(item=>[item.key,'NA'])),damage_markers:[{x:100,y:335,type:'R'}],damage_notes:'Risco já existente na porta esquerda.',notes:'EXEMPLO COM DADOS FICTÍCIOS. Não representa uma entrega real.',checked:true,signatures:{}}}};
 test('frota valida inspecao completa e nunca inventa estados ou assinaturas',()=>{
   assert.equal(INSPECTION_ITEMS.length,new Set(INSPECTION_ITEMS.map(item=>item.key)).size);
