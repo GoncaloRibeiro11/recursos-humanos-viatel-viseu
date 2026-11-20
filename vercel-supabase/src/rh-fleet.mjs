@@ -10,6 +10,7 @@ const equal=(a,b)=>JSON.stringify(canonical(a))===JSON.stringify(canonical(b));
 const core=value=>{const result={...value};delete result.signatures;delete result.signature_receipts;delete result.checked;return result;};
 const date=value=>value?new Intl.DateTimeFormat('pt-PT',{timeZone:'Europe/Lisbon',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(value)):'—';
 const day=value=>value?value.split('-').reverse().join('/'):'—';
+const fileLabel=name=>name==='auto-v1.pdf'?'Auto original arquivado':/^auto-fotos-v1-[a-f0-9]{64}\.pdf$/.test(name)?'Auto com fotografias arquivado':name.replace(/^[a-f0-9-]{36}-/,'');
 const icon=name=>`<i data-lucide="${name}" aria-hidden="true"></i>`;
 const button=(name,title,action,extra='')=>`<button type="button" class="btn fleet-icon" data-action="${action}" title="${esc(title)}" aria-label="${esc(title)}" ${extra}>${icon(name)}</button>`;
 const statusLabel={draft:'Rascunho',confirmed:'Confirmado',cancelled:'Cancelado'};
@@ -455,7 +456,7 @@ class Fleet {
     const id=this.dialog?.id;if(!id)return;const target=this.host.querySelector('[data-fleet-files]');if(!target)return;
     const {data,error}=await this.client.storage.from('rh-fleet').list(id,{limit:100,sortBy:{column:'created_at',order:'asc'}});
     if(this.dialog?.id!==id)return;if(error){target.textContent='Não foi possível carregar os anexos.';return;}
-    target.innerHTML=(data || []).filter(file=>file.name!=='.emptyFolderPlaceholder').map(file=>`<li>${icon('paperclip')}<span>${esc(file.name==='auto-v1.pdf'?'Auto original arquivado':file.name.replace(/^[a-f0-9-]{36}-/,''))}</span><button type="button" class="btn" data-action="download-file" data-path="${esc(id+'/'+file.name)}">${icon('download')}Abrir</button></li>`).join('');this.drawIcons();
+    target.innerHTML=(data || []).filter(file=>file.name!=='.emptyFolderPlaceholder').map(file=>`<li>${icon('paperclip')}<span>${esc(fileLabel(file.name))}</span><button type="button" class="btn" data-action="download-file" data-path="${esc(id+'/'+file.name)}">${icon('download')}Abrir</button></li>`).join('');this.drawIcons();
   }
   async downloadFile(objectPath){const {data,error}=await this.client.storage.from('rh-fleet').download(objectPath);if(error)throw error;this.downloadBlob(data,objectPath.split('/').pop());}
   downloadBlob(blob,name){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}

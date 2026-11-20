@@ -110,4 +110,48 @@ async function renderFleetPdf(handover){
   pdf.setTitle(number+' - '+v.plate);pdf.setAuthor('RH Viatel Viseu');pdf.setCreationDate(captured);pdf.setModificationDate(captured);
   return Buffer.from(await pdf.save());
 }
-module.exports={renderFleetPdf,asset};
+async function appendFleetPhotos(document,handover,photos=[]){
+  if(!photos.length)return document;
+  const {createCanvas,loadImage}=require('@napi-rs/canvas');
+  const {imageSize}=require('image-size');
+  const pdf=await PDFDocument.load(document);pdf.registerFontkit(fontkit);
+  const font=await pdf.embedFont(await fs.readFile(path.join(__dirname,'../assets/fonts/Roboto.ttf')),{subset:true});
+  const number='FRO-'+String(handover.number || 'RASCUNHO').padStart(5,'0'),plate=handover.snapshot?.vehicle?.plate || '';
+  const ink=rgb(.05,.18,.3);
+  function text(page,value,x,top,width,size=10){
+    const label=clean(value).replace(/\n/g,' ');if(!label)return;
+    const fitted=Math.max(6,Math.min(size,width/font.widthOfTextAtSize(label,1)));
+    let shown=label;while(font.widthOfTextAtSize(shown,fitted)>width)shown=shown.slice(0,-1);
+    page.drawText(shown,{x,y:842-top-fitted,size:fitted,font,color:ink});
+  }
+  let page;
+  for(const [index,photo] of photos.entries()){
+    if(index%2===0){
+      page=pdf.addPage([595,842]);
+      text(page,number+' - Anexo fotográfico',48,42,499,16);
+      text(page,plate+' | '+photos.length+' fotografia(s) anexada(s) ao auto',48,70,499,10);
+      text(page,handover.status==='confirmed'?'Anexo de fotografias. O auto original arquivado é preservado.':'RASCUNHO - NÃO CONFIRMA ENTREGA',48,88,499,9);
+      text(page,'Anexo fotográfico '+(Math.floor(index/2)+1)+' / '+Math.ceil(photos.length/2),48,806,499,9);
+    }
+    let image;
+    try{
+      const size=imageSize(photo.bytes);
+      if(!['jpg','png','webp'].includes(size.type) || !size.width || !size.height || size.width>12000 || size.height>12000 || size.width*size.height>40000000)throw new Error('dimensions');
+      const source=await loadImage(photo.bytes),scale=Math.min(1,1600/source.width,1600/source.height);
+      const canvas=createCanvas(Math.max(1,Math.round(source.width*scale)),Math.max(1,Math.round(source.height*scale))),ctx=canvas.getContext('2d');
+      ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(source,0,0,canvas.width,canvas.height);
+      image=await pdf.embedJpg(canvas.toBuffer('image/jpeg',85));
+    }catch{throw Object.assign(new Error('Não foi possível incluir a fotografia '+photo.name+' no auto. Verifica o ficheiro e tenta novamente.'),{status:422});}
+    const top=120+(index%2)*332,width=499,height=270,scale=Math.min(width/image.width,height/image.height);
+    page.drawRectangle({x:48,y:842-top-height,width,height,borderColor:rgb(.83,.86,.88),borderWidth:.5});
+    page.drawImage(image,{x:48+(width-image.width*scale)/2,y:842-top-height+(height-image.height*scale)/2,width:image.width*scale,height:image.height*scale});
+    text(page,(index+1)+'. '+photo.name.replace(/^[a-f0-9-]{36}-/i,''),48,top+279,499,10);
+    const at=new Date(photo.created_at),hasDate=photo.created_at && Number.isFinite(+at);
+    const after=hasDate && handover.confirmed_at && +at>+new Date(handover.confirmed_at);
+    if(hasDate)text(page,'Anexada em '+new Intl.DateTimeFormat('pt-PT',{timeZone:'Europe/Lisbon',dateStyle:'short',timeStyle:'short'}).format(at)+(after?' - após confirmação do auto':''),48,top+296,499,8);
+  }
+  const bytes=Buffer.from(await pdf.save());
+  if(bytes.length>4*1024*1024)throw Object.assign(new Error('O PDF com fotografias excede 4 MB. Reduz o tamanho das fotografias antes de voltar a gerar o auto.'),{status:413});
+  return bytes;
+}
+module.exports={renderFleetPdf,appendFleetPhotos,asset};

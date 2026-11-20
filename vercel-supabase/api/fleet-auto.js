@@ -1,5 +1,6 @@
 const fs=require('node:fs/promises');
-const {renderFleetPdf,asset}=require('../lib/fleet-pdf.cjs');
+const {renderFleetPdf,appendFleetPhotos,asset}=require('../lib/fleet-pdf.cjs');
+const {loadFleetPhotos,photoArchivePath}=require('../lib/fleet-photos.cjs');
 const DEFAULT_URL='https://vfmncuejbfcwrzrqzqnr.supabase.co';
 const DEFAULT_ANON='sb_publishable_QJM8W5vPsJOICxqw_FEUXA_suAywMLM';
 const fail=(message,status=503)=>Object.assign(new Error(message),{status});
@@ -58,6 +59,24 @@ function createFleetApi({env=process.env,fetcher=fetch,render=renderFleetPdf}={}
             document=Buffer.from(await existing.arrayBuffer());
           }
         }
+      }
+      const photos=await loadFleetPhotos(call,row.id);
+      if(photos.length){
+        if(row.status==='confirmed'){
+          const annexPath=encodeURIComponent(photoArchivePath(row.id,document,photos));
+          const cached=await call('/storage/v1/object/authenticated/rh-fleet/'+annexPath);
+          if(cached.ok)document=Buffer.from(await cached.arrayBuffer());
+          else{
+            if(![400,404].includes(cached.status))throw fail('Não foi possível consultar o arquivo fotográfico do auto.');
+            document=await appendFleetPhotos(document,row,photos);
+            const stored=await call('/storage/v1/object/rh-fleet/'+annexPath,{method:'POST',headers:{'Content-Type':'application/pdf','Cache-Control':'no-store'},body:document});
+            if(!stored.ok){
+              const existing=await call('/storage/v1/object/authenticated/rh-fleet/'+annexPath);
+              if(!existing.ok)throw fail('O auto original está guardado, mas falta arquivar a versão com fotografias. Volta a carregar em Auto PDF.');
+              document=Buffer.from(await existing.arrayBuffer());
+            }
+          }
+        }else document=await appendFleetPhotos(document,row,photos);
       }
       res.statusCode=200;res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition',`attachment; filename="${row.status==='draft'?'rascunho-':''}auto-${row.number}.pdf"`);res.end(document);
     }catch(error){res.statusCode=error.status || 503;res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify({error:error.status?error.message:'Não foi possível gerar o auto. Tenta novamente.'}));}

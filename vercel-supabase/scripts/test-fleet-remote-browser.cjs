@@ -36,7 +36,7 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
    if(options.method==='POST'){
     if(objects.has(objectPath))return Response.json({error:'exists'},{status:409});
     objects.set(objectPath,Buffer.from(options.body));await t.query('insert into storage.objects(bucket_id,name) values($1,$2)',['rh-fleet',objectPath]);
-    if(objectPath.endsWith('/auto-v1.pdf'))archived=Buffer.from(options.body);return Response.json({Key:objectPath});
+    if(/\/auto-fotos-v1-[a-f0-9]+\.pdf$/.test(objectPath))archived=Buffer.from(options.body);return Response.json({Key:objectPath});
    }
    return objects.has(objectPath)?new Response(objects.get(objectPath),{headers:{'Content-Type':objectPath.endsWith('.pdf')?'application/pdf':'image/jpeg'}}):Response.json({error:'missing'},{status:404});
   }
@@ -194,7 +194,7 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
   if(initialState){const rows=await t.query('select * from rh_fleet_custody where vehicle_id=$1 order by from_at nulls first',[t.uuid(1)]);assert.equal(rows.length,2);assert.equal(rows[0].origin,'initial_state');assert.equal(rows[0].from_at,null);assert.equal(rows[1].person_id,'b');}
   assert.equal(final.snapshot.operation.damage_markers.length,1);assert.ok(Math.abs(final.snapshot.operation.damage_markers[0].x-100)<=1);assert.ok(Math.abs(final.snapshot.operation.damage_markers[0].y-335)<=1);
   for(let i=0;i<50 && !archived;i++)await new Promise(resolve=>setTimeout(resolve,100));
-  assert.ok(archived);assert.equal((await PDFDocument.load(archived)).getPageCount(),absenceMode?4:3);
+  assert.ok(archived);assert.equal((await PDFDocument.load(archived)).getPageCount(),absenceMode?5:4);
   fs.writeFileSync(path.join(output,absenceMode?'auto-sem-assinatura-recebe-teste.pdf':'auto-assinado-teste.pdf'),archived);
   assert.equal(await admin.evaluate(()=>JSON.stringify(state)===window.hrBefore),true);assert.deepEqual(errors,[]);
   if(deleteMode){
@@ -214,7 +214,7 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
     await admin.locator('.fleet-dialog').screenshot({path:path.join(output,'eliminar-auto-'+item.status+'-390.png')});
     await admin.locator('[data-action=confirm-delete-handover]').click();
     if(item.id===final.id){
-     await admin.getByText('Auto eliminado. Os anexos aguardam limpeza; podes repetir no aviso acima.',{exact:true}).waitFor();assert.equal(objects.size,2);
+     await admin.getByText('Auto eliminado. Os anexos aguardam limpeza; podes repetir no aviso acima.',{exact:true}).waitFor();assert.equal(objects.size,3);
      await admin.reload();await admin.getByRole('button',{name:'Tentar limpar anexos',exact:true}).waitFor();
      await admin.screenshot({path:path.join(output,'eliminacao-anexos-pendentes-390.png'),fullPage:true});
      await admin.getByRole('button',{name:'Tentar limpar anexos',exact:true}).click();await admin.getByRole('button',{name:'Tentar limpar anexos',exact:true}).waitFor({state:'detached'});

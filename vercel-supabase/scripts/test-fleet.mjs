@@ -105,13 +105,14 @@ test('PDF exige sessao e administrador; nao usa chave de servico e arquiva sem s
     if(url.endsWith('/auth/v1/user'))return Response.json({id:'admin'});
     if(url.includes('/user_profiles?'))return Response.json([{role:'admin'}]);
     if(url.includes('/rh_fleet_handovers?'))return Response.json([row]);
+    if(url.endsWith('/object/list/rh-fleet'))return Response.json([]);
     if(url.includes('/object/authenticated/'))return stored?new Response('%PDF-test'):Response.json({error:'not found'},{status:404});
     if(url.includes('/object/rh-fleet/')){stored=true;return Response.json({Key:'ok'});}
     throw new Error('unexpected '+url);
   }});
   let res=response();await api({method:'POST',headers:{},body:{id:uuid}},res);assert.equal(res.statusCode,401);assert.equal(calls.length,0);
   for(let i=0;i<2;i++){res=response();await api({method:'POST',headers:{authorization:'Bearer test-user-session'},body:{id:uuid}},res);assert.equal(res.statusCode,200);assert.equal(res.value.toString(),'%PDF-test');}
-  assert.equal(calls.filter(call=>call.method==='POST').length,1);assert.ok(calls.every(call=>call.headers.Authorization==='Bearer test-user-session'));
+  assert.equal(calls.filter(call=>call.method==='POST' && call.url.includes('/object/rh-fleet/')).length,1);assert.ok(calls.every(call=>call.headers.Authorization==='Bearer test-user-session'));
   assert.equal(res.headers['Cache-Control'],'no-store');
   const denied=createFleetApi({fetcher:async url=>Response.json(url.endsWith('/auth/v1/user')?{id:'manager'}:[{role:'gestor'}])});
   res=response();await denied({method:'POST',headers:{authorization:'Bearer manager'},body:{id:uuid}},res);assert.equal(res.statusCode,403);

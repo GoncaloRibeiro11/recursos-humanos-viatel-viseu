@@ -4,7 +4,18 @@ import {fileURLToPath} from 'node:url';
 import {fixture} from './test-fleet.mjs';
 const require=createRequire(import.meta.url);
 const {renderFleetPdf}=require('../lib/fleet-pdf.cjs');
+const {appendFleetPhotos}=require('../lib/fleet-pdf.cjs');
+const {createCanvas}=require('@napi-rs/canvas');
 const output=fileURLToPath(new URL('../../../../recovery/viaturas-implementacao/',import.meta.url));
 await mkdir(output,{recursive:true});
 await writeFile(output+'/auto-teste.pdf',await renderFleetPdf(fixture));
+const photos=Array.from({length:3},(_,index)=>{
+  const w=index===1?600:1200,h=index===1?1200:700,c=createCanvas(w,h),ctx=c.getContext('2d');
+  ctx.fillStyle='#e9eff2';ctx.fillRect(0,0,w,h);ctx.strokeStyle='#007d97';ctx.lineWidth=12;ctx.strokeRect(6,6,w-12,h-12);
+  ctx.fillStyle='#006c88';ctx.fillRect(w*.1,h*.35,w*.8,h*.3);ctx.fillStyle='#23313c';ctx.fillRect(w*.17,h*.6,w*.14,h*.13);ctx.fillRect(w*.69,h*.6,w*.14,h*.13);
+  ctx.font='bold 36px sans-serif';ctx.fillText('FOTOGRAFIA DE TESTE '+(index+1),30,60);
+  return {name:['frente.jpg','lateral.png','traseira.webp'][index],created_at:index===2?'2026-11-20T11:00:00Z':'2026-11-17T08:55:00Z',bytes:c.toBuffer(index===1?'image/png':index===2?'image/webp':'image/jpeg')};
+});
+const confirmed={...fixture,status:'confirmed',confirmed_at:'2026-11-17T09:10:00Z'};
+await writeFile(output+'/auto-com-fotografias-teste.pdf',await appendFleetPhotos(await renderFleetPdf(confirmed),confirmed,photos));
 console.log('PDF de teste criado com dados ficticios.');

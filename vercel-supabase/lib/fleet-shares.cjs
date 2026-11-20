@@ -1,6 +1,7 @@
 const {randomBytes,createHash,randomUUID}=require('node:crypto');
 const fs=require('node:fs/promises');
-const {renderFleetPdf,asset}=require('./fleet-pdf.cjs');
+const {renderFleetPdf,appendFleetPhotos,asset}=require('./fleet-pdf.cjs');
+const {loadFleetPhotos}=require('./fleet-photos.cjs');
 const DEFAULT_URL='https://vfmncuejbfcwrzrqzqnr.supabase.co';
 const DEFAULT_ANON='sb_publishable_QJM8W5vPsJOICxqw_FEUXA_suAywMLM';
 const PUBLIC_PAGE='https://recursos-humanos-viatel-viseu-supab.vercel.app/auto-viatura.html';
@@ -163,7 +164,9 @@ function createFleetShares({env=process.env,fetcher=fetch,now=()=>new Date(),ren
     if(value.action==='diagram')return {binary:await fs.readFile(asset('modri-94-01-page2.png')),type:'image/png'};
     if(value.action==='pdf'){
       const snapshot={...current.payload,operation:{...current.payload.operation,signatures:{}},captured_at:current.signing_at || h.data.at};
-      return {binary:await render({id:h.id,number:current.number,status:'draft',snapshot}),type:'application/pdf'};
+      const handover={id:h.id,number:current.number,status:'draft',snapshot};
+      const photos=await loadFleetPhotos(request,h.id,current.payload.photos || []);
+      return {binary:await appendFleetPhotos(await render(handover),handover,photos),type:'application/pdf'};
     }
     if(value.action==='files')return {files:await files(h.id)};
     if(value.action==='file'){
