@@ -141,6 +141,11 @@ function createFleetShares({env=process.env,fetcher=fetch,now=()=>new Date(),ren
   async function remote(value){
     const current=await access(value.token);
     if(value.action==='read')return current;
+    if(value.action==='reconfirm'){
+      if(!['from','to'].includes(current.purpose) || !['open','signed'].includes(current.status))throw fail('Esta ligação não permite confirmar assinaturas.',403);
+      if(!idValid(value.previous_receipt_id) || typeof value.name!=='string' || value.name.length<2 || value.name.length>120 || value.accept!==true)throw fail('Confirma o nome e a aceitação desta versão do auto.',400);
+      return rpc('rh_fleet_remote_reconfirm',{p_hash:hash(value.token),p_previous:value.previous_receipt_id,p_name:value.name,p_content_hash:value.content_hash,p_accept:true});
+    }
     if(current.status!=='open'){
       if(value.action==='submit' && current.status==='submitted')return current;
       if(value.action==='sign' && current.status==='signed')return rpc('rh_fleet_remote_sign',{p_hash:hash(value.token),p_name:value.name,p_signature:await imageData(value.signature,true),p_content_hash:value.content_hash,p_accept:value.accept===true});

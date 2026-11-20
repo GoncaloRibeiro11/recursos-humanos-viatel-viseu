@@ -3,6 +3,20 @@ const require=createRequire(import.meta.url);
 const {createFleetShares,imageData,hash,safePatch}=require('../lib/fleet-shares.cjs');
 const {createCanvas}=require('@napi-rs/canvas');
 const id='10000000-0000-4000-8000-000000000002',token='a'.repeat(43),secret='server-only-test-key';
+test('reconfirmar assinatura exige aceitacao e envia apenas a referencia, nunca uma imagem escolhida pelo cliente',async()=>{
+  let purpose='to',status='open';const calls=[];
+  const service=createFleetShares({env:{SUPABASE_SERVICE_ROLE_KEY:secret},fetcher:async(url,options)=>{
+    const body=JSON.parse(options.body);calls.push({url,body});
+    if(url.endsWith('/rh_fleet_read_share'))return Response.json({purpose,status,handover:{id}});
+    if(url.endsWith('/rh_fleet_remote_reconfirm'))return Response.json({status:'signed'});
+    throw new Error('Unexpected route');
+  }});
+  const value={action:'reconfirm',token,previous_receipt_id:id,name:'Pessoa teste',content_hash:'current-hash',accept:true,signature:'injected'};
+  await assert.rejects(service.remote({...value,accept:false}),error=>error.status===400);
+  assert.equal((await service.remote(value)).status,'signed');const sent=calls.at(-1).body;
+  assert.equal(sent.p_previous,id);assert.equal(sent.p_signature,undefined);assert.equal(sent.p_accept,true);assert.equal(sent.p_content_hash,'current-hash');
+  status='signed';assert.equal((await service.remote(value)).status,'signed');purpose='editor';await assert.rejects(service.remote(value),error=>error.status===403);
+});
 test('assinaturas exigem apenas avaliacao e fotografias, nao os campos da confirmacao de entrega',async()=>{
   const {INSPECTION_ITEMS,validateSignatureRequest}=await import('../src/rh-fleet-model.mjs');
   const data={inspection:Object.fromEntries(INSPECTION_ITEMS.map(i=>[i.key,'NA'])),at:'',odometer:'',fuel:'',place:'',reason:'',zone_name:'',expected_return:'',checked:false,damage_notes:''};

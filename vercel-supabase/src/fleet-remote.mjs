@@ -44,16 +44,27 @@ function signer(value){
   if(op.destination==='external_structure')content.querySelector('.remote-facts').insertAdjacentHTML('beforeend','<div><dt>Estrutura de destino</dt><dd>'+esc(op.external_structure)+'</dd></div>');
   icons();setMessage('');
   const name=document.getElementById('remoteSignerName'),accept=document.getElementById('remoteAccept'),button=document.getElementById('remoteSign');let busy=false;
-  name.value=driverName(op,value.purpose,source[value.purpose==='from'?'from_person':'to_person']);
-  const update=()=>button.disabled=busy || name.value.trim().length<2 || !accept.checked || !pad.value();
+  const previous=value.previous_signature;
+  if(previous)name.closest('label').insertAdjacentHTML('afterend',`<label class="remote-check"><input type="checkbox" id="remoteReuse">Usar a minha assinatura guardada em ${esc(date(previous.signed_at))}</label>`);
+  const reuse=document.getElementById('remoteReuse'),sameName=()=>name.value.trim().replace(/\s+/g,' ').toLocaleLowerCase('pt')===previous?.signer_name.trim().replace(/\s+/g,' ').toLocaleLowerCase('pt');
+  name.value=previous?.signer_name || driverName(op,value.purpose,source[value.purpose==='from'?'from_person':'to_person']);
+  const update=()=>{
+    if(reuse){reuse.disabled=busy || !sameName();if(!sameName())reuse.checked=false;}
+    const saved=!!reuse?.checked;
+    document.getElementById('remoteSignature').hidden=saved;document.getElementById('remoteClear').hidden=saved;
+    button.disabled=busy || name.value.trim().length<2 || !accept.checked || !(saved || pad.value());
+    button.textContent=saved?'Confirmar nova versão':'Confirmar assinatura';
+  };
   const pad=signaturePad(document.getElementById('remoteSignature'),{onChange:update});name.addEventListener('input',update);accept.addEventListener('change',update);
+  reuse?.addEventListener('change',()=>{accept.checked=false;update();});
   document.getElementById('remoteClear').onclick=()=>{pad.clear();accept.checked=false;update();};
   document.getElementById('remotePdf').onclick=async()=>{try{download(await (await call('pdf',{},true)).blob(),'auto-viatura.pdf');}catch(error){setMessage(error.message,true);}};
   button.onclick=async()=>{
     if(busy)return;busy=true;update();name.disabled=true;accept.disabled=true;setMessage('A guardar a assinatura…');
-    try{const result=await call('sign',{name:name.value.trim(),signature:pad.value(),content_hash:value.content_hash,accept:accept.checked});completed(result);}
+    try{const result=await call(reuse?.checked?'reconfirm':'sign',{name:name.value.trim(),...(reuse?.checked?{previous_receipt_id:previous.id}:{signature:pad.value()}),content_hash:value.content_hash,accept:accept.checked});completed(result);}
     catch(error){setMessage(error.message,true);busy=false;name.disabled=false;accept.disabled=false;update();}
   };
+  update();
   call('files').then(async result=>{const photos=document.getElementById('remotePhotos');if(!result.files.length && photos)photos.closest('section').hidden=true;for(const file of result.files){const response=await call('file',{name:file.name},true),url=URL.createObjectURL(await response.blob()),image=new Image();image.src=url;image.alt='Fotografia do auto';image.onload=()=>URL.revokeObjectURL(url);document.getElementById('remotePhotos')?.append(image);}}).catch(()=>{const photos=document.getElementById('remotePhotos');if(photos)photos.textContent='Não foi possível carregar as fotografias.';});
 }
 async function start(){

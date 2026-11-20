@@ -89,8 +89,10 @@ async function renderFleetPdf(handover){
     for(const [role,receipt] of receipts){
       text(page,role==='from'?'Quem entrega / devolve':'Quem recebe',52,top,490,11);top+=24;
       text(page,'Nome indicado: '+receipt.signer_name,52,top,490,10);top+=20;
-      text(page,'Assinado em: '+new Intl.DateTimeFormat('pt-PT',{timeZone:'Europe/Lisbon',dateStyle:'long',timeStyle:'medium'}).format(new Date(receipt.signed_at)),52,top,490,9);top+=20;
-      text(page,'Metodo: assinatura manuscrita em ecra',52,top,490,9);top+=20;
+      const reconfirmed=receipt.method==='screen_reconfirmed';
+      text(page,(reconfirmed?'Nova versão confirmada em: ':'Assinado em: ')+new Intl.DateTimeFormat('pt-PT',{timeZone:'Europe/Lisbon',dateStyle:'long',timeStyle:'medium'}).format(new Date(receipt.signed_at)),52,top,490,9);top+=20;
+      text(page,reconfirmed?'Método: assinatura guardada, reutilizada com confirmação desta versão':'Metodo: assinatura manuscrita em ecra',52,top,490,9);top+=20;
+      if(reconfirmed){text(page,'Assinatura anterior: '+receipt.previous_receipt_id,52,top,490,8);top+=20;}
       text(page,'Referencia do registo: '+receipt.id,52,top,490,8);top+=20;
       text(page,'Versao do conteudo (SHA-256):',52,top,490,9);top+=16;text(page,receipt.content_hash,52,top,490,8);top+=45;
     }

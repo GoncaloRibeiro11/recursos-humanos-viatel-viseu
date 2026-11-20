@@ -260,7 +260,7 @@ class Fleet {
       const before=clone(this.dialog.data);this.capture();
       if(this.dialog.type==='handover'){
         if(Object.keys(before.signature_receipts || {}).length && !equal(core(before),core(this.dialog.data)) && !this.dialog.invalidatingApproved){
-          if(!confirm('Alterar o conteúdo invalida as assinaturas recolhidas. Continuar e pedir novas assinaturas?')){const previous={...this.dialog,data:before};this.stash();this.openHandover(this.vehicle(previous.vehicleId),null,previous);return;}
+          if(!confirm('Alterar o conteúdo exige confirmação da nova versão. As assinaturas guardadas ficam no histórico e a mesma pessoa pode reutilizar o desenho ao confirmar. Continuar?')){const previous={...this.dialog,data:before};this.stash();this.openHandover(this.vehicle(previous.vehicleId),null,previous);return;}
           this.dialog.invalidatingApproved=true;
         }
         this.scheduleSave();this.updateProgress();
@@ -350,7 +350,7 @@ class Fleet {
           if(sent.signature_receipts && !equal(result.data.signature_receipts || {},sent.signature_receipts)){
             current.data.signatures=result.data.signatures || {};current.data.signature_receipts=result.data.signature_receipts || {};
             for(const canvas of this.host.querySelectorAll('[data-signature]'))canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
-            this.message('O conteúdo foi alterado. É necessário recolher novas assinaturas.',true);
+            this.message('O conteúdo foi alterado. As assinaturas ficaram guardadas no histórico; envia novas ligações para confirmar esta versão.',true);
           }
           this.stash();this.status(this.dirty?'A guardar rascunho…':'Rascunho guardado no servidor');
         }catch(error){this.dirty=true;throw error;}
@@ -360,13 +360,17 @@ class Fleet {
   }
   async confirmHandover(){
     if(this.busy)return;this.capture();const vehicle=this.vehicle(this.dialog.vehicleId),errors=validateHandover(this.dialog.data,vehicle,this.holder(vehicle.id));
-    const absence=this.host.querySelector('[data-recipient-absent]')?.checked,reason=this.host.querySelector('[data-absence-reason]')?.value.trim() || '';
-    if(absence && (reason.length<8 || reason.length>500))errors.push('Indica o motivo da assinatura de quem recebe não ter sido recolhida (8 a 500 caracteres).');
     if(errors.length){this.confirmError(errors.join('\n'));return;}
-    if(!confirm(`Confirmar a ${handoverLabel(this.dialog.data).toLowerCase()} da viatura ${vehicle.plate}? O histórico e este auto ficam fechados para edição.${this.dialog.data.purpose==='regularization'?' O responsável e o período de utilização mantêm-se.':''}${this.dialog.data.destination==='external_structure'?' A viatura será retirada da frota ativa.':''}${absence?' A assinatura de quem recebe ficará registada como NÃO RECOLHIDA; nenhuma marca nesse campo será apresentada como assinatura.':''}`))return;
     this.busy=true;const form=this.host.querySelector('fieldset');form.disabled=true;
     try{
-      await this.saveDraft();this.status('A confirmar no servidor…');
+      await this.saveDraft();
+      const latest=await this.shareApi({action:'status',id:this.dialog.id});
+      if(latest.handover?.version!==this.dialog.version)throw new Error('O auto mudou entretanto. Atualiza as assinaturas antes de confirmar.');
+      this.showShareStatus(latest);
+      const absence=this.host.querySelector('[data-recipient-absent]')?.checked,reason=this.host.querySelector('[data-absence-reason]')?.value.trim() || '';
+      if(absence && (reason.length<8 || reason.length>500))throw new Error('Indica o motivo da assinatura de quem recebe não ter sido recolhida (8 a 500 caracteres).');
+      if(!confirm(`Confirmar a ${handoverLabel(this.dialog.data).toLowerCase()} da viatura ${vehicle.plate}? O histórico e este auto ficam fechados para edição.${this.dialog.data.purpose==='regularization'?' O responsável e o período de utilização mantêm-se.':''}${this.dialog.data.destination==='external_structure'?' A viatura será retirada da frota ativa.':''}${absence?' A assinatura de quem recebe ficará registada como NÃO RECOLHIDA; nenhuma marca nesse campo será apresentada como assinatura.':''}`))return;
+      this.status('A confirmar no servidor…');
       const h=await this.rpc(absence?'rh_fleet_confirm_without_recipient':'rh_fleet_confirm_handover',{p_id:this.dialog.id,p_version:this.dialog.version,...(absence?{p_reason:reason}:{})});
       if(h.data.destination==='external_structure')this.showArchived=true;
       this.clearStash();this.dirty=false;this.host.innerHTML='';this.dialog=null;await this.load();this.page='handovers';this.render();
@@ -401,7 +405,17 @@ class Fleet {
     if(value.handover?.id===this.dialog?.id && !value.session?.required){this.autoNameDefaults=true;this.updateKind();}
     const labels={editor:'Preenchimento',from:'Entrega / devolve',to:'Recebe'};
     const receipts=(value.receipts || []).filter(r=>!r.invalidated_at);
+    const receipt=receipts.find(r=>r.purpose==='to' && value.session?.active && r.content_hash===value.session.content_hash && r.id===value.handover?.data.signature_receipts?.to?.id);
+    const absence=this.host.querySelector('[data-recipient-absent]');
+    if(absence && value.handover?.id===this.dialog?.id && value.handover.version===this.dialog.version){
+      absence.disabled=!!receipt;
+      if(receipt)absence.checked=false;
+      this.host.querySelector('[data-absence-field]').hidden=!absence.checked;
+      absence.closest('label').lastChild.textContent=receipt?'Assinatura de quem recebe já recolhida e válida.':'Assinatura de quem recebe não recolhida';
+    }
     target.innerHTML=['from','to'].map(role=>{const receipt=receipts.find(r=>r.purpose===role);return `<div>${labels[role]}: ${receipt?esc(receipt.signer_name)+' · '+date(receipt.signed_at):'Por assinar'}</div>`;}).join('')+(value.links || []).filter(l=>!l.revoked_at && !l.used_at).map(l=>`<div>${labels[l.purpose]} · ligação ${+new Date(l.expires_at)<Date.now()?'expirada':'válida até '+date(l.expires_at)}</div>`).join('');
+    const history=value.signature_history || [];
+    if(history.length)target.insertAdjacentHTML('beforeend',`<details><summary>Assinaturas guardadas · ${history.length}</summary>${history.map(r=>`<div>${esc(labels[r.purpose])} · ${esc(r.signer_name)} · ${date(r.signed_at)}<span class="fleet-small">Versão ${esc(r.content_hash.slice(0,12))}</span></div>`).join('')}</details>`);
     if(value.handover?.version>this.dialog?.version)this.status('Há alterações noutro dispositivo. Atualiza as assinaturas.');
   }
   async refreshShares(){

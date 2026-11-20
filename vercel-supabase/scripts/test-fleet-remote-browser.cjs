@@ -6,7 +6,7 @@ const root=path.resolve(__dirname,'../public'),output=path.resolve(__dirname,'..
 const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
 (async()=>{
  const t=await createDb(),objects=new Map(),secret='local-test-server-key';let base,archived;
- const regularization=process.env.TEST_REGULARIZATION==='1',absenceMode=process.env.TEST_SIGNATURE_ABSENCE==='1',deleteMode=process.env.TEST_DELETE==='1',initialState=process.env.TEST_INITIAL_STATE==='1' || deleteMode || regularization,external=process.env.TEST_EXTERNAL==='1',signatureOnly=process.env.TEST_SIGNATURE_ONLY==='1';
+ const reconfirmMode=process.env.TEST_RECONFIRM==='1',regularization=process.env.TEST_REGULARIZATION==='1',absenceMode=process.env.TEST_SIGNATURE_ABSENCE==='1',deleteMode=process.env.TEST_DELETE==='1',initialState=process.env.TEST_INITIAL_STATE==='1' || deleteMode || regularization,external=process.env.TEST_EXTERNAL==='1',signatureOnly=process.env.TEST_SIGNATURE_ONLY==='1';
  let failStorageDeletion=deleteMode;
  let h=await t.draft(2,external?{kind:'return',destination:'external_structure',external_structure:'Estrutura de Teste',driver_fields:{from:{name:fromName},to:{name:toName}}}:regularization?{kind:'initial',to_person_id:'a'}:initialState?{kind:'temporary',to_person_id:'b',expected_return:new Date(Date.now()+86400000).toISOString()}:{});
  if(initialState || external){
@@ -19,6 +19,7 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
  await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261118_fleet_deletions.sql'),'utf8')));
  await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261120_fleet_signature_absence.sql'),'utf8')));
  await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261120_fleet_regularization.sql'),'utf8')));
+ await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261120_fleet_signature_history.sql'),'utf8')));
  const originalCustody=JSON.stringify(await t.query('select * from rh_fleet_custody where vehicle_id=$1',[t.uuid(1)]));
  const fetcher=async(url,options={})=>{
   const u=new URL(url),body=options.body && !Buffer.isBuffer(options.body)?JSON.parse(options.body):null;
@@ -170,7 +171,24 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
    await page.reload();await page.getByRole('heading',{name:'Assinatura registada',exact:true}).waitFor();return page;
   }
   await sign(fromHash,fromName,390);if(!absenceMode)await sign(toHash,toName,320);
-  await admin.getByRole('button',{name:'Atualizar assinaturas',exact:true}).click();await admin.locator('[data-share-status]').getByText(new RegExp(fromName)).waitFor();
+  await admin.getByRole('button',{name:'Atualizar assinaturas',exact:true}).click();await admin.locator('[data-share-status]').getByText(new RegExp('^Entrega / devolve: '+fromName)).waitFor();
+  if(reconfirmMode){
+   const previous=(await t.query('select * from rh_fleet_handovers where id=$1',[h.id]))[0];
+   await admin.locator('[name=notes]').fill('Nova versão observada e confirmada.');await admin.getByRole('button',{name:'Guardar rascunho',exact:true}).click();
+   const newFrom=await makeLink('from'),newTo=await makeLink('to');
+   for(const [fragment,role,name] of [[newFrom,'from',fromName],[newTo,'to',toName]]){
+    const page=await mobile.newPage();page.on('pageerror',error=>errors.push(error.message));await page.goto(base+'/auto-viatura.html'+fragment);
+    await page.locator('#remoteReuse').waitFor();assert.equal(await page.locator('#remoteReuse').isChecked(),false);assert.equal(await page.locator('#remoteSign').isDisabled(),true);
+    await page.locator('#remoteReuse').check();assert.equal(await page.locator('#remoteSignature').isVisible(),false);assert.equal(await page.locator('#remoteAccept').isChecked(),false);
+    assert.equal(await page.locator('#remoteSign').isDisabled(),true);await page.locator('#remoteAccept').check();
+    await page.screenshot({path:path.join(output,'reconfirmar-'+role+'-390.png'),fullPage:true});
+    await page.getByRole('button',{name:'Confirmar nova versão',exact:true}).click();await page.getByRole('heading',{name:'Assinatura registada',exact:true}).waitFor();
+    const latest=(await t.query('select * from rh_fleet_handovers where id=$1',[h.id]))[0];
+    assert.equal(latest.data.signatures[role],previous.data.signatures[role]);assert.equal(latest.data.signature_receipts[role].method,'screen_reconfirmed');assert.equal(latest.data.signature_receipts[role].previous_receipt_id,previous.data.signature_receipts[role].id);
+   }
+   assert.equal((await t.query('select * from rh_fleet_signature_archive')).length,4);
+   await admin.getByRole('button',{name:'Atualizar assinaturas',exact:true}).click();await admin.getByText('Assinaturas guardadas · 4',{exact:true}).waitFor();
+  }
   if(absenceMode){
    await admin.getByRole('button',{name:'Confirmar entrega',exact:true}).click();await admin.locator('[data-confirm-error]').getByText(/Faltam assinaturas/).waitFor();
    await admin.locator('[data-recipient-absent]').check();await admin.locator('[data-absence-reason]').fill('NA');
@@ -179,6 +197,15 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
    await admin.setViewportSize({width:390,height:844});await admin.locator('[data-recipient-absent]').scrollIntoViewIfNeeded();
    assert.equal(await admin.locator('body').evaluate(el=>el.scrollWidth<=window.innerWidth+1),true);
    await admin.screenshot({path:path.join(output,'assinatura-nao-recolhida-390.png')});await admin.setViewportSize({width:1440,height:1000});
+  }
+  if(!absenceMode){
+   await admin.locator('[data-recipient-absent]').waitFor();
+   assert.equal(await admin.locator('[data-recipient-absent]').isDisabled(),true);
+   assert.equal(await admin.locator('[data-recipient-absent]').isChecked(),false);
+   await admin.getByText('Assinatura de quem recebe já recolhida e válida.',{exact:true}).waitFor();
+   // Simulate an old open form that still has the contradictory absence option selected.
+   await admin.locator('[data-recipient-absent]').evaluate(el=>{el.disabled=false;el.checked=true;});
+   await admin.locator('[data-absence-reason]').evaluate(el=>{el.value='Destinatário ausente; assinatura não recolhida.';});
   }
   if(signatureOnly){
    assert.equal((await t.query('select * from rh_fleet_signature_receipts where invalidated_at is null')).length,2);
@@ -190,6 +217,7 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
   await admin.getByRole('button',{name:regularization?'Confirmar regularização':'Confirmar entrega',exact:true}).click();await admin.waitForFunction(()=>!document.querySelector('.fleet-dialog'));
   const final=(await t.query('select * from rh_fleet_handovers where id=$1',[h.id]))[0];assert.equal(final.status,'confirmed');assert.ok(final.snapshot.operation.signatures.from);if(!absenceMode)assert.ok(final.snapshot.operation.signatures.to);
   if(absenceMode){assert.equal(final.snapshot.signature_absences.to.recorded_by,t.admin);assert.equal(final.snapshot.operation.signature_receipts.to,undefined);assert.equal((await t.query('select * from rh_fleet_signature_receipts where invalidated_at is null')).length,1);}
+  else{assert.equal(final.snapshot.signature_absences,undefined);assert.ok(final.snapshot.operation.signature_receipts.to.id);}
   assert.equal(final.snapshot.operation.driver_fields.from.name,fromName);assert.equal(final.snapshot.operation.driver_fields.to.name,toName);assert.equal(final.snapshot.to_person.id,external?null:initialState && !regularization?'b':'a');
   if(external){
    assert.equal(final.snapshot.to_person.name,toName);assert.equal(final.snapshot.to_person.structure,'Estrutura de Teste');
@@ -256,6 +284,6 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
    assert.equal(await admin.evaluate(()=>JSON.stringify(state)===window.hrBefore),true);assert.deepEqual(errors,[]);
   }
   const expired=await mobile.newPage();await expired.goto(base+'/auto-viatura.html#'+'x'.repeat(43));await expired.getByRole('heading',{name:'Ligação indisponível',exact:true}).waitFor();
-  console.log(JSON.stringify({initialState,external,deleteMode,absenceMode,regularization,editorWithoutRhAccess:true,mobileDraftSurvivesReload:true,driverNamesSaved:true,sameNamesForSigning:true,privatePhotoUpload:true,scopedLinks:true,signWithFinger390:true,signWithFinger320:!absenceMode,darkTheme:true,oneTimeReceipt:true,explicitAbsenceRequired:absenceMode,pdfHasImagesAndReceipts:true,serverArchive:true,tokensNotInRequestUrls:true,hrUnchanged:true,pageErrors:errors}));
+  console.log(JSON.stringify({initialState,external,deleteMode,absenceMode,regularization,reconfirmMode,editorWithoutRhAccess:true,mobileDraftSurvivesReload:true,driverNamesSaved:true,sameNamesForSigning:true,privatePhotoUpload:true,scopedLinks:true,signWithFinger390:true,signWithFinger320:!absenceMode,darkTheme:true,oneTimeReceipt:true,explicitAbsenceRequired:absenceMode,pdfHasImagesAndReceipts:true,serverArchive:true,tokensNotInRequestUrls:true,hrUnchanged:true,pageErrors:errors}));
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve));await t.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});
