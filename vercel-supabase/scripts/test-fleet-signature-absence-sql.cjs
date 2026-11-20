@@ -1,0 +1,43 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const createDb=require('./fleet-share-test-db.cjs');
+(async()=>{
+ const t=await createDb(),signature='data:image/png;base64,'+'A'.repeat(160),reason='Destinatário ausente; assinatura não recolhida.';
+ try{
+  for(const file of ['20261118_fleet_external.sql','20261120_fleet_signature_absence.sql'])await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations',file),'utf8')));
+  let h=await t.draft(2);
+  await t.query('insert into storage.objects(bucket_id,name) values($1,$2)',['rh-fleet',h.id+'/photo.jpg']);
+  const link=await t.link(h.id,'from','2'.repeat(64));
+  h=(await t.call('rh_fleet_share_status',[h.id])).handover;
+  await assert.rejects(t.call('rh_fleet_finish_handover',[h.id,h.version,reason]),/permission denied/);
+  await assert.rejects(t.call('rh_fleet_confirm_without_recipient',[h.id,h.version,reason],'authenticated',t.manager),/administrador/);
+  await assert.rejects(t.call('rh_fleet_confirm_without_recipient',[h.id,h.version,reason],'anon'),/permission denied/);
+  await assert.rejects(t.call('rh_fleet_confirm_without_recipient',[h.id,h.version,null]),/motivo/);
+  await assert.rejects(t.call('rh_fleet_confirm_without_recipient',[h.id,h.version,'NA']),/motivo/);
+  await assert.rejects(t.call('rh_fleet_confirm_without_recipient',[h.id,h.version,reason]),/Faltam/);
+  await t.call('rh_fleet_remote_sign',['2'.repeat(64),'Entrega teste',signature,link.content_hash,true],'service_role');
+  h=(await t.call('rh_fleet_share_status',[h.id])).handover;
+  await assert.rejects(t.call('rh_fleet_confirm_handover',[h.id,h.version]),/Faltam/);
+  await assert.rejects(t.call('rh_fleet_confirm_without_recipient',[h.id,h.version-1,reason]),/mudou/);
+  h=await t.call('rh_fleet_save_handover',[h.id,h.vehicle_id,h.version,null,{...h.data,signatures:{...h.data.signatures,to:'NA',from:signature+'AAAA'}}]);
+  await assert.rejects(t.call('rh_fleet_confirm_without_recipient',[h.id,h.version,reason]),/imagem/);
+  h=await t.call('rh_fleet_save_handover',[h.id,h.vehicle_id,h.version,null,{...h.data,signatures:{...h.data.signatures,from:signature}}]);
+  const original=JSON.stringify(h.data),beforeHash=link.content_hash;
+  h=await t.call('rh_fleet_confirm_without_recipient',[h.id,h.version,reason]);
+  assert.equal(h.status,'confirmed');assert.equal(JSON.stringify(h.data),original);
+  assert.equal(h.snapshot.signature_absences.to.reason,reason);assert.equal(h.snapshot.signature_absences.to.recorded_by,t.admin);assert.equal(h.snapshot.signature_absences.to.content_hash,beforeHash);
+  assert.equal(h.snapshot.operation.signature_receipts.to,undefined);assert.equal(h.snapshot.operation.signatures.from,signature);
+  assert.equal((await t.query('select count(*)::int as n from rh_fleet_signature_receipts where invalidated_at is null'))[0].n,1);
+  assert.equal((await t.query('select * from rh_fleet_custody where to_at is null'))[0].person_id,'a');
+  assert.equal((await t.call('rh_fleet_confirm_without_recipient',[h.id,h.version,reason])).version,h.version);
+  let next=await t.draft(3,{kind:'temporary',to_person_id:'b',expected_return:new Date(Date.now()+86400000).toISOString()});
+  const holder=(await t.query('select * from rh_fleet_custody where to_at is null'))[0];
+  next=await t.call('rh_fleet_save_handover',[next.id,next.vehicle_id,next.version,holder.id,next.data]);
+  const from=await t.link(next.id,'from','3'.repeat(64));await t.link(next.id,'to','4'.repeat(64));
+  for(const hash of ['3','4'])await t.call('rh_fleet_remote_sign',[hash.repeat(64),'Assinante teste',signature,from.content_hash,true],'service_role');
+  next=(await t.call('rh_fleet_share_status',[next.id])).handover;
+  await assert.rejects(t.call('rh_fleet_confirm_without_recipient',[next.id,next.version,reason]),/já assinou/);
+  next=await t.call('rh_fleet_save_handover',[next.id,next.vehicle_id,next.version,holder.id,{...next.data,notes:'Conteúdo alterado'}]);
+  await assert.rejects(t.call('rh_fleet_confirm_without_recipient',[next.id,next.version,reason]),/conteúdo mudou/);
+  console.log(JSON.stringify({explicitReason:true,adminOnly:true,noFakeRecipientReceipt:true,originalSignaturePreserved:true,tamperingRejected:true,staleVersionRejected:true,contentChangeRejected:true,existingRecipientCannotBeWaived:true,historyCreated:true,idempotent:true}));
+ }finally{await t.close();}
+})().catch(error=>{console.error(error);process.exitCode=1;});

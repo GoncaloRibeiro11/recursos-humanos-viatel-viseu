@@ -344,19 +344,25 @@ class Fleet {
   }
   async confirmHandover(){
     if(this.busy)return;this.capture();const vehicle=this.vehicle(this.dialog.vehicleId),errors=validateHandover(this.dialog.data,vehicle,this.holder(vehicle.id));
-    if(errors.length){this.message(errors.join('\n'),true);return;}
-    if(!confirm(`Confirmar a ${handoverLabel(this.dialog.data).toLowerCase()} da viatura ${vehicle.plate}? O histórico e este auto ficam fechados para edição.${this.dialog.data.destination==='external_structure'?' A viatura será retirada da frota ativa.':''}`))return;
+    const absence=this.host.querySelector('[data-recipient-absent]')?.checked,reason=this.host.querySelector('[data-absence-reason]')?.value.trim() || '';
+    if(absence && (reason.length<8 || reason.length>500))errors.push('Indica o motivo da assinatura de quem recebe não ter sido recolhida (8 a 500 caracteres).');
+    if(errors.length){this.confirmError(errors.join('\n'));return;}
+    if(!confirm(`Confirmar a ${handoverLabel(this.dialog.data).toLowerCase()} da viatura ${vehicle.plate}? O histórico e este auto ficam fechados para edição.${this.dialog.data.destination==='external_structure'?' A viatura será retirada da frota ativa.':''}${absence?' A assinatura de quem recebe ficará registada como NÃO RECOLHIDA; nenhuma marca nesse campo será apresentada como assinatura.':''}`))return;
     this.busy=true;const form=this.host.querySelector('fieldset');form.disabled=true;
     try{
       await this.saveDraft();this.status('A confirmar no servidor…');
-      const h=await this.rpc('rh_fleet_confirm_handover',{p_id:this.dialog.id,p_version:this.dialog.version});
+      const h=await this.rpc(absence?'rh_fleet_confirm_without_recipient':'rh_fleet_confirm_handover',{p_id:this.dialog.id,p_version:this.dialog.version,...(absence?{p_reason:reason}:{})});
       if(h.data.destination==='external_structure')this.showArchived=true;
       this.clearStash();this.dirty=false;this.host.innerHTML='';this.dialog=null;await this.load();this.page='handovers';this.render();
       try{await this.downloadPdf(h.id);}catch(error){this.message('Entrega confirmada. '+error.message,true);}
-    }finally{this.busy=false;if(form.isConnected)form.disabled=false;}
+    }catch(error){this.confirmError(error.message);}finally{this.busy=false;if(form.isConnected)form.disabled=false;}
+  }
+  confirmError(text){
+    this.message(text,true);const target=this.host.querySelector('[data-confirm-error]');if(target){target.textContent=text;target.scrollIntoView({block:'nearest'});}
   }
   readHandover(h,vehicle){
     const s=h.snapshot;this.showDialog(`${vehicle.plate} · FRO-${String(h.number).padStart(5,'0')}`,`<p class="fleet-locked">${icon('lock')}${esc(statusLabel[h.status])} · histórico preservado</p><dl class="fleet-read-data"><div><dt>Operação</dt><dd>${esc(handoverLabel(h.data))}</dd></div><div><dt>Data / hora</dt><dd>${date(h.data.at)}</dd></div><div><dt>Entrega</dt><dd>${esc(driverName(s?.operation || h.data,'from',s?.from_person) || '—')}</dd></div><div><dt>Recebe</dt><dd>${esc(driverName(s?.operation || h.data,'to',s?.to_person) || '—')}</dd></div>${h.data.destination==='external_structure'?'<div><dt>Estrutura de destino</dt><dd>'+esc(h.data.external_structure)+'</dd></div>':''}<div><dt>N.º Cartrack</dt><dd>${esc(s?.vehicle.cartrack_number || vehicle.cartrack_number || '—')}</dd></div><div><dt>Quilómetros</dt><dd>${esc(h.data.odometer)}</dd></div><div><dt>Motivo</dt><dd>${esc(h.data.reason)}</dd></div><div><dt>Devolução prevista</dt><dd>${date(h.data.expected_return)}</dd></div></dl><div class="fleet-section"><h3>Observações</h3><p style="white-space:pre-wrap">${esc(h.data.damage_notes)}${h.data.notes?'\n'+esc(h.data.notes):''}</p></div><section class="fleet-section"><h3>Fotografias / documentos / auto assinado</h3>${h.status==='confirmed'?'<input type="file" data-fleet-upload accept="image/jpeg,image/png,image/webp,application/pdf" multiple aria-label="Anexar auto assinado ou fotografias">':''}<ul class="fleet-file-list" data-fleet-files></ul></section>`, h.status==='confirmed'?`<button class="btn btn-primary" data-action="pdf" data-id="${h.id}">${icon('download')}Auto PDF</button>`:'');
+    const absence=s?.signature_absences?.to;if(absence)this.host.querySelector('.fleet-read-data').insertAdjacentHTML('afterend',`<section class="fleet-section"><h3>Assinatura de quem recebe · Não recolhida</h3><p>${esc(absence.reason)}</p><p class="fleet-small">Registado por administrador em ${date(absence.recorded_at)}.</p></section>`);
     this.setupFiles();this.loadFiles();
   }
   setupSignatures(){
@@ -368,6 +374,8 @@ class Fleet {
   async shareApi(value){const response=await this.authFetch('/api/fleet-share',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});return response.json();}
   setupSharing(){
     const footer=this.host.querySelector('.fleet-dialog-footer');
+    footer.insertAdjacentHTML('beforebegin',`<section class="fleet-section"><label class="fleet-check"><input type="checkbox" data-recipient-absent>Assinatura de quem recebe não recolhida</label><div class="fleet-form-grid"><label class="fleet-wide" data-absence-field hidden>Motivo<textarea data-absence-reason rows="3" maxlength="500" autocomplete="off"></textarea></label></div></section><div data-confirm-error class="fleet-error" role="alert"></div>`);
+    this.host.querySelector('[data-recipient-absent]').addEventListener('change',event=>{this.host.querySelector('[data-absence-field]').hidden=!event.target.checked;});
     footer.insertAdjacentHTML('beforebegin',`<section class="fleet-section" data-sharing><h3>Ligações privadas · preenchimento e assinaturas</h3><div class="fleet-bar">${[['editor','Enviar para preencher'],['from','Assinatura de quem entrega / devolve'],['to','Assinatura de quem recebe']].map(([key,label])=>`<button type="button" class="btn" data-action="create-link" data-purpose="${key}">${icon('link')}${label}</button>`).join('')}</div><div data-share-status class="fleet-small" role="status" aria-live="polite"></div><div data-share-output hidden><label class="fleet-small">Ligação privada<input readonly data-share-url aria-label="Ligação privada gerada"></label><div class="fleet-bar"><button type="button" class="btn" data-action="copy-share">${icon('copy')}Copiar</button><button type="button" class="btn" data-action="send-share">${icon('share-2')}Partilhar</button><span class="fleet-small" data-share-expiry></span></div></div><div class="fleet-bar"><button type="button" class="btn" data-action="refresh-shares">${icon('refresh-cw')}Atualizar assinaturas</button><button type="button" class="btn" data-action="revoke-links">${icon('x')}Cancelar ligações</button></div></section>`);
     this.drawIcons();
     if(this.dialog.version)this.shareApi({action:'status',id:this.dialog.id}).then(value=>this.showShareStatus(value)).catch(error=>{const target=this.host.querySelector('[data-share-status]');if(target)target.textContent=error.message;});

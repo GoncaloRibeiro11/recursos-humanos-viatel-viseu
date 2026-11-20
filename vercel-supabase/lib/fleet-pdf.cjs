@@ -45,7 +45,8 @@ async function renderFleetPdf(handover){
     if(!['R','A','P'].includes(mark.type) || !Number.isFinite(mark.x) || !Number.isFinite(mark.y) || mark.x<50 || mark.x>537 || mark.y<260 || mark.y>622)continue;
     pages[1].drawText(mark.type,{x:mark.x-4,y:842-mark.y-4,size:12,font,color:rgb(.8,.05,.05)});
   }
-  const missingSignatures=['from','to','zone'].filter(key=>!op.signatures?.[key]);
+  const absence=s.signature_absences?.to;
+  const missingSignatures=['from','to','zone'].filter(key=>!op.signatures?.[key] && !(key==='to' && absence));
   const number='FRO-'+String(handover.number || 'RASCUNHO').padStart(5,'0');
   const metadata=[number,handoverLabel(op),time,'Cartrack: '+(v.cartrack_number || '—'),'Combustível: '+(op.fuel || '—'),op.destination==='external_structure'?'Estrutura de destino: '+op.external_structure:''].filter(Boolean).join(' | ');
   const note=[metadata,op.reason,op.damage_notes,op.notes,...overflow.map(value=>'Dados completos: '+value)].filter(Boolean).join('\n');
@@ -62,6 +63,7 @@ async function renderFleetPdf(handover){
   const names={from:driverName(op,'from',s.from_person),to:driverName(op,'to',s.to_person),zone:op.zone_name};
   for(const [index,key] of ['from','to','zone'].entries()){
     const top=701+index*26;text(pages[1],names[key],154,top,200,8,true);
+    if(key==='to' && absence){text(pages[1],'Não recolhida',415,top,112,8,true);continue;}
     const signature=op.signatures?.[key];
     if(signature && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(signature) && signature.length<180000){
       const image=await pdf.embedPng(signature);const scale=Math.min(112/image.width,21/image.height);
@@ -69,7 +71,7 @@ async function renderFleetPdf(handover){
     }
   }
   for(const [index,page] of pages.entries()){
-    text(page,number+' | '+(handover.status==='confirmed'?'Entrega confirmada':'RASCUNHO')+(missingSignatures.length?' | Por assinar':''),240,811,303,7);
+    text(page,number+' | '+(handover.status==='confirmed'?'Entrega confirmada':'RASCUNHO')+(absence?' | Recebe: assinatura não recolhida':missingSignatures.length?' | Por assinar':''),240,811,303,7);
     if(handover.status!=='confirmed')text(page,'RASCUNHO - NÃO CONFIRMA ENTREGA',52,45,488,10);
   }
   if(noteLines.length>6){
@@ -80,7 +82,7 @@ async function renderFleetPdf(handover){
       text(page,line,52,top,490,9);top+=13;
     }
   }
-  const receipts=Object.entries(op.signature_receipts || {}).filter(([role,value])=>['from','to'].includes(role) && value?.signed_at);
+  const receipts=Object.entries(op.signature_receipts || {}).filter(([role,value])=>['from','to'].includes(role) && !(role==='to' && absence) && value?.signed_at);
   if(receipts.length){
     const page=pdf.addPage([595,842]);text(page,number+' - Registo de assinaturas',52,55,490,14);
     text(page,v.plate+' | '+time,52,82,490,10);let top=118;
@@ -93,6 +95,16 @@ async function renderFleetPdf(handover){
       text(page,'Versao do conteudo (SHA-256):',52,top,490,9);top+=16;text(page,receipt.content_hash,52,top,490,8);top+=45;
     }
     text(page,'As assinaturas correspondem ao conteudo identificado acima.',52,top,490,9);
+  }
+  if(absence){
+    const page=pdf.addPage([595,842]);let top=55;
+    text(page,number+' - Assinatura não recolhida',52,top,490,14);top+=32;
+    text(page,'Quem recebe: '+names.to,52,top,490,10);top+=24;
+    for(const line of wrap('Motivo: '+absence.reason,490,10)){text(page,line,52,top,490,10);top+=15;}
+    top+=16;text(page,'Registado pelo administrador: '+absence.recorded_by,52,top,490,9);top+=22;
+    text(page,'Registado em: '+new Intl.DateTimeFormat('pt-PT',{timeZone:'Europe/Lisbon',dateStyle:'long',timeStyle:'medium'}).format(new Date(absence.recorded_at)),52,top,490,9);top+=24;
+    text(page,'Conteúdo do auto (SHA-256):',52,top,490,9);top+=18;text(page,absence.content_hash,52,top,490,8);top+=32;
+    text(page,'Este registo não equivale à assinatura nem à aceitação de quem recebe.',52,top,490,9);
   }
   const captured=[s.captured_at,handover.created_at].filter(Boolean).map(value=>new Date(value)).find(value=>Number.isFinite(+value)) || new Date();
   pdf.setTitle(number+' - '+v.plate);pdf.setAuthor('RH Viatel Viseu');pdf.setCreationDate(captured);pdf.setModificationDate(captured);
