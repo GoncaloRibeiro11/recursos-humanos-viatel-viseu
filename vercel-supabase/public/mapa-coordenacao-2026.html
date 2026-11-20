@@ -4153,7 +4153,7 @@ async function loadSupabaseSession(){
   await loadFromSupabase();
   hideAuth();
   autoSelectNextColor();
-  try { switchTab('rh'); } catch(e){ renderAll(); }
+  try { switchTab(RhOop.analysisEntry(location.href)?'oop':'rh'); } catch(e){ renderAll(); }
 }
 async function loadFromSupabase(){
   await loadTeamHistory();
@@ -4247,7 +4247,7 @@ let fleetApp=null;
 let oopApp=null;
 function renderOop(){
   if(!currentProfile || !supabaseReady) return;
-  if(!oopApp) oopApp=RhOop.mount({root:document.getElementById('oopRoot'),getClient:()=>supabaseClient,getProfile:()=>currentProfile,getUserId:()=>currentUserId,getProjectId:()=>supabaseProjectId});
+  if(!oopApp) oopApp=RhOop.mount({root:document.getElementById('oopRoot'),getClient:()=>supabaseClient,getProfile:()=>currentProfile,getUserId:()=>currentUserId,getProjectId:()=>supabaseProjectId,entry:RhOop.analysisEntry(location.href),isActive:()=>activeTab==='oop',getLeaders:()=>state.persons.filter(p=>p.ativo!==false && ['chefe_equipa','capitao'].includes(p.role)),manageAccess:id=>openAccessModal(id)});
   void oopApp.open();
 }
 function renderFleet(){

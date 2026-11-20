@@ -1,8 +1,10 @@
-import {createIcons,Plus,Pencil,History,RefreshCw,X,Check,Save,Archive,ArrowLeft,ArrowRight,ClipboardList,Target,Users,BarChart3,CalendarDays} from 'lucide';
+import {createIcons,Plus,Pencil,History,RefreshCw,X,Check,Save,Archive,ArrowLeft,ArrowRight,ClipboardList,Target,Users,BarChart3,CalendarDays,Link,Copy,ExternalLink} from 'lucide';
 import {STAGES,STAGE_STATUS,PRODUCTS,OUTCOMES,REASONS,ACTION_STATUS,DIAGNOSIS,newContact,setEndStage,validateContact,periodDates,todayLisbon,ratio,bucketTrend,priorities,officialMetrics} from './oop-model.mjs';
 import {lisbonInput,fromLisbonInput} from './rh-fleet-model.mjs';
 import {OopJournal} from './oop-journal.mjs';
-const icons={Plus,Pencil,History,RefreshCw,X,Check,Save,Archive,ArrowLeft,ArrowRight,ClipboardList,Target,Users,BarChart3,CalendarDays};
+import {analysisLink,analysisEntry,validateAnalysisEntry} from './oop-access.mjs';
+export {analysisEntry};
+const icons={Plus,Pencil,History,RefreshCw,X,Check,Save,Archive,ArrowLeft,ArrowRight,ClipboardList,Target,Users,BarChart3,CalendarDays,Link,Copy,ExternalLink};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon=name=>`<i data-lucide="${name}" aria-hidden="true"></i>`;
 const command=(name,title,action,extra='')=>`<button type="button" class="btn oop-icon" title="${esc(title)}" aria-label="${esc(title)}" data-oop-action="${action}" ${extra}>${icon(name)}</button>`;
@@ -14,9 +16,11 @@ class Oop {
   constructor(options){
     Object.assign(this,options);this.view='overview';this.period='month';Object.assign(this,periodDates('month'));this.person='';this.team='';this.current=true;this.offset=0;this.actionOffset=0;this.actionStatus='active';this.trend='day';this.includeVoided=false;this.context=null;this.data=null;this.actions={items:[],total:0};this.loading=false;this.error='';this.notice='';this.pending={count:0,items:[],issues:[],durable:true};this.dialog=null;this.generation=0;
     this.session=0;this.root.innerHTML='<div class="oop-workspace"></div><div class="oop-modal-host"></div>';this.panel=this.root.firstElementChild;this.host=this.root.lastElementChild;
+    this.entryApplied=false;this.liveTimer=null;this.liveRefreshing=false;this.contextCheckedAt=0;this.lastSync=null;
     this.root.addEventListener('click',e=>this.click(e));
     this.online=()=>{if(this.journal)this.flush();};window.addEventListener('online',this.online);
     this.unload=e=>{if(this.pending.count && !this.pending.durable){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',this.unload);
+    this.wake=()=>void this.refreshLive(true);window.addEventListener('focus',this.wake);document.addEventListener('visibilitychange',this.wake);
   }
   get admin(){return this.context?.profile.role==='admin';}
   get key(){return `rh-oop-drafts-v1:${this.getProjectId()}:${this.getUserId()}:`;}
@@ -31,25 +35,48 @@ class Oop {
   async open(){
     if(!this.getProfile())return;
     try{
-      this.context=await this.rpc('rh_oop_context');
+      const context=await this.rpc('rh_oop_context');
+      const team=validateAnalysisEntry(this.entry,context.profile,context.teams);
+      this.context=context;this.contextCheckedAt=Date.now();
+      if(team && !this.entryApplied){this.view='team';this.team=this.admin?team:'';this.current=true;this.person='';this.entryApplied=true;}
       if(!this.journal){const uid=this.getUserId(),session=this.session;this.journal=new OopJournal({storage:localStorage,userId:uid,projectId:this.getProjectId(),rpc:(n,a)=>{if(this.getUserId()!==uid || this.session!==session)throw new Error('Sessão alterada.');return this.rpc(n,a);},onStatus:s=>{if(this.session!==session)return;const drained=this.pending.count>0 && s.count===0;this.pending=s;if(!this.dialog)this.render();if(drained && !this.dialog && !this.loading)void this.load();}});}
-      await this.load();if(this.pending.count)void this.flush();
-    }catch(e){this.error=/rh_oop_|does not exist|schema cache/.test(e.message)?'O módulo OOP ainda não está instalado neste ambiente.':e.message;this.render();}
+      await this.load();if(!this.liveTimer)this.liveTimer=setInterval(()=>void this.refreshLive(),15000);if(this.pending.count)void this.flush();
+    }catch(e){this.context=null;this.data=null;this.error=/rh_oop_|does not exist|schema cache/.test(e.message)?'O módulo OOP ainda não está instalado neste ambiente.':e.message;this.render();}
   }
-  async load(){
-    if(!this.context)return;const generation=++this.generation;this.loading=true;this.error='';this.render();
+  async refreshLive(forceContext=false){
+    const active=this.isActive?this.isActive():this.root.isConnected && this.root.getClientRects().length>0;
+    if(!active || document.visibilityState==='hidden' || navigator.onLine===false || !this.context || !this.getProfile() || this.dialog || this.loading || this.liveRefreshing || this.pending.count || this.journal?.running)return;
+    const focused=document.activeElement;if(this.panel.contains(focused) && focused.matches('input,select,textarea'))return;
+    const session=this.session;this.liveRefreshing=true;
+    try{
+      let contextChanged=false;
+      if(forceContext || Date.now()-this.contextCheckedAt>60000){
+        const context=await this.rpc('rh_oop_context');if(session!==this.session)return;
+        try{validateAnalysisEntry(this.entry,context.profile,context.teams);}catch(error){this.context=null;this.data=null;throw error;}
+        contextChanged=JSON.stringify(context)!==JSON.stringify(this.context);this.context=context;this.contextCheckedAt=Date.now();
+      }
+      if(this.period!=='custom'){
+        const range=periodDates(this.period);if(range.from!==this.from || range.to!==this.to){Object.assign(this,range);this.offset=0;this.actionOffset=0;contextChanged=true;}
+      }
+      if(session===this.session && !this.dialog)await this.load({quiet:true,contextChanged});
+    }catch(e){if(session===this.session){this.error=e.message;if(!this.dialog)this.render();}}
+    finally{if(session===this.session)this.liveRefreshing=false;}
+  }
+  async load({quiet=false,contextChanged=false}={}){
+    if(!this.context)return;const generation=++this.generation;let changed=contextChanged || !!this.error;this.loading=true;this.error='';if(!quiet)this.render();
     try{
       const data=await this.rpc('rh_oop_workspace',{p_from:this.from,p_to:this.to,p_person:this.person || null,p_team:this.admin?this.team || null:null,p_current:!this.admin && this.current && !this.person,p_offset:this.offset,p_limit:20,p_include_voided:this.includeVoided});
       const actions=await this.rpc('rh_oop_action_list',{p_person:this.person || null,p_team:this.admin?this.team || null:null,p_status:this.actionStatus,p_offset:this.actionOffset,p_limit:20,p_current:!this.admin && this.current && !this.person});
-      if(generation!==this.generation)return;this.data=data;this.actions=actions;
+      if(generation!==this.generation)return;changed ||= JSON.stringify(data)!==JSON.stringify(this.data) || JSON.stringify(actions)!==JSON.stringify(this.actions);this.data=data;this.actions=actions;this.lastSync=new Date();
     }catch(e){if(generation===this.generation)this.error=e.message;}
-    finally{if(generation===this.generation){this.loading=false;this.render();}}
+    finally{if(generation===this.generation){this.loading=false;if(!quiet || changed || this.error)this.render();else{const time=this.panel.querySelector('[data-oop-sync-time]');if(time)time.textContent=this.syncTime();}}}
   }
+  syncTime(){return this.lastSync?'Atualizado às '+new Intl.DateTimeFormat('pt-PT',{timeZone:'Europe/Lisbon',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(this.lastSync):'';}
   draw(){createIcons({icons,attrs:{'stroke-width':1.7}});}
   render(){
     const views=[['overview','Coordenação','bar-chart-3'],['seller','Vendedor','target'],['team','Equipa','users'],['history','Contactos','history'],['actions','Acompanhamentos','clipboard-list']].filter(([v])=>this.admin || v!=='overview');
     if(!this.admin && this.view==='overview')this.view='team';
-    this.panel.innerHTML=`<div class="oop-top"><div><h2>Análise Vendedor</h2><span class="oop-muted">${esc(this.context?.profile.name || '')}${this.context?' · '+(this.admin?'Coordenação':'Gestor de equipa'):''}</span></div><div class="oop-tools">${this.context?`<button class="btn btn-primary" data-oop-action="new-contact">${icon('plus')}Novo contacto</button><button class="btn" data-oop-action="new-action">${icon('target')}Nova ação</button>`:''}${command('refresh-cw','Atualizar análise','reload')}</div></div>
+    this.panel.innerHTML=`<div class="oop-top"><div><h2>Análise Vendedor</h2><span class="oop-muted">${esc(this.context?.profile.name || '')}${this.context?' · '+(this.admin?'Coordenação':'Gestor de equipa'):''}</span><small data-oop-sync-time>${esc(this.syncTime())}</small></div><div class="oop-tools">${this.context?`${this.admin?'<button class="btn" data-oop-action="team-links">'+icon('link')+'Ligações dos CE</button>':''}<button class="btn btn-primary" data-oop-action="new-contact">${icon('plus')}Novo contacto</button><button class="btn" data-oop-action="new-action">${icon('target')}Nova ação</button>`:''}${command('refresh-cw','Atualizar análise','reload')}</div></div>
       <div class="oop-status ${this.error?'oop-error':''}" role="status" aria-live="polite">${esc(this.error || this.notice || (this.loading?'A carregar…':''))}</div>
       ${this.pending.count?`<section class="oop-pending" aria-label="Gravações pendentes"><strong>${this.pending.count} alteração(ões) ${this.pending.writing?'a guardar':'aguardam confirmação do servidor'}</strong>${!this.pending.durable?'<span class="oop-error">Armazenamento local indisponível. Mantém esta janela aberta.</span>':''}<button class="btn" data-oop-action="retry">${icon('refresh-cw')}Tentar guardar</button>${this.pending.issues.map(item=>`<div>${esc(item.error)} <button class="btn" data-oop-action="review-pending" data-id="${item.id}">${icon('pencil')}Rever</button>${command('archive','Descartar apenas esta alteração pendente','discard-pending',`data-id="${item.id}"`)}</div>`).join('')}</section>`:''}
       ${this.context?`<nav class="oop-tabs" aria-label="Análise comercial">${views.map(([v,label,i])=>`<button class="btn ${this.view===v?'selected':''}" data-oop-action="view" data-view="${v}" aria-current="${this.view===v?'page':'false'}">${icon(i)}${label}</button>`).join('')}</nav>${this.filters()}${this.data?this.body():''}`:''}`;
@@ -95,6 +122,15 @@ class Oop {
     const b=event.target.closest('[data-oop-action]');if(!b || !this.root.contains(b) || b.disabled)return;const action=b.dataset.oopAction,id=b.dataset.id;
     try{
       if(action==='reload')await this.open();
+      if(action==='team-links')this.openTeamLinks();
+      if(action==='copy-team-link'){
+        if(!this.admin || !this.teamLeaders().some(t=>t.id===id))throw new Error('Ligação indisponível.');
+        await navigator.clipboard.writeText(analysisLink(this.linkBase || location.href,id));this.host.querySelector('[data-oop-link-status]').textContent='Ligação copiada.';
+      }
+      if(action==='team-access'){
+        if(!this.admin || !this.teamLeaders().some(t=>t.id===id))throw new Error('Acesso indisponível.');
+        this.close();this.manageAccess?.(id);
+      }
       if(action==='view'){this.view=b.dataset.view;if(this.view==='seller' && !this.person)this.person=this.context.people.find(p=>p.current_member && p.active && p.role==='vendedor')?.id || '';if(this.view==='team' && this.admin && !this.team)this.team=this.context.teams[0]?.id || '';this.offset=0;this.actionOffset=0;await this.load();}
       if(action==='seller'){this.person=id;this.team='';this.view='seller';this.offset=0;await this.load();}
       if(action==='team'){this.team=id;this.person='';this.view='team';this.offset=0;await this.load();}
@@ -141,6 +177,11 @@ class Oop {
     this.modal('Rever versões antes de guardar',`<p>O servidor tem uma versão mais recente. A alteração pendente não foi aplicada.</p><div class="oop-table-wrap"><table><thead><tr><th>Campo diferente</th><th>No servidor · versão ${current.version}</th><th>Pendente · versão ${item.args.p_version}</th></tr></thead><tbody>${changes.map(([key,label])=>`<tr><th>${label}</th><td class="oop-compare">${esc(display(key,latest[key]))}</td><td class="oop-compare">${esc(display(key,item.args.p_data[key]))}</td></tr>`).join('')}</tbody></table></div><p>Reaplicar abre os dados pendentes para revisão sobre a versão atual. Confirma todos os campos antes de guardar.</p>`,`<button class="btn" data-oop-action="keep-server">Manter servidor</button>${!current.voided_at?'<button class="btn btn-primary" data-oop-action="reapply-pending">Reaplicar versão pendente</button>':''}`);
   }
   showError(text){const target=this.host.querySelector('[data-oop-error]');if(target)target.textContent=text;else{this.error=text;this.render();}}
+  teamLeaders(){return (this.getLeaders?this.getLeaders():this.context?.teams || []).slice().sort((a,b)=>a.name.localeCompare(b.name,'pt'));}
+  openTeamLinks(){
+    if(!this.admin)return;const teams=this.teamLeaders();this.dialog={type:'team-links'};
+    this.modal('Ligações dos CE',`<div class="oop-link-list">${teams.map(t=>{const url=analysisLink(this.linkBase || location.href,t.id);return `<div class="oop-team-link"><div class="oop-section-head">${this.avatar(t.id,t.name)}${this.manageAccess?command('users','Configurar acesso de '+t.name,'team-access',`data-id="${esc(t.id)}"`):''}</div><div class="oop-link-controls"><input readonly aria-label="Ligação de ${esc(t.name)}" value="${esc(url)}">${command('copy','Copiar ligação de '+t.name,'copy-team-link',`data-id="${esc(t.id)}"`)}<a class="btn oop-icon" href="${esc(url)}" target="_blank" rel="noopener noreferrer" aria-label="Abrir ligação de ${esc(t.name)}" title="Abrir ligação de ${esc(t.name)}">${icon('external-link')}</a></div></div>`;}).join('') || '<p class="oop-empty">Sem gestores de equipa ativos.</p>'}</div><div class="oop-muted" data-oop-link-status role="status" aria-live="polite"></div>`,'');
+  }
   modal(title,body,footer){
     this.host.innerHTML=`<div class="oop-backdrop"><section class="oop-dialog" role="dialog" aria-modal="true" aria-label="${esc(title)}"><header><h2>${esc(title)}</h2>${command('x','Fechar','close')}</header><div class="oop-error" data-oop-error role="alert"></div>${body}<footer>${footer}</footer></section></div>`;this.draw();this.host.querySelector('button,input,select')?.focus();
     this.host.querySelector('.oop-dialog').addEventListener('keydown',e=>{if(e.key==='Escape')this.close();if(e.key==='Tab'){const list=[...this.host.querySelectorAll('button,input,select,textarea,summary')].filter(x=>!x.disabled && x.getClientRects().length),i=list.indexOf(document.activeElement);if(e.shiftKey && i===0){e.preventDefault();list.at(-1)?.focus();}if(!e.shiftKey && i===list.length-1){e.preventDefault();list[0]?.focus();}}});
@@ -226,5 +267,5 @@ class Oop {
   }
   async flush(){await this.journal?.flush();if(!this.pending.count)this.notice='Alterações guardadas no servidor.';if(!this.dialog)await this.load();}
   close(){if(this.dialog?.type==='contact')this.captureContact();if(this.dialog?.type==='action')this.captureAction();this.host.innerHTML='';this.dialog=null;this.render();}
-  reset(){this.generation++;this.session++;this.journal?.stop();this.journal=null;this.context=null;this.data=null;this.dialog=null;this.pending={count:0,items:[],issues:[],durable:true};this.panel.innerHTML='';this.host.innerHTML='';}
+  reset(){this.generation++;this.session++;clearInterval(this.liveTimer);this.liveTimer=null;this.liveRefreshing=false;this.contextCheckedAt=0;this.entryApplied=false;this.lastSync=null;this.journal?.stop();this.journal=null;this.context=null;this.data=null;this.dialog=null;this.pending={count:0,items:[],issues:[],durable:true};this.panel.innerHTML='';this.host.innerHTML='';}
 }

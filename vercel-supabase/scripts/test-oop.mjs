@@ -3,9 +3,20 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {newContact,setEndStage,validateContact,periodDates,bucketTrend,priorities,officialMetrics,ratio} from '../src/oop-model.mjs';
 import {OopJournal} from '../src/oop-journal.mjs';
+import {analysisLink,analysisEntry,validateAnalysisEntry} from '../src/oop-access.mjs';
 const require=createRequire(import.meta.url),{assertSafePreview}=require('../lib/preview-env.cjs');
 const storage=()=>{const items=new Map();return {get length(){return items.size},key:i=>[...items.keys()][i],getItem:k=>items.get(k)??null,setItem:(k,v)=>items.set(k,v),removeItem:k=>items.delete(k)};};
 const complete=()=>({...newContact('a','2026-11-17T10:00:00Z'),product:'both',outcome:'both',stages:Array.from({length:7},(_,i)=>({stage:i+1,status:i===5?'no_objections':'good',note:''}))});
+
+test('ligacoes por CE nao transportam credenciais e nunca substituem a conta autenticada',()=>{
+ const link=analysisLink('https://rh.example/mapa-recursos-humanos.html?token=nao-copiar&access_token=privado#password','ce/1?nome=teste');
+ const url=new URL(link);assert.equal(url.origin,'https://rh.example');assert.equal(url.searchParams.get('ce'),'ce/1?nome=teste');assert.deepEqual([...url.searchParams.keys()],['view','ce']);assert.equal(url.hash,'');
+ assert.deepEqual(analysisEntry(link),{team:'ce/1?nome=teste'});assert.equal(analysisEntry('https://rh.example/?ce=ce1'),null);
+ const teams=[{id:'ce1'},{id:'ce2'}];assert.equal(validateAnalysisEntry({team:'ce1'},{role:'gestor',person_id:'ce1'},teams),'ce1');
+ for(const profile of [null,{role:'gestor',person_id:'ce2'},{role:'gestor',person_id:null},{role:'vendedor',person_id:'ce1'}])assert.throws(()=>validateAnalysisEntry({team:'ce1'},profile,teams),/outra equipa/);
+ assert.equal(validateAnalysisEntry({team:'ce2'},{role:'admin'},teams),'ce2');assert.throws(()=>validateAnalysisEntry({team:'apagado'},{role:'admin'},teams),/disponível/);
+ assert.throws(()=>analysisLink('javascript:alert(1)','ce1'),/Endereço/);assert.throws(()=>analysisLink('https://user:pass@rh.example/','ce1'),/Endereço/);assert.throws(()=>analysisLink('https://rh.example/','\nce1'),/Equipa/);
+});
 test('etapa onde termina nao significa dificuldade; posteriores nao alcancadas',()=>{
  const c=setEndStage({...complete(),outcome:'refusal',reason:'no_reason'},3);
  assert.deepEqual(validateContact(c),[]);assert.equal(c.stages[2].status,'good');assert.equal(c.stages[3].status,'not_reached');
