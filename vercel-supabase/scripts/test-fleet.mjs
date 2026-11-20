@@ -117,10 +117,12 @@ test('auto mantem duas paginas e suporta acentos, observacoes extensas e modelo 
 });
 function response(){return {headers:{},statusCode:0,setHeader(key,value){this.headers[key]=value;},end(value){this.value=value;}};}
 test('ausencia de assinatura fica explicita no PDF e nunca tenta mostrar NA como assinatura',async()=>{
+ for(const role of ['from','to']){
   const h=structuredClone(fixture);h.status='confirmed';h.snapshot.signature_absences={to:{status:'not_collected',reason:'Destinatário ausente; assinatura não recolhida.',recorded_by:'admin-teste',recorded_at:'2026-11-20T10:00:00Z',content_hash:'a'.repeat(64)}};
-  h.snapshot.operation.signatures={to:'data:image/png;base64,NA=='};
+  h.snapshot.signature_absences={[role]:h.snapshot.signature_absences.to};h.snapshot.operation.signatures={[role]:'data:image/png;base64,NA=='};
   const pdf=await PDFDocument.load(await renderFleetPdf(h));assert.equal(pdf.getPageCount(),3);
   delete h.snapshot.signature_absences;await assert.rejects(renderFleetPdf(h),'uma marca invalida nao e transformada em assinatura');
+ }
 });
 test('PDF exige sessao e administrador; nao usa chave de servico e arquiva sem substituir',async()=>{
   const calls=[];let stored=false;
