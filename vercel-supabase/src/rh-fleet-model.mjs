@@ -100,3 +100,17 @@ export function fromLisbonInput(value){
 export function custodyAt(rows,vehicleId,date){
   return rows.find(row=>row.vehicle_id===vehicleId && row.from_at && +new Date(row.from_at)<=+new Date(date) && (!row.to_at || +new Date(date)<+new Date(row.to_at))) || null;
 }
+export function filterFleetVehicles(vehicles,{page='vehicles',includeArchived=false,personId='',vehicleId='',search='',persons=[],custody=[],handovers=[]}={}){
+  const historical=page!=='vehicles' || includeArchived;
+  const names=new Map(persons.map(p=>[p.id,p.name]));
+  const query=search.trim().toLocaleLowerCase('pt');
+  return vehicles.filter(v=>{
+    if(!historical && !v.active || vehicleId && v.id!==vehicleId)return false;
+    const uses=custody.filter(c=>c.vehicle_id===v.id),current=uses.find(c=>!c.to_at);
+    const autos=historical?handovers.filter(h=>h.vehicle_id===v.id):[];
+    const pastIds=historical?[...uses.map(c=>c.person_id),...autos.flatMap(h=>[h.snapshot?.from_person?.id,h.snapshot?.to_person?.id,h.data?.to_person_id])]:[];
+    if(personId && ![v.habitual_person_id,current?.person_id,...pastIds].includes(personId))return false;
+    const pastNames=historical?[...uses.flatMap(c=>[c.person_name,names.get(c.person_id)]),...autos.flatMap(h=>[h.snapshot?.from_person?.name,h.snapshot?.to_person?.name,h.data?.driver_fields?.from?.name,h.data?.driver_fields?.to?.name,h.data?.external_structure])]:[];
+    return [v.plate,v.make_model,v.cartrack_number,names.get(current?.person_id),current?.person_name,...pastNames].filter(Boolean).join(' ').toLocaleLowerCase('pt').includes(query);
+  });
+}

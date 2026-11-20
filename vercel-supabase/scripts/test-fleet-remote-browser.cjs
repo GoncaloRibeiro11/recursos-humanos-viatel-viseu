@@ -190,6 +190,22 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
    assert.equal((await t.query('select * from rh_fleet_custody where vehicle_id=$1 and to_at is null',[t.uuid(1)])).length,0);
    assert.equal((await t.query('select * from rh_persons')).length,2);
    await admin.getByText('Entrega a outra estrutura',{exact:true}).waitFor();
+   const beforeHistory=JSON.stringify(final);
+   await admin.locator('[data-action=page][data-page=vehicles]').click();await admin.locator('[data-filter=archived]').uncheck();
+   assert.equal(await admin.locator('[data-fleet-vehicle="'+t.uuid(1)+'"]').count(),0);
+   await admin.locator('[data-action=page][data-page=handovers]').click();
+   await admin.getByText('Viatura arquivada',{exact:true}).waitFor();assert.equal(await admin.locator('[data-filter=archived]').count(),0);
+   await admin.locator('[data-filter=person]').selectOption('a');await admin.getByText('Entrega a outra estrutura',{exact:true}).waitFor();
+   await admin.locator('[data-filter=search]').fill(fromName);await admin.getByText('Entrega a outra estrutura',{exact:true}).waitFor();
+   await admin.setViewportSize({width:390,height:844});await admin.screenshot({path:path.join(output,'auto-arquivado-preservado-390.png'),fullPage:true});await admin.setViewportSize({width:1440,height:1000});
+   await admin.locator('[data-action=page][data-page=history]').click();await admin.getByRole('columnheader',{name:'Auto de saída',exact:true}).waitFor();
+   await admin.locator('[data-action=edit-handover][data-id="'+h.id+'"]').click();
+   await admin.getByText('Confirmado · histórico preservado',{exact:true}).waitFor();await admin.getByText(fromName,{exact:true}).waitFor();
+   assert.equal(await admin.locator('[data-action=confirm]').count(),0);
+   await admin.locator('.fleet-dialog [data-action=close]').click();
+   await admin.locator('[data-filter=person]').selectOption('');await admin.locator('[data-filter=search]').fill('');
+   await admin.locator('[data-action=page][data-page=handovers]').click();await admin.getByText('Entrega a outra estrutura',{exact:true}).waitFor();
+   assert.equal(JSON.stringify((await t.query('select * from rh_fleet_handovers where id=$1',[h.id]))[0]),beforeHistory);
   }
   if(initialState){const rows=await t.query('select * from rh_fleet_custody where vehicle_id=$1 order by from_at nulls first',[t.uuid(1)]);assert.equal(rows.length,2);assert.equal(rows[0].origin,'initial_state');assert.equal(rows[0].from_at,null);assert.equal(rows[1].person_id,'b');}
   assert.equal(final.snapshot.operation.damage_markers.length,1);assert.ok(Math.abs(final.snapshot.operation.damage_markers[0].x-100)<=1);assert.ok(Math.abs(final.snapshot.operation.damage_markers[0].y-335)<=1);

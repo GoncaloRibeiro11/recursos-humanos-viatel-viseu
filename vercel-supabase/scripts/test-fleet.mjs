@@ -1,12 +1,29 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createRequire} from 'node:module';
-import {INSPECTION_ITEMS,INSPECTION_GROUPS,inspectionProgress,validateHandover,fromLisbonInput,lisbonInput,custodyAt,driverName,handoverOrigin,adoptInitialDraftVersion,handoverLabel,VEHICLE_STATES,showVehicleInspection,vehicleSaveData} from '../src/rh-fleet-model.mjs';
+import {INSPECTION_ITEMS,INSPECTION_GROUPS,inspectionProgress,validateHandover,fromLisbonInput,lisbonInput,custodyAt,driverName,handoverOrigin,adoptInitialDraftVersion,handoverLabel,VEHICLE_STATES,showVehicleInspection,vehicleSaveData,filterFleetVehicles} from '../src/rh-fleet-model.mjs';
 const require=createRequire(import.meta.url);
 const {renderFleetPdf}=require('../lib/fleet-pdf.cjs');
 const {createFleetApi}=require('../api/fleet-auto.js');
 const {PDFDocument}=require('pdf-lib');
 const uuid='10000000-0000-4000-8000-000000000001';
+test('arquivar viatura nao esconde autos nem historico e permite pesquisar o antigo condutor',()=>{
+  const vehicles=[{id:'archived',plate:'11-JN-55',active:false,habitual_person_id:null},{id:'active',plate:'AA-00-AA',active:true,habitual_person_id:'new'}];
+  const custody=[{id:'old',vehicle_id:'archived',person_id:'seller',person_name:'Nome histórico do condutor',from_at:null,to_at:'2026-11-20T09:33:00Z'}];
+  const handovers=[{id:'auto',vehicle_id:'archived',status:'confirmed',expected_custody_id:'old',data:{at:'2026-11-20T09:33:00Z',driver_fields:{from:{name:'Nome completo no auto'}},external_structure:'Estrutura de destino'},snapshot:{from_person:{id:'seller',name:'Nome no fecho'}}}];
+  const persons=[{id:'seller',name:'Nome atual do colaborador'}],before=JSON.stringify({vehicles,custody,handovers});
+  const base={persons,custody,handovers};
+  assert.deepEqual(filterFleetVehicles(vehicles,base).map(v=>v.id),['active']);
+  assert.equal(filterFleetVehicles(vehicles,{...base,includeArchived:true}).length,2);
+  for(const page of ['handovers','history']){
+    assert.equal(filterFleetVehicles(vehicles,{...base,page,includeArchived:false}).length,2);
+    for(const search of ['11-JN-55','Nome histórico','Nome atual','Nome completo no auto','Nome no fecho','Estrutura de destino'])assert.deepEqual(filterFleetVehicles(vehicles,{...base,page,search}).map(v=>v.id),['archived']);
+    assert.deepEqual(filterFleetVehicles(vehicles,{...base,page,personId:'seller'}).map(v=>v.id),['archived']);
+    assert.deepEqual(filterFleetVehicles(vehicles,{...base,page,vehicleId:'archived'}).map(v=>v.id),['archived']);
+    assert.equal(filterFleetVehicles(vehicles,{...base,page,personId:'unknown'}).length,0);
+  }
+  assert.equal(JSON.stringify({vehicles,custody,handovers}),before);
+});
 test('estado da viatura controla a data sem eliminar datas antigas ou enviar licenca de transportes',()=>{
   assert.deepEqual(Object.values(VEHICLE_STATES),['Nova','Recente','Usada']);
   for(const vehicle_condition of ['new','recent']){
