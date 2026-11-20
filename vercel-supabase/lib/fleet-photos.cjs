@@ -32,7 +32,7 @@ async function loadFleetPhotos(request,id,paths){
   return photos;
 }
 function photoArchivePath(id,document,photos){
-  const hash=createHash('sha256').update('fleet-photo-annex-v1').update(document);
+  const hash=createHash('sha256').update('fleet-photo-annex-v2-auto-compression').update(document);
   for(const photo of photos)hash.update(JSON.stringify([photo.name,photo.created_at])).update(photo.bytes);
   return id+'/auto-fotos-v1-'+hash.digest('hex')+'.pdf';
 }

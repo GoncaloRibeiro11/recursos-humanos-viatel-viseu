@@ -6,9 +6,9 @@ const root=path.resolve(__dirname,'../public'),output=path.resolve(__dirname,'..
 const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
 (async()=>{
  const t=await createDb(),objects=new Map(),secret='local-test-server-key';let base,archived;
- const absenceMode=process.env.TEST_SIGNATURE_ABSENCE==='1',deleteMode=process.env.TEST_DELETE==='1',initialState=process.env.TEST_INITIAL_STATE==='1' || deleteMode,external=process.env.TEST_EXTERNAL==='1',signatureOnly=process.env.TEST_SIGNATURE_ONLY==='1';
+ const regularization=process.env.TEST_REGULARIZATION==='1',absenceMode=process.env.TEST_SIGNATURE_ABSENCE==='1',deleteMode=process.env.TEST_DELETE==='1',initialState=process.env.TEST_INITIAL_STATE==='1' || deleteMode || regularization,external=process.env.TEST_EXTERNAL==='1',signatureOnly=process.env.TEST_SIGNATURE_ONLY==='1';
  let failStorageDeletion=deleteMode;
- let h=await t.draft(2,external?{kind:'return',destination:'external_structure',external_structure:'Estrutura de Teste',driver_fields:{from:{name:fromName},to:{name:toName}}}:initialState?{kind:'temporary',to_person_id:'b',expected_return:new Date(Date.now()+86400000).toISOString()}:{});
+ let h=await t.draft(2,external?{kind:'return',destination:'external_structure',external_structure:'Estrutura de Teste',driver_fields:{from:{name:fromName},to:{name:toName}}}:regularization?{kind:'initial',to_person_id:'a'}:initialState?{kind:'temporary',to_person_id:'b',expected_return:new Date(Date.now()+86400000).toISOString()}:{});
  if(initialState || external){
   await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261117_fleet_initial_state.sql'),'utf8')));
   h=(await t.query('select * from rh_fleet_handovers where id=$1',[h.id]))[0];
@@ -18,6 +18,8 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
  await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261118_fleet_external.sql'),'utf8')));
  await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261118_fleet_deletions.sql'),'utf8')));
  await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261120_fleet_signature_absence.sql'),'utf8')));
+ await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261120_fleet_regularization.sql'),'utf8')));
+ const originalCustody=JSON.stringify(await t.query('select * from rh_fleet_custody where vehicle_id=$1',[t.uuid(1)]));
  const fetcher=async(url,options={})=>{
   const u=new URL(url),body=options.body && !Buffer.isBuffer(options.body)?JSON.parse(options.body):null;
   if(u.pathname==='/auth/v1/user')return Response.json({id:t.admin});
@@ -106,6 +108,11 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
    await admin.locator('[data-action=page][data-page=history]').click();await admin.getByText('Início desconhecido',{exact:true}).first().waitFor();await admin.screenshot({path:path.join(output,'situacao-inicial-historico.png'),fullPage:true});
   }
   await admin.locator('[data-action=page][data-page=handovers]').click();await admin.locator('[data-action=edit-handover]').click();
+  if(regularization){
+   await admin.locator('[name=kind]').selectOption('regularization');await admin.locator('[data-action=save-draft]').click();
+   assert.equal(await admin.locator('[name=to_person_id]').inputValue(),'a');assert.equal(await admin.locator('[name=to_person_id]').isDisabled(),true);
+   await admin.setViewportSize({width:390,height:844});await admin.locator('.fleet-dialog').screenshot({path:path.join(output,'regularizar-atribuicao-390.png')});await admin.setViewportSize({width:1440,height:1000});
+  }
   if(external){
    assert.equal(await admin.locator('[name=kind]').inputValue(),'external');
    assert.equal(await admin.locator('[name=external_structure]').inputValue(),'Estrutura de Teste');
@@ -180,10 +187,10 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
    assert.equal(await admin.evaluate(()=>JSON.stringify(state)===window.hrBefore),true);assert.deepEqual(errors,[]);
    console.log(JSON.stringify({onlyInspectionAndPhotosRequired:true,emptyOptionalFields:true,missingMetadataPdfWorks:true,realApiToSql:true,bothFingerSignatures:true,noCustodyChange:true,hrUntouched:true,pageErrors:errors}));return;
   }
-  await admin.getByRole('button',{name:'Confirmar entrega',exact:true}).click();await admin.waitForFunction(()=>!document.querySelector('.fleet-dialog'));
+  await admin.getByRole('button',{name:regularization?'Confirmar regularização':'Confirmar entrega',exact:true}).click();await admin.waitForFunction(()=>!document.querySelector('.fleet-dialog'));
   const final=(await t.query('select * from rh_fleet_handovers where id=$1',[h.id]))[0];assert.equal(final.status,'confirmed');assert.ok(final.snapshot.operation.signatures.from);if(!absenceMode)assert.ok(final.snapshot.operation.signatures.to);
   if(absenceMode){assert.equal(final.snapshot.signature_absences.to.recorded_by,t.admin);assert.equal(final.snapshot.operation.signature_receipts.to,undefined);assert.equal((await t.query('select * from rh_fleet_signature_receipts where invalidated_at is null')).length,1);}
-  assert.equal(final.snapshot.operation.driver_fields.from.name,fromName);assert.equal(final.snapshot.operation.driver_fields.to.name,toName);assert.equal(final.snapshot.to_person.id,external?null:initialState?'b':'a');
+  assert.equal(final.snapshot.operation.driver_fields.from.name,fromName);assert.equal(final.snapshot.operation.driver_fields.to.name,toName);assert.equal(final.snapshot.to_person.id,external?null:initialState && !regularization?'b':'a');
   if(external){
    assert.equal(final.snapshot.to_person.name,toName);assert.equal(final.snapshot.to_person.structure,'Estrutura de Teste');
    const vehicle=(await t.query('select * from rh_fleet_vehicles where id=$1',[t.uuid(1)]))[0];assert.equal(vehicle.active,false);assert.equal(vehicle.habitual_person_id,null);
@@ -207,7 +214,10 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
    await admin.locator('[data-action=page][data-page=handovers]').click();await admin.getByText('Entrega a outra estrutura',{exact:true}).waitFor();
    assert.equal(JSON.stringify((await t.query('select * from rh_fleet_handovers where id=$1',[h.id]))[0]),beforeHistory);
   }
-  if(initialState){const rows=await t.query('select * from rh_fleet_custody where vehicle_id=$1 order by from_at nulls first',[t.uuid(1)]);assert.equal(rows.length,2);assert.equal(rows[0].origin,'initial_state');assert.equal(rows[0].from_at,null);assert.equal(rows[1].person_id,'b');}
+  if(regularization){
+   assert.equal(final.snapshot.operation.purpose,'regularization');assert.equal(JSON.stringify(await t.query('select * from rh_fleet_custody where vehicle_id=$1',[t.uuid(1)])),originalCustody);
+   await admin.locator('[data-action=page][data-page=history]').click();await admin.locator('[data-action=edit-handover][data-id="'+h.id+'"]').waitFor();await admin.locator('[data-action=page][data-page=handovers]').click();
+  }else if(initialState){const rows=await t.query('select * from rh_fleet_custody where vehicle_id=$1 order by from_at nulls first',[t.uuid(1)]);assert.equal(rows.length,2);assert.equal(rows[0].origin,'initial_state');assert.equal(rows[0].from_at,null);assert.equal(rows[1].person_id,'b');}
   assert.equal(final.snapshot.operation.damage_markers.length,1);assert.ok(Math.abs(final.snapshot.operation.damage_markers[0].x-100)<=1);assert.ok(Math.abs(final.snapshot.operation.damage_markers[0].y-335)<=1);
   for(let i=0;i<50 && !archived;i++)await new Promise(resolve=>setTimeout(resolve,100));
   assert.ok(archived);assert.equal((await PDFDocument.load(archived)).getPageCount(),absenceMode?5:4);
@@ -246,6 +256,6 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
    assert.equal(await admin.evaluate(()=>JSON.stringify(state)===window.hrBefore),true);assert.deepEqual(errors,[]);
   }
   const expired=await mobile.newPage();await expired.goto(base+'/auto-viatura.html#'+'x'.repeat(43));await expired.getByRole('heading',{name:'Ligação indisponível',exact:true}).waitFor();
-  console.log(JSON.stringify({initialState,external,deleteMode,absenceMode,editorWithoutRhAccess:true,mobileDraftSurvivesReload:true,driverNamesSaved:true,sameNamesForSigning:true,privatePhotoUpload:true,scopedLinks:true,signWithFinger390:true,signWithFinger320:!absenceMode,darkTheme:true,oneTimeReceipt:true,explicitAbsenceRequired:absenceMode,pdfHasImagesAndReceipts:true,serverArchive:true,tokensNotInRequestUrls:true,hrUnchanged:true,pageErrors:errors}));
+  console.log(JSON.stringify({initialState,external,deleteMode,absenceMode,regularization,editorWithoutRhAccess:true,mobileDraftSurvivesReload:true,driverNamesSaved:true,sameNamesForSigning:true,privatePhotoUpload:true,scopedLinks:true,signWithFinger390:true,signWithFinger320:!absenceMode,darkTheme:true,oneTimeReceipt:true,explicitAbsenceRequired:absenceMode,pdfHasImagesAndReceipts:true,serverArchive:true,tokensNotInRequestUrls:true,hrUnchanged:true,pageErrors:errors}));
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve));await t.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

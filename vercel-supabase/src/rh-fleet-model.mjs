@@ -1,5 +1,6 @@
-export const OPERATIONS={initial:'Entrega inicial',temporary:'Passagem temporária',permanent:'Atribuição permanente',return:'Devolução à empresa'};
-export function handoverLabel(data){return data.kind==='return' && data.destination==='external_structure'?'Entrega a outra estrutura':OPERATIONS[data.kind];}
+export const OPERATIONS={initial:'Entrega inicial',temporary:'Passagem temporária',permanent:'Atribuição permanente',return:'Devolução à empresa',regularization:'Regularizar atribuição atual'};
+export function handoverChoice(data){return data.purpose==='regularization'?'regularization':data.kind==='return' && data.destination==='external_structure'?'external':data.kind;}
+export function handoverLabel(data){return data.purpose==='regularization'?'Regularização da atribuição atual':data.kind==='return' && data.destination==='external_structure'?'Entrega a outra estrutura':OPERATIONS[data.kind];}
 export const CONDITIONS=['Bom','Suf','Mau','NE','NA'];
 export const VEHICLE_STATES={new:'Nova',recent:'Recente',used:'Usada'};
 export const showVehicleInspection=vehicle=>!['new','recent'].includes(vehicle?.vehicle_condition);
@@ -58,8 +59,8 @@ export function validateSignatureRequest(data,photoCount=0){
   return errors;
 }
 export function validateHandover(data,vehicle,current,now=new Date()){
-  const errors=[];
-  if(!OPERATIONS[data.kind])errors.push('Seleciona a operação.');
+  const errors=[],regularization=data.purpose==='regularization';
+  if(!OPERATIONS[data.kind] || data.kind==='regularization')errors.push('Seleciona a operação.');
   if(!data.place?.trim() || !data.reason?.trim())errors.push('Indica local e motivo.');
   const at=new Date(data.at);
   if(!data.at || !Number.isFinite(+at))errors.push('Indica uma data e hora válidas.');
@@ -67,8 +68,12 @@ export function validateHandover(data,vehicle,current,now=new Date()){
   if(current?.from_at && +at<=+new Date(current.from_at))errors.push('A operação tem de ser posterior à entrega atual.');
   if(!Number.isInteger(Number(data.odometer)) || data.odometer==='' || data.odometer==null || Number(data.odometer)<Number(vehicle.odometer) || Number(data.odometer)>99999999)errors.push('Confirma os quilómetros; não podem diminuir.');
   if(!['Reserva','1/4','1/2','3/4','Cheio'].includes(data.fuel))errors.push('Confirma o combustível.');
-  if(data.kind!=='return' && (!data.to_person_id || data.to_person_id===current?.person_id))errors.push('Seleciona quem recebe, diferente de quem entrega.');
-  if(data.kind==='initial' && current)errors.push('A viatura já tem um responsável.');
+  if(regularization){
+    if(data.kind!=='initial' || !current || data.to_person_id!==current.person_id)errors.push('A regularização tem de manter o responsável atual, sem mudar a utilização da viatura.');
+  }else{
+    if(data.kind!=='return' && (!data.to_person_id || data.to_person_id===current?.person_id))errors.push('Seleciona quem recebe, diferente de quem entrega. Se o carro fica com a mesma pessoa, escolhe Regularizar atribuição atual.');
+    if(data.kind==='initial' && current)errors.push('A viatura já tem um responsável. Para manter a mesma pessoa, escolhe Regularizar atribuição atual.');
+  }
   if(['temporary','return'].includes(data.kind) && !current)errors.push('A viatura não tem uma utilização em curso. Se já está em uso e ainda não existe histórico, regista a situação inicial; caso contrário, faz uma entrega inicial.');
   if(data.kind==='temporary' && (!data.expected_return || +new Date(data.expected_return)<=+at || !Number.isFinite(+new Date(data.expected_return))))errors.push('Indica a devolução prevista posterior à entrega.');
   if(data.destination==='external_structure'){

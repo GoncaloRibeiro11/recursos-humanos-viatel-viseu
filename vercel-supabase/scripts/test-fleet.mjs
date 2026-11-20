@@ -45,6 +45,14 @@ test('frota valida inspecao completa e nunca inventa estados ou assinaturas',()=
   assert.ok(validateHandover({...data,checked:false},{odometer:73000},current).some(v=>v.includes('verificação')));
   assert.equal(Object.keys(data.signatures).length,0);
 });
+test('regularizacao aceita o responsavel atual sem permitir uma transferencia para ele proprio',()=>{
+  const d={...structuredClone(fixture.snapshot.operation),kind:'initial',purpose:'regularization',to_person_id:'a'},current={id:'c',person_id:'a',from_at:null};
+  assert.deepEqual(validateHandover(d,{odometer:0},current),[]);assert.match(handoverLabel(d),/Regularização/);
+  assert.ok(validateHandover({...d,to_person_id:'b'},{odometer:0},current).some(s=>s.includes('manter')));
+  assert.ok(validateHandover(d,{odometer:0},null).some(s=>s.includes('manter')));
+  assert.ok(validateHandover({...d,purpose:undefined},{odometer:0},current).some(s=>s.includes('já tem')));
+  assert.ok(validateHandover({...d,kind:'temporary',purpose:undefined},{odometer:0},current).some(s=>s.includes('diferente')));
+});
 test('datas de frota seguem Lisboa e recusam horas inexistentes ou ambiguas',()=>{
   assert.equal(fromLisbonInput('2026-11-17T09:00'),'2026-11-17T09:00:00.000Z');
   assert.equal(fromLisbonInput('2026-07-17T09:00'),'2026-07-17T08:00:00.000Z');

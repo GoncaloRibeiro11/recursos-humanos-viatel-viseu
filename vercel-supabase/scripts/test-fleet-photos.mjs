@@ -4,13 +4,24 @@ import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 const {PDFDocument,PDFName}=require('pdf-lib');
 const {createCanvas}=require('@napi-rs/canvas');
-const {renderFleetPdf,appendFleetPhotos}=require('../lib/fleet-pdf.cjs');
+const {renderFleetPdf,appendFleetPhotos,compressPhotoForPdf}=require('../lib/fleet-pdf.cjs');
 const {loadFleetPhotos,photoArchivePath}=require('../lib/fleet-photos.cjs');
 const {createFleetApi}=require('../api/fleet-auto.js');
 const {createFleetShares}=require('../lib/fleet-shares.cjs');
 const id='10000000-0000-4000-8000-000000000001';
 const handover={id,number:24,status:'confirmed',confirmed_at:'2026-11-20T09:00:00Z',snapshot:{template_version:1,vehicle:{plate:'AB-12-CD'},from_person:{name:'Entrega Teste'},to_person:{name:'Recebe Teste'},operation:{kind:'return',at:'2026-11-20T09:00:00Z',signatures:{},inspection:{},notes:'EXEMPLO FICTÍCIO'}}};
 const response=()=>({headers:{},setHeader(k,v){this.headers[k]=v;},end(value){this.value=value;}});
+test('conversor automatico reduz fotos grandes e mantem todas no PDF abaixo de 4 MB',async()=>{
+ const c=createCanvas(1600,1200),ctx=c.getContext('2d'),pixels=ctx.createImageData(1600,1200);let seed=13579;
+ for(let i=0;i<pixels.data.length;i+=4){for(let k=0;k<3;k++){seed=(Math.imul(seed,1664525)+1013904223)>>>0;pixels.data[i+k]=seed>>>24;}pixels.data[i+3]=255;}ctx.putImageData(pixels,0,0);
+ const bytes=c.toBuffer('image/jpeg',95),photos=Array.from({length:8},(_,i)=>({name:'foto-grande-'+i+'.jpg',bytes})),before=Buffer.from(bytes);
+ const converted=await compressPhotoForPdf(photos[0],180000);assert.ok(converted.length<=180000);
+ const {imageSize}=require('image-size'),size=imageSize(converted);assert.ok(Math.abs(size.width/size.height-4/3)<.01);
+ assert.ok(bytes.length*photos.length>4*1024*1024);
+ const base=await renderFleetPdf(handover),final=await appendFleetPhotos(base,handover,photos),pdf=await PDFDocument.load(final);
+ assert.ok(final.length<=4*1024*1024);assert.equal(pdf.getPageCount(),6);assert.deepEqual(bytes,before);
+ for(const page of pdf.getPages().slice(2))assert.equal(page.node.Resources().lookup(PDFName.of('XObject')).entries().length,2);
+});
 function picture(name,width=600,height=400,type='image/jpeg'){
  const c=createCanvas(width,height),ctx=c.getContext('2d');ctx.fillStyle='#e8f1f5';ctx.fillRect(0,0,width,height);ctx.fillStyle='#006a94';ctx.fillRect(width*.1,height*.2,width*.8,height*.55);ctx.fillStyle='#273743';ctx.fillRect(width*.15,height*.7,width*.15,height*.15);ctx.fillRect(width*.7,height*.7,width*.15,height*.15);
  return {name,created_at:'2026-11-20T08:50:00Z',bytes:c.toBuffer(type)};
