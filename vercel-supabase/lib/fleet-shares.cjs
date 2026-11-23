@@ -92,7 +92,8 @@ function createFleetShares({env=process.env,fetcher=fetch,now=()=>new Date(),ren
     }
     if(value.action==='status')return rpc('rh_fleet_share_status',{p_id:value.id},bearer);
     if(value.action==='revoke')return {revoked:await rpc('rh_fleet_revoke_shares',{p_id:value.id},bearer)};
-    if(value.action!=='create' || !['editor','from','to'].includes(value.purpose))throw fail('Pedido inválido.',400);
+    if(value.action!=='create' || !['editor','from','to','both'].includes(value.purpose))throw fail('Pedido inválido.',400);
+    const shared=value.shared===true || value.purpose==='both';
     const prepared=await rpc('rh_fleet_prepare_share',{p_id:value.id},bearer);
     if(prepared.handover.status!=='draft')throw fail('Só podes partilhar autos em rascunho.',409);
     if(value.purpose!=='editor'){
@@ -100,8 +101,8 @@ function createFleetShares({env=process.env,fetcher=fetch,now=()=>new Date(),ren
       if(errors.length)throw fail('Falta completar o pedido de assinatura:\n'+errors.join('\n'),400);
     }
     const token=randomBytes(32).toString('base64url');
-    const expires=new Date(+now()+24*3600000).toISOString();
-    const link=await rpc('rh_fleet_create_share',{p_id:value.id,p_purpose:value.purpose,p_hash:hash(token),p_expires:expires},bearer);
+    const expires=new Date(+now()+(shared?30*24:24)*3600000).toISOString();
+    const link=shared?await rpc('rh_fleet_create_shared_share',{p_id:value.id,p_editable:value.purpose==='editor',p_hash:hash(token),p_expires:expires},bearer):await rpc('rh_fleet_create_share',{p_id:value.id,p_purpose:value.purpose,p_hash:hash(token),p_expires:expires},bearer);
     const status=await rpc('rh_fleet_share_status',{p_id:value.id},bearer);
     return {id:link.id,purpose:link.purpose,expires_at:link.expires_at,url:PUBLIC_PAGE+'#'+token,handover:status.handover};
   }
@@ -141,12 +142,26 @@ function createFleetShares({env=process.env,fetcher=fetch,now=()=>new Date(),ren
   async function remote(value){
     const current=await access(value.token);
     if(value.action==='read')return current;
+    if(current.shared_signing){
+      if(value.action==='sign'){
+        if(!['open','complete'].includes(current.status) || current.purpose!=='both')throw fail('Esta ligação ainda não permite assinar.',403);
+        if(!['from','to'].includes(value.role))throw fail('Seleciona o campo da tua assinatura.',400);
+        return rpc('rh_fleet_remote_shared_sign',{p_hash:hash(value.token),p_role:value.role,p_name:value.name,p_signature:await imageData(value.signature,true),p_content_hash:value.content_hash,p_accept:value.accept===true});
+      }
+      if(value.action==='submit' && current.purpose==='both'){
+        if(!Number.isInteger(value.version))throw fail('Dados inválidos.',400);
+        return rpc('rh_fleet_submit_shared',{p_hash:hash(value.token),p_version:value.version,p_patch:await safePatch(value.data)});
+      }
+      if(value.action==='reconfirm')throw fail('Cada pessoa deve confirmar a sua própria assinatura nesta ligação.',403);
+      if(!['open','complete'].includes(current.status))throw fail('Este auto já está fechado.',409);
+      if(current.purpose==='both' && ['save','submit','upload'].includes(value.action))throw fail('O conteúdo já está preparado para assinaturas e não pode ser alterado por esta ligação.',403);
+    }
     if(value.action==='reconfirm'){
       if(!['from','to'].includes(current.purpose) || !['open','signed'].includes(current.status))throw fail('Esta ligação não permite confirmar assinaturas.',403);
       if(!idValid(value.previous_receipt_id) || typeof value.name!=='string' || value.name.length<2 || value.name.length>120 || value.accept!==true)throw fail('Confirma o nome e a aceitação desta versão do auto.',400);
       return rpc('rh_fleet_remote_reconfirm',{p_hash:hash(value.token),p_previous:value.previous_receipt_id,p_name:value.name,p_content_hash:value.content_hash,p_accept:true});
     }
-    if(current.status!=='open'){
+    if(current.status!=='open' && !(current.shared_signing && current.status==='complete')){
       if(value.action==='submit' && current.status==='submitted')return current;
       if(value.action==='sign' && current.status==='signed')return rpc('rh_fleet_remote_sign',{p_hash:hash(value.token),p_name:value.name,p_signature:await imageData(value.signature,true),p_content_hash:value.content_hash,p_accept:value.accept===true});
       throw fail('Esta ligação já foi utilizada.',409);
@@ -160,6 +175,7 @@ function createFleetShares({env=process.env,fetcher=fetch,now=()=>new Date(),ren
         const data={...h.data,...patch};
         const errors=await signatureErrors(data,current.payload);if(errors.length)throw fail(errors.join('\n'),400);
       }
+      if(current.shared_signing && value.action==='submit')return rpc('rh_fleet_submit_shared',{p_hash:tokenHash,p_version:value.version,p_patch:patch});
       return rpc('rh_fleet_remote_save',{p_hash:tokenHash,p_version:value.version,p_patch:patch,p_submit:value.action==='submit'});
     }
     if(value.action==='sign'){

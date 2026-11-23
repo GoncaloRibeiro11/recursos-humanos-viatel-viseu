@@ -405,14 +405,14 @@ class Fleet {
       this.host.querySelector(`[data-${party.flag}]`).addEventListener('change',event=>{this.host.querySelector(`[data-${party.field}]`).hidden=!event.target.checked;});
       this.host.querySelector(`[data-${party.reason}]`).addEventListener('input',()=>{this.host.querySelector('[data-confirm-error]').textContent='';this.message('');});
     }
-    footer.insertAdjacentHTML('beforebegin',`<section class="fleet-section" data-sharing><h3>Ligações privadas · preenchimento e assinaturas</h3><div class="fleet-bar">${[['editor','Enviar para preencher'],['from','Assinatura de quem entrega / devolve'],['to','Assinatura de quem recebe']].map(([key,label])=>`<button type="button" class="btn" data-action="create-link" data-purpose="${key}">${icon('link')}${label}</button>`).join('')}</div><div data-share-status class="fleet-small" role="status" aria-live="polite"></div><div data-share-output hidden><label class="fleet-small">Ligação privada<input readonly data-share-url aria-label="Ligação privada gerada"></label><div class="fleet-bar"><button type="button" class="btn" data-action="copy-share">${icon('copy')}Copiar</button><button type="button" class="btn" data-action="send-share">${icon('share-2')}Partilhar</button><span class="fleet-small" data-share-expiry></span></div></div><div class="fleet-bar"><button type="button" class="btn" data-action="refresh-shares">${icon('refresh-cw')}Atualizar assinaturas</button><button type="button" class="btn" data-action="revoke-links">${icon('x')}Cancelar ligações</button></div></section>`);
+    footer.insertAdjacentHTML('beforebegin',`<section class="fleet-section" data-sharing><h3>Ligações privadas · preenchimento e assinaturas</h3><div class="fleet-bar">${[['editor','Enviar para preencher e assinar'],['both','Enviar para as duas assinaturas']].map(([key,label])=>`<button type="button" class="btn" data-action="create-link" data-purpose="${key}">${icon('link')}${label}</button>`).join('')}</div><div data-share-status class="fleet-small" role="status" aria-live="polite"></div><div data-share-output hidden><label class="fleet-small">Ligação privada<input readonly data-share-url aria-label="Ligação privada gerada"></label><div class="fleet-bar"><button type="button" class="btn" data-action="copy-share">${icon('copy')}Copiar</button><button type="button" class="btn" data-action="send-share">${icon('share-2')}Partilhar</button><span class="fleet-small" data-share-expiry></span></div></div><div class="fleet-bar"><button type="button" class="btn" data-action="refresh-shares">${icon('refresh-cw')}Atualizar assinaturas</button><button type="button" class="btn" data-action="revoke-links">${icon('x')}Cancelar ligações</button></div></section>`);
     this.drawIcons();
     if(this.dialog.version)this.shareApi({action:'status',id:this.dialog.id}).then(value=>this.showShareStatus(value)).catch(error=>{const target=this.host.querySelector('[data-share-status]');if(target)target.textContent=error.message;});
   }
   showShareStatus(value){
     const target=this.host.querySelector('[data-share-status]');if(!target)return;
     if(value.handover?.id===this.dialog?.id && !value.session?.required){this.autoNameDefaults=true;this.updateKind();}
-    const labels={editor:'Preenchimento',from:'Entrega / devolve',to:'Recebe'};
+    const labels={editor:'Preenchimento e assinaturas',both:'Entrega e receção',from:'Entrega / devolve',to:'Recebe'};
     const receipts=(value.receipts || []).filter(r=>!r.invalidated_at);
     for(const party of signatureParties){
       const receipt=receipts.find(r=>r.purpose===party.role && value.session?.active && r.content_hash===value.session.content_hash && r.id===value.handover?.data.signature_receipts?.[party.role]?.id);
@@ -441,7 +441,7 @@ class Fleet {
     this.busy=true;const fieldset=this.host.querySelector('fieldset');
     try{
       await this.saveDraft();fieldset.disabled=true;this.status('A criar ligação privada…');
-      const result=await this.shareApi({action:'create',id:this.dialog.id,purpose});
+      const result=await this.shareApi({action:'create',id:this.dialog.id,purpose,shared:true});
       if(result.handover)this.openHandover(this.vehicle(result.handover.vehicle_id),result.handover);
       const output=this.host.querySelector('[data-share-output]');output.hidden=false;output.querySelector('[data-share-url]').value=result.url;output.querySelector('[data-share-expiry]').textContent='Válida até '+date(result.expires_at);
       this.status('Ligação privada criada');

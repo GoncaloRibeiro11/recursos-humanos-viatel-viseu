@@ -1,11 +1,11 @@
-import {createIcons,Download,Trash2,Check} from 'lucide';
+import {createIcons,Download,Trash2,Check,Share2,Copy} from 'lucide';
 import {mountRemoteEditor} from './rh-fleet.mjs';
 import {signaturePad} from './fleet-signature-pad.mjs';
 import {OPERATIONS,INSPECTION_GROUPS,driverName,handoverLabel} from './rh-fleet-model.mjs';
 const token=location.hash.slice(1),content=document.getElementById('remoteContent'),message=document.getElementById('remoteMessage');
 const esc=value=>String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date=value=>value && Number.isFinite(+new Date(value))?new Intl.DateTimeFormat('pt-PT',{timeZone:'Europe/Lisbon',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(value)):'—';
-const icons=()=>createIcons({icons:{Download,Trash2,Check}});
+const icons=()=>createIcons({icons:{Download,Trash2,Check,Share2,Copy}});
 async function call(action,values={},binary=false){
   const response=await fetch('/api/fleet-remote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,token,...values})});
   if(!response.ok){let data;try{data=await response.json();}catch{}throw new Error(data?.error || 'Não foi possível concluir o pedido. Tenta novamente.');}
@@ -29,8 +29,54 @@ function editor(value){
     if(name!=='rh_fleet_save_handover')return {error:{message:'Operação não permitida.'}};
     try{return {data:await call('save',{version:args.p_version,data:args.p_data})};}catch(error){return {error:{message:error.message}};}
   },storage:{from:()=>({list:async()=>{try{return {data:(await call('files')).files};}catch(error){return {error};}},upload:async(_path,file)=>{try{await call('upload',{image:await photoData(file)});return {};}catch(error){return {error};}},download:async path=>{try{return {data:await (await call('file',{name:path.split('/').pop()},true)).blob()};}catch(error){return {error};}}})}};
-  mountRemoteEditor({root:document.getElementById('fleetRoot'),getClient:()=>client,remoteFetch:async url=>call(url.includes('diagram=1')?'diagram':'pdf',{},true),onRemoteSubmit:async(version,data)=>{await call('submit',{version,data});completed({status:'submitted'});}},value);
+  mountRemoteEditor({root:document.getElementById('fleetRoot'),getClient:()=>client,remoteFetch:async url=>call(url.includes('diagram=1')?'diagram':'pdf',{},true),onRemoteSubmit:async(version,data)=>{const result=await call('submit',{version,data});if(result.shared_signing)sharedSigner(result);else completed({status:'submitted'});}},value);
   setMessage('');
+}
+let sharedTimer;
+function sharedSigner(value){
+  clearInterval(sharedTimer);document.getElementById('fleetRoot').innerHTML='';
+  document.getElementById('remotePurpose').textContent='Entrega e receção · assinaturas';
+  if(value.status==='closed'){
+    content.innerHTML='<h1>Auto fechado</h1><p class="remote-muted">As assinaturas recolhidas estão arquivadas no RH.</p>';setMessage('');return;
+  }
+  const p=value.payload,op=p.operation,parties=[['from',op.kind==='return'?'Quem devolve':'Quem entrega'],['to','Quem recebe']];
+  const receipts={...value.receipts};let available=true;
+  content.innerHTML=`<h1>Assinar auto · ${esc(p.vehicle.plate)}</h1><p class="remote-muted">FRO-${String(value.number).padStart(5,'0')} · ${esc(handoverLabel(op))}</p><dl class="remote-facts">${[['Viatura',p.vehicle.make_model],['Data / hora',date(op.at)],['Entrega',driverName(op,'from',p.from_person) || 'Por indicar'],['Recebe',driverName(op,'to',p.to_person) || 'Por indicar'],['Quilómetros',op.odometer==='' || op.odometer==null?'—':Number(op.odometer).toLocaleString('pt-PT')],['Combustível',op.fuel || '—']].map(([label,text])=>`<div><dt>${esc(label)}</dt><dd>${esc(text)}</dd></div>`).join('')}</dl><div class="remote-row"><button type="button" data-shared-pdf>${'<i data-lucide="download" aria-hidden="true"></i>'}Consultar auto PDF</button><button type="button" data-shared-copy><i data-lucide="copy" aria-hidden="true"></i>Copiar ligação</button><button type="button" data-shared-send><i data-lucide="share-2" aria-hidden="true"></i>Partilhar ligação</button></div><p class="remote-muted">Ligação válida até ${date(value.expires_at)}</p><p data-shared-status role="status" aria-live="polite"></p><div class="remote-signing-parties">${parties.map(([role,label])=>`<section class="remote-section" data-sign-party="${role}"><h2>${esc(label)}</h2><div data-party-content></div></section>`).join('')}</div><section class="remote-section remote-inspection"><h2>Inspeção</h2>${INSPECTION_GROUPS.map(group=>`<details><summary>${esc(group.label)}</summary><ul>${group.items.map(item=>`<li><span>${esc(item.label)}</span><strong>${esc(op.inspection?.[item.key] || 'Por verificar')}</strong></li>`).join('')}</ul></details>`).join('')}</section><p class="remote-notes">${esc(op.damage_notes || '')}${op.notes?'\n'+esc(op.notes):''}</p><section class="remote-section"><h2>Fotografias</h2><div class="remote-photos" data-shared-photos></div></section>`;
+  const updateStatus=()=>{content.querySelector('[data-shared-status]').textContent=receipts.from && receipts.to?'As duas assinaturas estão guardadas no servidor.':'Falta a assinatura de '+(receipts.from?'quem recebe':receipts.to?'quem entrega / devolve':'quem entrega / devolve e de quem recebe')+'.';};
+  const showReceipt=(role,receipt)=>{
+    const section=content.querySelector(`[data-sign-party="${role}"]`);if(!section)return;
+    section.querySelector('[data-party-content]').innerHTML=`<div class="remote-signed" role="status"><strong>Assinatura guardada</strong><span>${esc(receipt.signer_name)}</span><span class="remote-muted">${date(receipt.signed_at)}</span></div>`;
+  };
+  const mergeReceipts=result=>{for(const [role,receipt] of Object.entries(result.receipts || {})){if(!receipts[role]){receipts[role]=receipt;showReceipt(role,receipt);}}updateStatus();};
+  for(const [role,label] of parties){
+    if(receipts[role]){showReceipt(role,receipts[role]);continue;}
+    const section=content.querySelector(`[data-sign-party="${role}"]`),field=section.querySelector('[data-party-content]');
+    field.innerHTML=`<label>Nome completo de ${label.toLocaleLowerCase('pt')}<input data-party-name autocomplete="name" maxlength="120" required value="${esc(driverName(op,role,p[role==='from'?'from_person':'to_person']))}"></label><div class="remote-row"><button type="button" data-party-clear><i data-lucide="trash-2" aria-hidden="true"></i>Limpar assinatura</button></div><canvas data-party-signature class="remote-signature" width="900" height="360" aria-label="Assinatura de ${esc(label.toLocaleLowerCase('pt'))}" role="img"></canvas><label class="remote-check"><input type="checkbox" data-party-accept>Li o auto e confirmo que esta é a minha assinatura no campo “${esc(label)}”.</label><p data-party-message class="remote-error" role="alert"></p><button type="button" class="btn-primary" data-party-confirm disabled><i data-lucide="check" aria-hidden="true"></i>Guardar assinatura de ${esc(label.toLocaleLowerCase('pt'))}</button>`;
+    const name=field.querySelector('[data-party-name]'),accept=field.querySelector('[data-party-accept]'),button=field.querySelector('[data-party-confirm]');let busy=false;
+    const update=()=>{button.disabled=!available || busy || name.value.trim().length<2 || !accept.checked || !pad.value();};
+    const pad=signaturePad(field.querySelector('canvas'),{onChange:update});
+    name.addEventListener('input',update);accept.addEventListener('change',update);
+    field.querySelector('[data-party-clear]').onclick=()=>{pad.clear();accept.checked=false;update();};
+    button.onclick=async()=>{
+      if(busy || !available)return;busy=true;update();name.disabled=true;accept.disabled=true;
+      const message=field.querySelector('[data-party-message]');message.textContent='A guardar no servidor…';
+      try{mergeReceipts(await call('sign',{role,name:name.value.trim(),signature:pad.value(),content_hash:value.content_hash,accept:accept.checked}));}
+      catch(error){message.textContent=error.message;busy=false;name.disabled=false;accept.disabled=false;update();}
+    };
+  }
+  content.querySelector('[data-shared-copy]').onclick=async()=>{try{await navigator.clipboard.writeText(location.href);setMessage('Ligação copiada.');}catch{setMessage('Não foi possível copiar a ligação. Partilha o endereço desta página.',true);}};
+  content.querySelector('[data-shared-send]').onclick=async()=>{try{if(navigator.share)await navigator.share({title:'Auto de viatura',url:location.href});else window.open('https://wa.me/?text='+encodeURIComponent('Auto de viatura: '+location.href),'_blank','noopener,noreferrer');}catch(error){if(error.name!=='AbortError')setMessage('Não foi possível partilhar a ligação.',true);}};
+  content.querySelector('[data-shared-pdf]').onclick=async()=>{try{download(await (await call('pdf',{},true)).blob(),'auto-viatura.pdf');}catch(error){setMessage(error.message,true);}};
+  call('files').then(async result=>{
+    const photos=content.querySelector('[data-shared-photos]');
+    if(!result.files.length){photos.closest('section').hidden=true;return;}
+    for(const file of result.files){const response=await call('file',{name:file.name},true),url=URL.createObjectURL(await response.blob()),image=new Image();image.src=url;image.alt='Fotografia do auto';image.onload=()=>URL.revokeObjectURL(url);photos.append(image);}
+  }).catch(()=>{const photos=content.querySelector('[data-shared-photos]');if(photos)photos.textContent='Não foi possível carregar as fotografias.';});
+  sharedTimer=setInterval(async()=>{
+    if(document.visibilityState==='hidden' || navigator.onLine===false)return;
+    try{const result=await call('read');if(result.status==='closed'){available=false;clearInterval(sharedTimer);setMessage('O auto foi fechado no RH.');for(const field of content.querySelectorAll('input,button[data-party-confirm],button[data-party-clear]'))field.disabled=true;}else mergeReceipts(result);}catch(error){available=false;clearInterval(sharedTimer);setMessage(error.message,true);for(const button of content.querySelectorAll('[data-party-confirm]'))button.disabled=true;}
+  },20000);
+  updateStatus();icons();setMessage('');window.scrollTo({top:0});
 }
 function signer(value){
   const source=value.payload,op=source.operation,p={...source,from_person:{...source.from_person,name:driverName(op,'from',source.from_person) || 'Por indicar'},to_person:{...source.to_person,name:driverName(op,'to',source.to_person) || 'Por indicar'}},external=op.destination==='external_structure',role=value.purpose==='from'?(op.kind==='return' && !external?'Quem devolve':'Quem entrega'):(external?'Quem recebe noutra estrutura':op.kind==='return'?'Quem recebe a devolução':'Quem recebe');
@@ -70,7 +116,7 @@ function signer(value){
 async function start(){
   try{
     if(!/^[A-Za-z0-9_-]{43}$/.test(token))throw new Error('Ligação inválida ou incompleta. Pede uma nova ligação ao RH.');
-    const value=await call('read');if(value.status!=='open')completed(value);else if(value.purpose==='editor')editor(value);else signer(value);
+    const value=await call('read');if(value.shared_signing && value.purpose!=='editor')sharedSigner(value);else if(value.status!=='open')completed(value);else if(value.purpose==='editor')editor(value);else signer(value);
   }catch(error){setMessage(error.message,true);content.innerHTML='<h1>Ligação indisponível</h1>';}
 }
 start();

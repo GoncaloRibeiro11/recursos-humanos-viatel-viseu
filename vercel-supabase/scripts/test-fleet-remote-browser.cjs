@@ -7,6 +7,7 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
 (async()=>{
  const t=await createDb(),objects=new Map(),secret='local-test-server-key';let base,archived;
  const giverAbsence=process.env.TEST_GIVER_ABSENCE==='1',reconfirmMode=process.env.TEST_RECONFIRM==='1',regularization=process.env.TEST_REGULARIZATION==='1',absenceMode=process.env.TEST_SIGNATURE_ABSENCE==='1',deleteMode=process.env.TEST_DELETE==='1',initialState=process.env.TEST_INITIAL_STATE==='1' || deleteMode || regularization,external=process.env.TEST_EXTERNAL==='1',signatureOnly=process.env.TEST_SIGNATURE_ONLY==='1';
+ const sharedMode=process.env.TEST_SHARED_SIGNING==='1',reverse=process.env.TEST_SHARED_REVERSE==='1';
  let failStorageDeletion=deleteMode;
  let h=await t.draft(2,external?{kind:'return',destination:'external_structure',external_structure:'Estrutura de Teste',driver_fields:{from:{name:fromName},to:{name:toName}}}:regularization?{kind:'initial',to_person_id:'a'}:initialState?{kind:'temporary',to_person_id:'b',expected_return:new Date(Date.now()+86400000).toISOString()}:{});
  if(initialState || external){
@@ -21,6 +22,7 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
  await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261120_fleet_regularization.sql'),'utf8')));
  await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261120_fleet_signature_history.sql'),'utf8')));
  await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261120_fleet_giver_absence.sql'),'utf8')));
+ await t.run('postgres',t.admin,()=>t.db.exec(fs.readFileSync(path.resolve(__dirname,'../../supabase/migrations/20261123_fleet_shared_signing.sql'),'utf8')));
  const originalCustody=JSON.stringify(await t.query('select * from rh_fleet_custody where vehicle_id=$1',[t.uuid(1)]));
  const fetcher=async(url,options={})=>{
   const u=new URL(url),body=options.body && !Buffer.isBuffer(options.body)?JSON.parse(options.body):null;
@@ -120,9 +122,12 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
    assert.equal(await admin.locator('[name=external_structure]').inputValue(),'Estrutura de Teste');
    await admin.locator('.fleet-dialog').screenshot({path:path.join(output,'entrega-outra-estrutura-1440.png')});
   }
-  async function makeLink(role){const ready=admin.waitForResponse(response=>response.url().endsWith('/api/fleet-share') && response.request().postDataJSON()?.action==='create' && response.request().postDataJSON()?.purpose===role);await admin.locator(`[data-action=create-link][data-purpose=${role}]`).click();const response=await ready,value=await response.json();assert.equal(response.status(),200,JSON.stringify(value));await admin.waitForFunction(url=>document.querySelector('[data-share-url]')?.value===url,value.url);return new URL(value.url).hash;}
+  async function makeLink(role){
+   if(!sharedMode){const result=await service.manage({headers:{authorization:'Bearer admin-test-session'}},{action:'create',id:h.id,purpose:role});return new URL(result.url).hash;}
+   const ready=admin.waitForResponse(response=>response.url().endsWith('/api/fleet-share') && response.request().postDataJSON()?.action==='create' && response.request().postDataJSON()?.purpose===role);await admin.locator(`[data-action=create-link][data-purpose=${role}]`).click();const response=await ready,value=await response.json();assert.equal(response.status(),200,JSON.stringify(value));await admin.waitForFunction(url=>document.querySelector('[data-share-url]')?.value===url,value.url);return new URL(value.url).hash;
+  }
   const editorHash=await makeLink('editor');
-  const mobile=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,acceptDownloads:true});const editor=await mobile.newPage();editor.on('pageerror',error=>errors.push(error.message));
+  const mobile=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,acceptDownloads:true,permissions:['clipboard-read','clipboard-write']});const editor=await mobile.newPage();editor.on('pageerror',error=>errors.push(error.message));
   const requestUrls=[];editor.on('request',request=>requestUrls.push(request.url()));
   await editor.goto(base+'/auto-viatura.html'+editorHash);await editor.locator('[name=odometer]').waitFor();
   assert.equal(await editor.locator('[name=kind]').isDisabled(),true);assert.equal(await editor.locator('[data-sharing]').count(),0);assert.equal(await editor.locator('[data-signature]').count(),0);
@@ -141,7 +146,9 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
   assert.equal(await editor.locator('[name="driver.from.name"]').inputValue(),fromName);assert.equal(await editor.locator('[name="driver.to.name"]').inputValue(),toName);
   await editor.locator('[data-driver=name]').first().locator('xpath=../..').screenshot({path:path.join(output,'nomes-condutores-390.png')});
   await editor.screenshot({path:path.join(output,'preencher-390.png'),fullPage:true});
-  await editor.getByRole('button',{name:'Concluir preenchimento',exact:true}).click();await editor.getByRole('heading',{name:'Preenchimento enviado ao RH',exact:true}).waitFor();
+  await editor.getByRole('button',{name:'Concluir preenchimento',exact:true}).click();
+  if(sharedMode){await editor.locator('[data-sign-party=from]').waitFor();assert.equal(await editor.locator('[data-party-signature]').count(),2);assert.equal(await editor.locator('[data-party-confirm]:disabled').count(),2);}
+  else await editor.getByRole('heading',{name:'Preenchimento enviado ao RH',exact:true}).waitFor();
   assert.ok(requestUrls.every(url=>!url.includes(editorHash.slice(1))));
   await admin.getByRole('button',{name:'Atualizar assinaturas',exact:true}).click();await admin.locator('[data-sharing]').waitFor();
   await admin.waitForFunction(()=>document.querySelector('[name=odometer]')?.value==='145');
@@ -151,10 +158,20 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
    await admin.locator('[name=fuel]').selectOption('');await admin.locator('[name=checked]').uncheck();
    const item=admin.locator('[data-inspection=doc_dua]');await item.locator('xpath=ancestor::details').locator('summary').click();await item.selectOption('Mau');
   }
-  const fromHash=await makeLink('from'),toHash=await makeLink('to');
+  const fromHash=sharedMode?editorHash:await makeLink('from'),toHash=sharedMode?editorHash:await makeLink('to');
   await admin.locator('[data-sharing]').screenshot({path:path.join(output,'rh-ligacoes.png')});
-  async function sign(fragment,name,width){
+  async function sign(fragment,name,width,role){
    const page=await mobile.newPage();page.on('pageerror',error=>errors.push(error.message));await page.setViewportSize({width,height:900});await page.goto(base+'/auto-viatura.html'+fragment);
+   if(sharedMode){
+    const party=page.locator('[data-sign-party='+role+']');await party.locator('[data-party-name]').waitFor();assert.equal(await party.locator('[data-party-name]').inputValue(),name);assert.equal(await party.locator('[data-party-confirm]').isDisabled(),true);
+    if(width===320)await page.emulateMedia({colorScheme:'dark'});
+    const canvas=party.locator('canvas');await canvas.scrollIntoViewIfNeeded();const box=await canvas.boundingBox(),cdp=await mobile.newCDPSession(page),point=(x,y)=>({x:box.x+box.width*x,y:box.y+box.height*y});
+    await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point(.1,.6)]});for(const [x,y] of [[.2,.25],[.35,.75],[.5,.3],[.7,.65],[.85,.4]])await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[point(x,y)]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
+    await party.locator('[data-party-accept]').check();assert.equal(await party.locator('[data-party-confirm]').isEnabled(),true);assert.equal(await page.locator('body').evaluate(el=>el.scrollWidth<=window.innerWidth+1),true);
+    await page.screenshot({path:path.join(output,'link-unico-'+role+'-'+width+'.png'),fullPage:true});await party.locator('[data-party-confirm]').click();await party.getByText('Assinatura guardada',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Copiar ligação',exact:true}).click();assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),base+'/auto-viatura.html'+fragment);
+    await page.reload();await page.locator('[data-sign-party='+role+']').getByText('Assinatura guardada',{exact:true}).waitFor();return page;
+   }
    await page.locator('#remoteSignerName').waitFor();assert.equal(await page.locator('#remoteSignerName').inputValue(),name);assert.equal(await page.locator('#remoteSign').isDisabled(),true);
    assert.match(await page.locator('.remote-facts').innerText(),new RegExp(fromName));assert.match(await page.locator('.remote-facts').innerText(),new RegExp(toName));
    await page.waitForFunction(()=>document.querySelector('#remotePhotos img')?.naturalWidth>0);
@@ -171,7 +188,14 @@ const fromName='Manuel de Entrega Teste',toName='Ana de Rececao Teste';
    await page.locator('#remoteSign').click();await page.getByRole('heading',{name:'Assinatura registada',exact:true}).waitFor();
    await page.reload();await page.getByRole('heading',{name:'Assinatura registada',exact:true}).waitFor();return page;
   }
-  if(!giverAbsence)await sign(fromHash,fromName,390);if(!absenceMode)await sign(toHash,toName,320);
+  if(sharedMode){
+   const order=reverse?[['to',toName],['from',fromName]]:[['from',fromName],['to',toName]];
+   await sign(editorHash,order[0][1],390,order[0][0]);
+   assert.equal((await t.query('select * from rh_fleet_signature_receipts where handover_id=$1 and invalidated_at is null',[h.id])).length,1);
+   await sign(editorHash,order[1][1],320,order[1][0]);
+   await editor.reload();await editor.getByText('As duas assinaturas estão guardadas no servidor.',{exact:true}).waitFor();assert.equal(await editor.locator('[data-party-signature]').count(),0);
+   await editor.setViewportSize({width:1440,height:1000});await editor.screenshot({path:path.join(output,'link-unico-completo-1440.png'),fullPage:true});
+  }else{if(!giverAbsence)await sign(fromHash,fromName,390);if(!absenceMode)await sign(toHash,toName,320);}
   await admin.getByRole('button',{name:'Atualizar assinaturas',exact:true}).click();await admin.locator('[data-share-status]').getByText(new RegExp(giverAbsence?'^Recebe: '+toName:'^Entrega / devolve: '+fromName)).waitFor();
   if(reconfirmMode){
    const previous=(await t.query('select * from rh_fleet_handovers where id=$1',[h.id]))[0];

@@ -3,6 +3,42 @@ const require=createRequire(import.meta.url);
 const {createFleetShares,imageData,hash,safePatch}=require('../lib/fleet-shares.cjs');
 const {createCanvas}=require('@napi-rs/canvas');
 const id='10000000-0000-4000-8000-000000000002',token='a'.repeat(43),secret='server-only-test-key';
+test('mesma ligacao guarda cada papel no servidor sem permitir editar o conteudo depois de concluir',async()=>{
+  const calls=[],canvas=createCanvas(900,360),ctx=canvas.getContext('2d');ctx.fillRect(30,40,150,20);
+  let current={shared_signing:true,purpose:'both',status:'open',content_hash:'version-hash',handover:{id,version:3},payload:{}};
+  const service=createFleetShares({env:{SUPABASE_SERVICE_ROLE_KEY:secret},fetcher:async(url,options)=>{
+    const body=JSON.parse(options.body);calls.push({url,body});
+    if(url.endsWith('/rh_fleet_read_share'))return Response.json(current);
+    if(url.endsWith('/rh_fleet_remote_shared_sign'))return Response.json({...current,receipts:{[body.p_role]:{signer_name:body.p_name}}});
+    if(url.endsWith('/rh_fleet_submit_shared'))return Response.json(current);
+    throw new Error('Unexpected route '+url);
+  }});
+  for(const role of ['from','to']){
+    const result=await service.remote({action:'sign',token,role,name:'Pessoa teste',signature:canvas.toDataURL('image/png'),content_hash:'version-hash',accept:true,id:'another-auto'});
+    assert.equal(result.receipts[role].signer_name,'Pessoa teste');const sent=calls.at(-1).body;assert.equal(sent.p_role,role);assert.equal(sent.p_hash,hash(token));assert.equal(sent.p_id,undefined);
+  }
+  await assert.rejects(service.remote({action:'sign',token,role:'zone'}),error=>error.status===400);
+  for(const action of ['save','upload','reconfirm'])await assert.rejects(service.remote({action,token,version:3,data:{notes:'change'}}),error=>error.status===403);
+  await service.remote({action:'submit',token,version:3,data:{notes:'unchanged',signatures:{from:'injected'}}});assert.equal(calls.at(-1).body.p_patch.signatures,undefined);
+  current={...current,purpose:'editor'};await assert.rejects(service.remote({action:'sign',token,role:'to'}),error=>error.status===403);
+  current={...current,purpose:'both',status:'closed'};await assert.rejects(service.remote({action:'sign',token,role:'to'}),error=>error.status===403);
+});
+test('ligacao partilhada tem 30 dias, e so o administrador a pode gerar',async()=>{
+  const calls=[],now=new Date('2026-11-23T12:00:00Z');
+  const service=createFleetShares({env:{SUPABASE_SERVICE_ROLE_KEY:secret},now:()=>now,fetcher:async(url,options)=>{
+    const body=options.body?JSON.parse(options.body):null;calls.push({url,body});
+    if(url.endsWith('/auth/v1/user'))return Response.json({id:'admin'});
+    if(url.includes('/user_profiles?'))return Response.json([{role:'admin'}]);
+    if(url.endsWith('/rh_fleet_prepare_share'))return Response.json({handover:{id,status:'draft',data:{}}});
+    if(url.endsWith('/rh_fleet_create_shared_share'))return Response.json({id:'link',purpose:'editor',expires_at:body.p_expires});
+    if(url.endsWith('/rh_fleet_share_status'))return Response.json({handover:{id,status:'draft',version:2}});
+    throw new Error('Unexpected route');
+  }});
+  const result=await service.manage({headers:{authorization:'Bearer admin'}},{action:'create',id,purpose:'editor',shared:true});
+  const sent=calls.find(call=>call.url.endsWith('/rh_fleet_create_shared_share')).body;
+  assert.equal(sent.p_expires,'2026-12-23T12:00:00.000Z');assert.equal(sent.p_editable,true);assert.equal(sent.p_hash,hash(new URL(result.url).hash.slice(1)));
+  await assert.rejects(service.manage({headers:{}},{action:'create',id,purpose:'both'}),error=>error.status===401);
+});
 test('reconfirmar assinatura exige aceitacao e envia apenas a referencia, nunca uma imagem escolhida pelo cliente',async()=>{
   let purpose='to',status='open';const calls=[];
   const service=createFleetShares({env:{SUPABASE_SERVICE_ROLE_KEY:secret},fetcher:async(url,options)=>{
