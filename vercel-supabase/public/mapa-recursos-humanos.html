@@ -1322,6 +1322,7 @@
     justify-content: center;
     background: #f3f6fb;
     padding: 18px;
+    overflow-y: auto;
   }
   .auth-overlay.open { display: flex; }
   .auth-card {
@@ -1330,6 +1331,8 @@
     border-radius: 14px;
     padding: 28px;
     box-shadow: 0 24px 70px rgba(0,0,0,.28);
+    margin: auto 0;
+    flex-shrink: 0;
   }
   .auth-brand {
     display: flex;
@@ -1342,7 +1345,7 @@
   .auth-card p { margin: 6px 0 0; font-size: 13px; color: var(--text-muted); line-height: 1.45; }
   .auth-form { display: grid; gap: 12px; }
   .auth-form label { display: grid; gap: 6px; font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
-  .auth-form input { height: 42px; border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 15px; }
+  .auth-form input { height: 42px; border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 16px; }
   .auth-error { min-height: 18px; color: #dc2626; font-size: 12px; }
   .auth-user {
     position: relative;
@@ -1520,12 +1523,12 @@
         <p>Usa a conta autorizada para veres a informação disponível para ti.</p>
       </div>
     </div>
-    <div class="auth-form">
-      <label>Email <input id="authEmail" type="email" autocomplete="username" placeholder="email@exemplo.pt"></label>
-      <label>Password <input id="authPassword" type="password" autocomplete="current-password" placeholder="Password"></label>
-      <div class="auth-error" id="authError"></div>
-      <button class="btn btn-primary" onclick="supabaseLogin()">Entrar</button>
-    </div>
+    <form class="auth-form" id="authForm" onsubmit="event.preventDefault(); supabaseLogin();">
+      <label>Email <input id="authEmail" type="email" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" enterkeyhint="next" placeholder="email@exemplo.pt" required></label>
+      <label>Password <input id="authPassword" type="password" autocomplete="current-password" enterkeyhint="go" placeholder="Password" required></label>
+      <div class="auth-error" id="authError" role="status" aria-live="polite"></div>
+      <button class="btn btn-primary" id="authSubmit" type="submit">Entrar</button>
+    </form>
   </div>
 </div>
 
@@ -3630,6 +3633,7 @@ const BACKUP_KEY = 'mapa-coordenacao-2026-backup';
 const THEME_KEY = 'mapa-rh-theme';
 let serverSyncTimer = null;
 let supabaseClient = null;
+let authLoginBusy = false;
 let supabaseReady = false;
 let currentProfile = null;
 let rhSync = null;
@@ -4036,10 +4040,7 @@ async function initSupabaseApp(){
   }
 }
 async function supabaseLogin(){
-  if (!supabaseClient){
-    await initSupabaseApp();
-    if (!supabaseClient) return;
-  }
+  if (authLoginBusy) return;
   const email = document.getElementById('authEmail')?.value.trim();
   const password = document.getElementById('authPassword')?.value;
   const err = document.getElementById('authError');
@@ -4048,7 +4049,15 @@ async function supabaseLogin(){
     if (err) err.textContent = 'Preenche email e password.';
     return;
   }
+  authLoginBusy = true;
+  const button = document.getElementById('authSubmit');
+  if (button){ button.disabled = true; button.textContent = 'A entrar…'; }
+  document.getElementById('authForm')?.setAttribute('aria-busy', 'true');
   try {
+    if (!supabaseClient){
+      await initSupabaseApp();
+      if (!supabaseClient) return;
+    }
     const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error){
       const message = String(error.message || '').toLowerCase();
@@ -4065,10 +4074,15 @@ async function supabaseLogin(){
       }
       return;
     }
+    document.getElementById('authPassword').value = '';
     await loadSupabaseSession();
   } catch (error) {
     console.error('Falha ao entrar no Supabase:', error);
     if (err) err.textContent = 'O serviço RH está temporariamente indisponível. Confirma se o projeto Supabase está ativo.';
+  } finally {
+    authLoginBusy = false;
+    if (button){ button.disabled = false; button.textContent = 'Entrar'; }
+    document.getElementById('authForm')?.removeAttribute('aria-busy');
   }
 }
 async function supabaseLogout(){

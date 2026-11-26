@@ -12,7 +12,7 @@
 </header>
 <main class="portal-main">
  <p id="status" role="status" aria-live="polite">A carregar…</p>
- <form id="login" hidden><label>Email<input id="email" type="email" autocomplete="username" required></label><label>Password<input id="password" type="password" autocomplete="current-password" required></label><button type="submit">Entrar</button></form>
+ <form id="login" hidden><label>Email<input id="email" type="email" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" enterkeyhint="next" required></label><label>Password<input id="password" type="password" autocomplete="current-password" enterkeyhint="go" required></label><button id="loginSubmit" type="submit">Entrar</button></form>
  <section id="admin" class="import-band" hidden>
   <details><summary>Importar mapas e associar acessos</summary><p>Selecione o ficheiro de importação preparado a partir dos mapas. Confirme a pessoa RH correspondente a cada NIF antes de gravar.</p><input id="importFile" type="file" accept=".json"><div id="mapping"></div><button id="importSave" type="button" hidden>Confirmar associações e importar</button></details>
  </section>
@@ -21,7 +21,8 @@
   <iframe id="reportFrame" title="Histórico de comissões" sandbox="allow-scripts allow-downloads allow-modals" referrerpolicy="no-referrer" hidden></iframe>
  </section>
 </main>
-<dialog id="passwordDialog" aria-labelledby="passwordTitle">
+<div id="passwordBackdrop" hidden></div>
+<dialog id="passwordDialog" aria-labelledby="passwordTitle" aria-modal="true" hidden>
  <h2 id="passwordTitle">Alterar password</h2>
  <form id="passwordForm">
   <label>Nova password<input id="newPassword" name="new-password" type="password" autocomplete="new-password" minlength="12" required></label>

@@ -1,10 +1,16 @@
 'use strict';
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let client,profile,metadata=[],pending,revision=0,passwordBusy=false,views=[],assetsPromise;
+let client,profile,metadata=[],pending,revision=0,passwordBusy=false,views=[],assetsPromise,loginBusy=false;
 function status(text){$('status').textContent=text;}
+function closePasswordDialog(){
+ const dialog=$('passwordDialog');
+ if(typeof dialog.close==='function')dialog.close();
+ dialog.hidden=true;dialog.removeAttribute('open');dialog.classList.remove('fallback');$('passwordBackdrop').hidden=true;
+ $('passwordForm').reset();$('passwordStatus').textContent='';
+}
 function clear(){
  revision++;profile=null;metadata=[];pending=null;views=[];passwordBusy=false;
- $('passwordOpen').hidden=true;$('logout').hidden=true;$('passwordDialog').close();$('passwordForm').reset();$('passwordStatus').textContent='';
+ $('passwordOpen').hidden=true;$('logout').hidden=true;closePasswordDialog();
  $('importSave').hidden=true;$('importFile').value='';$('mapping').innerHTML='';$('reportScope').innerHTML='';$('reportFrame').srcdoc='';$('reportFrame').hidden=true;$('app').hidden=true;$('admin').hidden=true;
 }
 async function checked(query){const result=await query;if(result.error)throw result.error;return result.data;}
@@ -43,7 +49,13 @@ async function load(){
  $('reportScope').value=(views.find(v=>v.id===preferred)||views.find(v=>v.kind==='team')||views[0]).id;
  $('app').hidden=false;await showReport();
 }
-$('login').onsubmit=async event=>{event.preventDefault();try{await checked(client.auth.signInWithPassword({email:$('email').value,password:$('password').value}));$('password').value='';await load();}catch(error){clear();$('login').hidden=false;status(error.message);}};
+$('login').onsubmit=async event=>{
+ event.preventDefault();if(loginBusy||!client)return;loginBusy=true;
+ const button=$('loginSubmit');button.disabled=true;button.textContent='A entrar…';$('login').setAttribute('aria-busy','true');status('A entrar…');
+ try{await checked(client.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value}));$('password').value='';await load();}
+ catch(error){clear();$('login').hidden=false;status(error.message);}
+ finally{loginBusy=false;button.disabled=false;button.textContent='Entrar';$('login').removeAttribute('aria-busy');}
+};
 $('logout').onclick=async()=>{await client.auth.signOut();clear();$('login').hidden=false;status('Sessão terminada.');};
 $('reportScope').onchange=()=>showReport().catch(error=>status(error.message));
 $('reload').onclick=()=>load().catch(error=>status(error.message));
@@ -51,11 +63,24 @@ $('passwordOpen').onclick=()=>{
  if(!profile)return;
  $('passwordForm').reset();$('passwordStatus').textContent='';$('passwordStatus').className='';
  for(const field of $('passwordForm').elements)field.disabled=false;
- $('passwordDialog').showModal();$('newPassword').focus();
+ const dialog=$('passwordDialog');dialog.hidden=false;
+ if(typeof dialog.showModal==='function')dialog.showModal();
+ else{dialog.setAttribute('open','');dialog.classList.add('fallback');$('passwordBackdrop').hidden=false;}
+ $('newPassword').focus();
 };
-$('passwordClose').onclick=()=>{if(!passwordBusy)$('passwordDialog').close();};
+$('passwordClose').onclick=()=>{if(!passwordBusy)closePasswordDialog();};
+$('passwordBackdrop').onclick=()=>{if(!passwordBusy)closePasswordDialog();};
 $('passwordDialog').addEventListener('cancel',e=>{if(passwordBusy)e.preventDefault();});
-$('passwordDialog').addEventListener('close',()=>{$('passwordForm').reset();$('passwordStatus').textContent='';});
+$('passwordDialog').addEventListener('close',()=>{$('passwordDialog').hidden=true;$('passwordForm').reset();$('passwordStatus').textContent='';});
+$('passwordDialog').addEventListener('keydown',e=>{
+ if(!$('passwordDialog').classList.contains('fallback'))return;
+ if(e.key==='Escape'){e.preventDefault();if(!passwordBusy)closePasswordDialog();}
+ if(e.key==='Tab'){
+  const fields=[...$('passwordForm').elements].filter(x=>!x.disabled),first=fields[0],last=fields[fields.length-1];
+  if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}
+  else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}
+ }
+});
 $('passwordForm').onsubmit=async e=>{
  e.preventDefault();if(!profile||passwordBusy)return;
  const password=$('newPassword').value,confirm=$('confirmPassword').value,message=$('passwordStatus');
