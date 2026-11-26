@@ -20,7 +20,13 @@ def prepare(root):
         data = json.loads((base / filename).read_text(encoding='utf-8'))
         for team, months in data.items():
             for month, m in months.items():
+                # A team may contain another person with a chief role (promotion).
+                # Prefer the explicit team chief. New teams without a chief detail
+                # column have no flag: require exactly one chief role in that case.
                 chiefs = [p['id'][1:] for p in m['people'] if p.get('chief')]
+                if not chiefs:
+                    chiefs = [p['id'][1:] for p in m['people']
+                              if p.get('role', '').startswith('Chefe')]
                 assert len(chiefs) <= 1, (filename, month, 'Ambiguous chief')
                 for p in m['people']:
                     nif = p['id'][1:]
