@@ -1,12 +1,12 @@
 'use strict';
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),money=v=>new Intl.NumberFormat('pt-PT',{style:'currency',currency:'EUR'}).format(v||0);
-let client,profile,rows=[],pending,revision=0;
+let client,profile,rows=[],pending,revision=0,passwordBusy=false;
 function status(s){$('status').textContent=s;}
-function clear(){revision++;profile=null;rows=[];pending=null;$('importSave').hidden=true;$('importFile').value='';$('reports').innerHTML='';$('mapping').innerHTML='';$('app').hidden=true;$('admin').hidden=true;}
+function clear(){revision++;profile=null;rows=[];pending=null;passwordBusy=false;$('passwordOpen').hidden=true;$('passwordDialog').close();$('passwordForm').reset();$('passwordStatus').textContent='';$('importSave').hidden=true;$('importFile').value='';$('reports').innerHTML='';$('mapping').innerHTML='';$('app').hidden=true;$('admin').hidden=true;}
 async function checked(q){const r=await q;if(r.error)throw r.error;return r.data;}
 async function load(){clear();const ticket=revision;const {data:{session}}=await client.auth.getSession();if(ticket!==revision)return;$('login').hidden=!!session;if(!session){status('Entre com o seu acesso RH.');return;}
  const nextProfile=await checked(client.from('user_profiles').select('role,person_id').eq('user_id',session.user.id).single());
- if(ticket!==revision)return;profile=nextProfile;const list=await allRows(()=>client.from('rh_commissions').select('period,owner_nif,source_name,total').order('period',{ascending:false}).order('owner_nif'));if(ticket!==revision)return;
+ if(ticket!==revision)return;profile=nextProfile;$('passwordOpen').hidden=false;const list=await allRows(()=>client.from('rh_commissions').select('period,owner_nif,source_name,total').order('period',{ascending:false}).order('owner_nif'));if(ticket!==revision)return;
  $('period').innerHTML=[...new Set(list.map(x=>x.period))].map(v=>`<option>${esc(v)}</option>`).join('');$('app').hidden=false;$('admin').hidden=profile.role!=='admin';if(!list.length){status('Ainda não existem comissões disponíveis para este acesso.');return;}await month();}
 async function allRows(makeQuery){const result=[];for(let offset=0;;){const page=await checked(makeQuery().range(offset,offset+99));result.push(...page);if(!page.length)return result;offset+=page.length;}}
 async function month(){const ticket=++revision;rows=[];$('reports').innerHTML='';status('A carregar o mês…');const next=await allRows(()=>client.from('rh_commissions').select('*').eq('period',$('period').value).order('owner_nif'));if(ticket!==revision)return;rows=next;$('person').innerHTML='<option value="all">Todas as pessoas autorizadas</option>'+rows.map(r=>`<option value="${esc(r.owner_nif)}">${esc(r.source_name)}</option>`).join('');status('Valores do mapa de pagamentos. O detalhe VP inclui valores negativos.');render();}
@@ -18,6 +18,29 @@ function card(r,query=''){const m=r.payload,p=m.people[0],groups=new Map();for(c
 function render(){const selected=rows.filter(r=>$('person').value==='all'||r.owner_nif===$('person').value);$('summary').textContent=selected.length+' pessoa(s) · Total do mês: '+money(selected.reduce((s,r)=>s+r.total,0));$('reports').innerHTML=selected.map(r=>card(r,$('search').value.toLowerCase())).join('');}
 $('login').onsubmit=async e=>{e.preventDefault();try{await checked(client.auth.signInWithPassword({email:$('email').value,password:$('password').value}));$('password').value='';await load();}catch(e){clear();status(e.message);}};
 $('logout').onclick=async()=>{await client.auth.signOut();clear();$('login').hidden=false;status('Sessão terminada.');};$('period').onchange=()=>month().catch(e=>status(e.message));$('person').onchange=render;$('search').oninput=render;
+$('passwordOpen').onclick=()=>{
+ if(!profile)return;
+ $('passwordForm').reset();$('passwordStatus').textContent='';$('passwordStatus').className='';
+ for(const field of $('passwordForm').elements)field.disabled=false;
+ $('passwordDialog').showModal();$('newPassword').focus();
+};
+$('passwordClose').onclick=()=>{if(!passwordBusy)$('passwordDialog').close();};
+$('passwordDialog').addEventListener('cancel',e=>{if(passwordBusy)e.preventDefault();});
+$('passwordDialog').addEventListener('close',()=>{$('passwordForm').reset();$('passwordStatus').textContent='';});
+$('passwordForm').onsubmit=async e=>{
+ e.preventDefault();if(!profile||passwordBusy)return;
+ const password=$('newPassword').value,confirm=$('confirmPassword').value,message=$('passwordStatus');
+ message.className='error';
+ if(password.length<12){message.textContent='A password deve ter pelo menos 12 caracteres.';return;}
+ if(password!==confirm){message.textContent='As passwords não coincidem.';return;}
+ const owner=profile;passwordBusy=true;message.textContent='A guardar…';
+ for(const field of $('passwordForm').elements)field.disabled=true;
+ try{
+  await checked(client.auth.updateUser({password}));if(profile!==owner)return;
+  $('passwordForm').reset();message.className='success';message.textContent='Password alterada.';
+ }catch(error){if(profile===owner)message.textContent=error.message||'Não foi possível alterar a password.';}
+ finally{if(profile===owner){passwordBusy=false;for(const field of $('passwordForm').elements)field.disabled=false;}}
+};
 $('export').onclick=async()=>{try{const nif=$('person').value;if(nif==='all')return status('Escolha uma pessoa para exportar.');const ticket=revision;const data=await allRows(()=>client.from('rh_commissions').select('*').eq('owner_nif',nif).order('period',{ascending:false}));if(ticket!==revision)return;const page='<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Comissões pessoais</title><style>'+document.querySelector('style').textContent+'</style><main>'+data.map(r=>card(r)).join('')+'</main>';const url=URL.createObjectURL(new Blob([page],{type:'text/html'})),a=document.createElement('a');a.href=url;a.download='Comissoes_'+nif+'.html';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}catch(e){status(e.message);}};
 $('importFile').onchange=async()=>{try{pending=null;$('importSave').hidden=true;if(!$('importFile').files.length)return;const parsed=CommissionModel.validateImport(JSON.parse(await $('importFile').files[0].text()));pending=parsed;const people=await allRows(()=>client.from('rh_persons').select('id,name').order('id'));const known=await checked(client.from('rh_commission_identities').select('*'));$('mapping').innerHTML=pending.identities.map(i=>`<p>${esc(i.source_name)} · ${esc(i.nif)} <select data-nif="${esc(i.nif)}"><option value="">Manter acesso existente / não criar novo</option>${people.map(p=>`<option value="${esc(p.id)}" ${known.some(k=>k.nif===i.nif&&k.person_id===p.id)?'selected':''}>${esc(p.name)}</option>`).join('')}</select></p>`).join('');$('importSave').hidden=false;status(pending.rows.length+' pagamentos mensais prontos para conferência. Sem associação anterior ou nova, apenas o administrador terá acesso. Uma associação existente é mantida se não escolher outra.');}catch(e){pending=null;status(e.message);}};
 $('importSave').onclick=async()=>{if(!pending)return;const button=$('importSave');button.disabled=true;try{const ids=[...document.querySelectorAll('[data-nif]')].filter(x=>x.value).map(x=>({nif:x.dataset.nif,person_id:x.value,source_name:pending.identities.find(i=>i.nif===x.dataset.nif).source_name}));if(new Set(ids.map(i=>i.person_id)).size!==ids.length)throw Error('A mesma pessoa RH foi associada a mais de um NIF.');if(ids.length)await checked(client.from('rh_commission_identities').upsert(ids));for(let i=0;i<pending.rows.length;i+=20)await checked(client.from('rh_commissions').upsert(pending.rows.slice(i,i+20),{onConflict:'period,owner_nif'}));await load();status('Importação concluída.');}catch(e){status('Importação não concluída: '+e.message+' Pode repetir sem duplicar pagamentos.');}finally{button.disabled=false;}};

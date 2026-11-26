@@ -14,7 +14,10 @@
    keys.add(k);
    if(r.chief_nif!==null&&!ids.has(r.chief_nif))throw Error('Chefe de equipa sem identidade.');
    if(p?.people?.length!==1||p.people[0].id!==owner||p.people[0].total!==r.total)throw Error('O pagamento não corresponde à pessoa.');
-   if(!Array.isArray(p.people[0].rubrics)||Math.abs(p.people[0].rubrics.reduce((s,x)=>s+x.amount,0)-r.total)>.005)throw Error('As rubricas não correspondem ao total.');
+   const rubrics=p.people[0].rubrics;
+   if(!Array.isArray(rubrics)||rubrics.some(x=>!x||!Number.isFinite(x.amount)))throw Error('Cada rubrica deve ter um valor numérico válido.');
+   const sum=rubrics.reduce((s,x)=>s+x.amount,0);
+   if(!Number.isFinite(sum)||Math.abs(sum-r.total)>.005)throw Error('As rubricas não correspondem ao total.');
    for(const f of fields)if(!Array.isArray(p[f])||p[f].some(x=>x.owner!==owner))throw Error('O detalhe contém dados de outra pessoa.');
   }
   return data;

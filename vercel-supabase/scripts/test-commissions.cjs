@@ -11,11 +11,21 @@ test('import rejects cross-person detail, conflicting totals and duplicate payme
  const b=data();b.rows.push(row());assert.throws(()=>validateImport(b),/repetido/);
 });
 test('client summary deduplicates VP source rows, preserves negative credits and escapes names',()=>{
- const elements=new Map(),document={getElementById:id=>{if(!elements.has(id))elements.set(id,{});return elements.get(id);}};
+ const elements=new Map(),document={getElementById:id=>{if(!elements.has(id))elements.set(id,{addEventListener(){}});return elements.get(id);}};
  const code=fs.readFileSync(path.join(__dirname,'../public/comissoes.js'),'utf8');
  const context=vm.createContext({document,Intl,console});vm.runInContext(code.slice(0,code.lastIndexOf('(async()=>'))+'\nthis.card=card;this.vp=vp;',context);
  const r=row(),base={owner:'p100000001',period:'Novembro 2026',nif:'200000001',client:'<img src=x onerror=alert(1)>',service:'TV',sale:'1',amount:10};
  r.payload.records=[{...base,line:1,credits:2},{...base,line:1,credits:2},{...base,line:2,credits:-.5}];
  assert.equal(context.vp(r.payload.records),1.5);
  const html=context.card(r);assert.ok(!html.includes('<img'));assert.ok(html.includes('&lt;img'));assert.ok(html.includes('1,5 VP'));assert.ok(html.includes('<details>'));
+});
+test('rubrics require finite numeric amounts before totals are compared',()=>{
+ for(const amount of [undefined,null,'20','',NaN,Infinity,-Infinity]){
+  const d=data();d.rows[0].payload.people[0].rubrics=[{label:'Comissão',amount}];assert.throws(()=>validateImport(d),/numérico/);
+ }
+ const missing=data();missing.rows[0].payload.people[0].rubrics=[{label:'Sem valor'}];assert.throws(()=>validateImport(missing),/numérico/);
+ const empty=data();empty.rows[0].payload.people[0].rubrics=[null];assert.throws(()=>validateImport(empty),/numérico/);
+ const overflow=data();overflow.rows[0].payload.people[0].rubrics=[{amount:Number.MAX_VALUE},{amount:Number.MAX_VALUE}];assert.throws(()=>validateImport(overflow),/total/);
+ const valid=data();valid.rows[0].payload.people[0].rubrics=[{label:'Positivo',amount:25},{label:'Acerto',amount:-5},{label:'Zero',amount:0}];assert.equal(validateImport(valid),valid);
+ const decimals=data();decimals.rows[0].payload.people[0].rubrics=[{amount:19.9},{amount:.1}];assert.equal(validateImport(decimals),decimals);
 });

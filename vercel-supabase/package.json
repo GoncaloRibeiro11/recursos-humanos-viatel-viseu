@@ -3,7 +3,9 @@
   "scripts": {
     "build": "node scripts/build-photo-background.mjs",
     "prepare:team-history": "node scripts/build-team-history-install.mjs",
-    "test": "node --test scripts/test-rh-sync.mjs scripts/test-rh-movements.mjs scripts/test-rh-team-history.mjs scripts/test-rh-analytics.mjs scripts/test-telegram.mjs scripts/test-fleet.mjs scripts/test-fleet-shares.mjs scripts/test-fleet-photos.mjs scripts/test-oop.mjs",
+    "test": "node --test scripts/test-rh-sync.mjs scripts/test-rh-movements.mjs scripts/test-rh-team-history.mjs scripts/test-rh-analytics.mjs scripts/test-telegram.mjs scripts/test-fleet.mjs scripts/test-fleet-shares.mjs scripts/test-fleet-photos.mjs scripts/test-oop.mjs scripts/test-commissions.cjs",
+    "test:commissions:sql": "node scripts/test-commissions-sql.cjs",
+    "test:commissions:browser": "node scripts/test-commissions-browser.cjs",
     "test:fleet:sql": "node scripts/test-fleet-sql.cjs",
     "test:fleet:condition:sql": "node scripts/test-fleet-condition-sql.cjs",
     "test:oop": "node --test scripts/test-oop.mjs",
