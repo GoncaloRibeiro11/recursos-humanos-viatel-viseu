@@ -1,23 +1,52 @@
 'use strict';
-const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),money=v=>new Intl.NumberFormat('pt-PT',{style:'currency',currency:'EUR'}).format(v||0);
-let client,profile,rows=[],pending,revision=0,passwordBusy=false;
-function status(s){$('status').textContent=s;}
-function clear(){revision++;profile=null;rows=[];pending=null;passwordBusy=false;$('passwordOpen').hidden=true;$('passwordDialog').close();$('passwordForm').reset();$('passwordStatus').textContent='';$('importSave').hidden=true;$('importFile').value='';$('reports').innerHTML='';$('mapping').innerHTML='';$('app').hidden=true;$('admin').hidden=true;}
-async function checked(q){const r=await q;if(r.error)throw r.error;return r.data;}
-async function load(){clear();const ticket=revision;const {data:{session}}=await client.auth.getSession();if(ticket!==revision)return;$('login').hidden=!!session;if(!session){status('Entre com o seu acesso RH.');return;}
- const nextProfile=await checked(client.from('user_profiles').select('role,person_id').eq('user_id',session.user.id).single());
- if(ticket!==revision)return;profile=nextProfile;$('passwordOpen').hidden=false;const list=await allRows(()=>client.from('rh_commissions').select('period,owner_nif,source_name,total').order('period',{ascending:false}).order('owner_nif'));if(ticket!==revision)return;
- $('period').innerHTML=[...new Set(list.map(x=>x.period))].map(v=>`<option>${esc(v)}</option>`).join('');$('app').hidden=false;$('admin').hidden=profile.role!=='admin';if(!list.length){status('Ainda não existem comissões disponíveis para este acesso.');return;}await month();}
-async function allRows(makeQuery){const result=[];for(let offset=0;;){const page=await checked(makeQuery().range(offset,offset+99));result.push(...page);if(!page.length)return result;offset+=page.length;}}
-async function month(){const ticket=++revision;rows=[];$('reports').innerHTML='';status('A carregar o mês…');const next=await allRows(()=>client.from('rh_commissions').select('*').eq('period',$('period').value).order('owner_nif'));if(ticket!==revision)return;rows=next;$('person').innerHTML='<option value="all">Todas as pessoas autorizadas</option>'+rows.map(r=>`<option value="${esc(r.owner_nif)}">${esc(r.source_name)}</option>`).join('');status('Valores do mapa de pagamentos. O detalhe VP inclui valores negativos.');render();}
-
-function vp(rs){return [...new Map(rs.map(r=>[r.period+'|'+r.line,r.credits])).values()].reduce((s,x)=>s+(typeof x==='number'?x:0),0);}
-function card(r,query=''){const m=r.payload,p=m.people[0],groups=new Map();for(const x of m.records||[]){if(!groups.has(x.nif))groups.set(x.nif,[]);groups.get(x.nif).push(x);}
- const fields=xs=>(xs||[]).map(x=>`<p>${esc(x.label)}: <b>${esc(x.value??'Não indicado')}</b></p>`).join('');
- return `<article><h2>${esc(r.source_name)} · ${money(r.total)}</h2><p>${esc(m.period)}</p><details><summary>Composição</summary>${p.rubrics.map(x=>`<p>${esc(x.label)}: ${money(x.amount)}</p>`).join('')}</details>${[...(m.productionVdd||[]),...(m.productionChe||[])].map(x=>`<details><summary>${esc(x.sheet)}</summary>${x.sourceTeam?`<p>Equipa indicada no resumo de produção: ${esc(x.sourceTeam)}</p>`:''}${fields(x.metrics)}${fields(x.criteria)}</details>`).join('')}<details><summary>Acertos e diversos</summary>${(m.adjustments||[]).map(x=>`<p>${esc(x.description)}: ${money(x.amount)}${x.notes?` · ${esc(x.notes)}`:''}</p>`).join('')||'Sem registos.'}</details>${(m.checks||[]).filter(x=>Math.abs(x.difference)>.01).map(x=>`<p class="error">Diferença já existente no mapa entre pagamento e detalhe: ${money(x.difference)}. Foram mantidos os valores de origem.</p>`).join('')}${m.personalNotice?`<p>${esc(m.personalNotice)}</p>`:''}${[...groups].filter(([n,a])=>!query||JSON.stringify(a).toLowerCase().includes(query)).map(([n,a])=>`<details><summary>NIF ${esc(n)} · ${esc(a[0].client)} · ${vp(a).toLocaleString('pt-PT')} VP · ${money(a.reduce((s,x)=>s+x.amount,0))}</summary><div class="scroll"><table><tr><th>Serviço / OV</th><th>Origem</th><th>VP</th><th>Comissão</th></tr>${a.map(x=>`<tr><td>${esc(x.service)} / ${esc(x.sale)}</td><td>${esc(x.origin)}</td><td>${esc(x.credits??'—')}</td><td>${money(x.amount)}</td></tr>`).join('')}</table></div></details>`).join('')}<p>Fonte: ${esc(m.sourcePay)} · linha ${esc(p.sourceRow)}</p></article>`;}
-function render(){const selected=rows.filter(r=>$('person').value==='all'||r.owner_nif===$('person').value);$('summary').textContent=selected.length+' pessoa(s) · Total do mês: '+money(selected.reduce((s,r)=>s+r.total,0));$('reports').innerHTML=selected.map(r=>card(r,$('search').value.toLowerCase())).join('');}
-$('login').onsubmit=async e=>{e.preventDefault();try{await checked(client.auth.signInWithPassword({email:$('email').value,password:$('password').value}));$('password').value='';await load();}catch(e){clear();status(e.message);}};
-$('logout').onclick=async()=>{await client.auth.signOut();clear();$('login').hidden=false;status('Sessão terminada.');};$('period').onchange=()=>month().catch(e=>status(e.message));$('person').onchange=render;$('search').oninput=render;
+const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let client,profile,metadata=[],pending,revision=0,passwordBusy=false,views=[],assetsPromise;
+function status(text){$('status').textContent=text;}
+function clear(){
+ revision++;profile=null;metadata=[];pending=null;views=[];passwordBusy=false;
+ $('passwordOpen').hidden=true;$('logout').hidden=true;$('passwordDialog').close();$('passwordForm').reset();$('passwordStatus').textContent='';
+ $('importSave').hidden=true;$('importFile').value='';$('mapping').innerHTML='';$('reportScope').innerHTML='';$('reportFrame').srcdoc='';$('reportFrame').hidden=true;$('app').hidden=true;$('admin').hidden=true;
+}
+async function checked(query){const result=await query;if(result.error)throw result.error;return result.data;}
+async function allRows(make){const result=[];for(let offset=0;;){const page=await checked(make().range(offset,offset+99));result.push(...page);if(!page.length)return result;offset+=page.length;}}
+async function reportAssets(){
+ if(!assetsPromise)assetsPromise=Promise.all(['commission-report.html','commission-model.js','commission-report.js'].map(async name=>{const response=await fetch(name,{cache:'no-store'});if(!response.ok)throw Error('Não foi possível carregar o modelo.');return response.text();})).catch(error=>{assetsPromise=null;throw error;});
+ return assetsPromise;
+}
+function reportDocument(assets,history){
+ const doc=new DOMParser().parseFromString(assets[0],'text/html');
+ doc.getElementById('report-data').textContent=JSON.stringify(history).replace(/</g,'\\u003c');
+ const runtime=doc.querySelector('script[src="commission-report.js"]'),model=doc.createElement('script');model.textContent=assets[1];runtime.before(model);runtime.removeAttribute('src');runtime.textContent=assets[2];
+ return '<!doctype html>'+doc.documentElement.outerHTML;
+}
+async function showReport(){
+ const view=views.find(v=>v.id===$('reportScope').value);if(!view)return;
+ const ticket=++revision,owner=profile;$('reportFrame').srcdoc='';$('reportFrame').hidden=true;status('A carregar o histórico…');
+ const query=()=>client.from('rh_commissions').select('*').eq(view.kind==='team'?'chief_nif':'owner_nif',view.key).order('period',{ascending:false}).order('owner_nif');
+ const [data,assets]=await Promise.all([allRows(query),reportAssets()]);if(ticket!==revision||profile!==owner)return;
+ const history=CommissionModel.buildHistory(data,view);if(!history){status('Sem pagamentos para este relatório.');return;}
+ const frame=$('reportFrame');frame.hidden=false;frame.getBoundingClientRect();frame.srcdoc=reportDocument(assets,history);status('');
+}
+async function load(){
+ const previous=$('reportScope').value;clear();const ticket=revision;
+ const {data:{session}}=await client.auth.getSession();if(ticket!==revision)return;
+ $('login').hidden=!!session;if(!session){status('Entre com o seu acesso RH.');return;}
+ const next=await checked(client.from('user_profiles').select('role,person_id').eq('user_id',session.user.id).single());if(ticket!==revision)return;
+ profile=next;$('passwordOpen').hidden=false;$('logout').hidden=false;$('admin').hidden=next.role!=='admin';
+ metadata=await allRows(()=>client.from('rh_commissions').select('period,owner_nif,chief_nif,source_name,total').order('period',{ascending:false}).order('owner_nif'));if(ticket!==revision)return;
+ if(!metadata.length){status('Ainda não existem comissões disponíveis para este acesso.');return;}
+ views=CommissionModel.reportOptions(metadata);
+ let ownNif=null;
+ if(next.person_id){const identity=await allRows(()=>client.from('rh_commission_identities').select('nif,source_name').eq('person_id',next.person_id).order('nif'));if(ticket!==revision)return;ownNif=identity[0]?.nif;}
+ $('reportScope').innerHTML=['team','person'].map(kind=>'<optgroup label="'+(kind==='team'?'Equipas':'Históricos pessoais')+'">'+views.filter(v=>v.kind===kind).map(v=>'<option value="'+esc(v.id)+'">'+esc(v.label)+'</option>').join('')+'</optgroup>').join('');
+ const preferred=next.role==='vendedor'?'person:'+ownNif:next.role==='gestor'?'team:'+ownNif:previous;
+ $('reportScope').value=(views.find(v=>v.id===preferred)||views.find(v=>v.kind==='team')||views[0]).id;
+ $('app').hidden=false;await showReport();
+}
+$('login').onsubmit=async event=>{event.preventDefault();try{await checked(client.auth.signInWithPassword({email:$('email').value,password:$('password').value}));$('password').value='';await load();}catch(error){clear();$('login').hidden=false;status(error.message);}};
+$('logout').onclick=async()=>{await client.auth.signOut();clear();$('login').hidden=false;status('Sessão terminada.');};
+$('reportScope').onchange=()=>showReport().catch(error=>status(error.message));
+$('reload').onclick=()=>load().catch(error=>status(error.message));
 $('passwordOpen').onclick=()=>{
  if(!profile)return;
  $('passwordForm').reset();$('passwordStatus').textContent='';$('passwordStatus').className='';
@@ -41,7 +70,25 @@ $('passwordForm').onsubmit=async e=>{
  }catch(error){if(profile===owner)message.textContent=error.message||'Não foi possível alterar a password.';}
  finally{if(profile===owner){passwordBusy=false;for(const field of $('passwordForm').elements)field.disabled=false;}}
 };
-$('export').onclick=async()=>{try{const nif=$('person').value;if(nif==='all')return status('Escolha uma pessoa para exportar.');const ticket=revision;const data=await allRows(()=>client.from('rh_commissions').select('*').eq('owner_nif',nif).order('period',{ascending:false}));if(ticket!==revision)return;const page='<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Comissões pessoais</title><style>'+document.querySelector('style').textContent+'</style><main>'+data.map(r=>card(r)).join('')+'</main>';const url=URL.createObjectURL(new Blob([page],{type:'text/html'})),a=document.createElement('a');a.href=url;a.download='Comissoes_'+nif+'.html';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}catch(e){status(e.message);}};
-$('importFile').onchange=async()=>{try{pending=null;$('importSave').hidden=true;if(!$('importFile').files.length)return;const parsed=CommissionModel.validateImport(JSON.parse(await $('importFile').files[0].text()));pending=parsed;const people=await allRows(()=>client.from('rh_persons').select('id,name').order('id'));const known=await checked(client.from('rh_commission_identities').select('*'));$('mapping').innerHTML=pending.identities.map(i=>`<p>${esc(i.source_name)} · ${esc(i.nif)} <select data-nif="${esc(i.nif)}"><option value="">Manter acesso existente / não criar novo</option>${people.map(p=>`<option value="${esc(p.id)}" ${known.some(k=>k.nif===i.nif&&k.person_id===p.id)?'selected':''}>${esc(p.name)}</option>`).join('')}</select></p>`).join('');$('importSave').hidden=false;status(pending.rows.length+' pagamentos mensais prontos para conferência. Sem associação anterior ou nova, apenas o administrador terá acesso. Uma associação existente é mantida se não escolher outra.');}catch(e){pending=null;status(e.message);}};
-$('importSave').onclick=async()=>{if(!pending)return;const button=$('importSave');button.disabled=true;try{const ids=[...document.querySelectorAll('[data-nif]')].filter(x=>x.value).map(x=>({nif:x.dataset.nif,person_id:x.value,source_name:pending.identities.find(i=>i.nif===x.dataset.nif).source_name}));if(new Set(ids.map(i=>i.person_id)).size!==ids.length)throw Error('A mesma pessoa RH foi associada a mais de um NIF.');if(ids.length)await checked(client.from('rh_commission_identities').upsert(ids));for(let i=0;i<pending.rows.length;i+=20)await checked(client.from('rh_commissions').upsert(pending.rows.slice(i,i+20),{onConflict:'period,owner_nif'}));await load();status('Importação concluída.');}catch(e){status('Importação não concluída: '+e.message+' Pode repetir sem duplicar pagamentos.');}finally{button.disabled=false;}};
-(async()=>{try{const c=await(await fetch('/api/config',{cache:'no-store'})).json();client=window.supabase.createClient(c.supabaseUrl,c.supabaseAnonKey);client.auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT'){clear();$('login').hidden=false;}});await load();}catch(e){clear();status('Não foi possível abrir as comissões: '+e.message);}})();
+
+$('importFile').onchange=async()=>{
+ if(profile?.role!=='admin')return;const ticket=revision,owner=profile;pending=null;$('importSave').hidden=true;
+ try{
+  const file=$('importFile').files[0];if(!file)return;const parsed=CommissionModel.validateImport(JSON.parse(await file.text()));
+  const [people,known]=await Promise.all([allRows(()=>client.from('rh_persons').select('id,name').order('id')),allRows(()=>client.from('rh_commission_identities').select('*').order('nif'))]);
+  if(ticket!==revision||profile!==owner)return;pending=parsed;
+  $('mapping').innerHTML=parsed.identities.map(i=>'<label class="mapping-row"><span>'+esc(i.source_name)+' · '+esc(i.nif)+'</span><select data-nif="'+esc(i.nif)+'"><option value="">Manter acesso existente / não criar novo</option>'+people.map(p=>'<option value="'+esc(p.id)+'" '+(known.some(k=>k.nif===i.nif&&k.person_id===p.id)?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></label>').join('');
+  $('importSave').hidden=false;status(parsed.rows.length+' pagamentos · '+new Set(parsed.rows.map(r=>r.period)).size+' meses · '+parsed.identities.length+' pessoas. Rever associações antes de importar.');
+ }catch(error){if(profile===owner){pending=null;status(error.message);}}
+};
+$('importSave').onclick=async()=>{
+ if(!pending||profile?.role!=='admin')return;const snapshot=pending,owner=profile,button=$('importSave');button.disabled=true;
+ try{
+  const ids=[...document.querySelectorAll('[data-nif]')].filter(x=>x.value).map(x=>({nif:x.dataset.nif,person_id:x.value,source_name:snapshot.identities.find(i=>i.nif===x.dataset.nif).source_name}));
+  if(new Set(ids.map(i=>i.person_id)).size!==ids.length)throw Error('A mesma pessoa RH foi associada a mais de um NIF.');
+  if(ids.length)await checked(client.from('rh_commission_identities').upsert(ids));
+  for(let i=0;i<snapshot.rows.length;i+=20){if(profile!==owner)throw Error('Sessão alterada. A importação foi interrompida.');status('A importar pagamentos: '+i+' / '+snapshot.rows.length+'…');await checked(client.from('rh_commissions').upsert(snapshot.rows.slice(i,i+20),{onConflict:'period,owner_nif'}));}
+  if(profile!==owner)return;await load();status('Importação concluída.');
+ }catch(error){if(profile===owner)status('Importação não concluída: '+error.message+' Pode repetir sem duplicar pagamentos.');}finally{button.disabled=false;}
+};
+(async()=>{try{const response=await fetch('/api/config',{cache:'no-store'});if(!response.ok)throw Error('Configuração indisponível.');const config=await response.json();client=window.supabase.createClient(config.supabaseUrl,config.supabaseAnonKey);client.auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT'){clear();$('login').hidden=false;}});await load();}catch(error){clear();status('Não foi possível abrir as comissões: '+error.message);}})();

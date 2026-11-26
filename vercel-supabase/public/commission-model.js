@@ -22,6 +22,52 @@
   }
   return data;
  }
- root.CommissionModel={validateImport};
+ const detailFields=['records','productionVdd','productionChe','adjustments','checks'];
+ function reportOptions(rows){
+  const people=new Map(),teams=new Set();
+  for(const row of rows){if(!people.has(row.owner_nif))people.set(row.owner_nif,row.source_name);if(row.chief_nif)teams.add(row.chief_nif);}
+  return [...[...teams].map(key=>({id:'team:'+key,kind:'team',key,label:'Equipa '+(people.get(key)||key)})),...[...people].map(([key,label])=>({id:'person:'+key,kind:'person',key,label}))].sort((a,b)=>a.kind.localeCompare(b.kind)||a.label.localeCompare(b.label,'pt'));
+ }
+ function buildHistory(rows,view){
+  if(!view||!['team','person'].includes(view.kind))throw Error('Relatório inválido.');
+  const chosen=rows.filter(r=>view.kind==='team'?r.chief_nif===view.key:r.owner_nif===view.key),years={};
+  if(!chosen.length)return null;
+  const names=new Map();for(const r of chosen){names.set(r.owner_nif,r.source_name);if(r.chief_nif&&!names.has(r.chief_nif))names.set(r.chief_nif,'Chefia');}
+  validateImport({version:1,identities:[...names].map(([nif,source_name])=>({nif,source_name})),rows:chosen});
+  for(const row of chosen){
+   const year=row.period.slice(0,4),key=String(Number(row.period.slice(5,7))),p=row.payload;
+   const y=years[year]||=( {teamName:view.label,months:{},latest:key} );
+   if(Number(key)>Number(y.latest))y.latest=key;
+   const m=y.months[key]||=( {mode:'team',teamName:view.label,period:p.period,monthNum:Number(key),partial:false,defaultPerson:view.kind==='person'?'p'+view.key:'all',sourcePay:p.sourcePay,sourceDetail:p.sourceDetail,sourceSheet:p.sourceSheet,people:[],...Object.fromEntries(detailFields.map(f=>[f,[]]))} );
+   m.partial ||= p.partial===true;m.people.push(structuredClone(p.people[0]));
+   for(const field of detailFields)m[field].push(...structuredClone(p[field]));
+  }
+  const notice=chosen.find(r=>r.payload.personalNotice)?.payload.personalNotice||'';
+  return {displayName:view.label,personal:view.kind==='person'&&!!notice,personId:view.kind==='person'?'p'+view.key:null,notice,latestYear:Object.keys(years).sort().at(-1),years};
+ }
+ function annualData(year,label){
+  const people=new Map(),months=Object.keys(year.months).sort((a,b)=>Number(a)-Number(b)).map(k=>year.months[k]);
+  for(const month of months)for(const person of month.people){
+   if(!people.has(person.id))people.set(person.id,{...structuredClone(person),total:0,rubrics:[]});
+   const item=people.get(person.id);item.role=person.role;item.team=person.team;item.chief=person.chief;item.total+=person.total;
+   item.rubrics.push(...person.rubrics.map(r=>({...r,label:month.period+' · '+r.label})));
+  }
+  return {mode:'team',teamName:year.teamName,period:'Acumulado '+label,partial:false,people:[...people.values()],...Object.fromEntries(detailFields.map(f=>[f,months.flatMap(m=>m[f])]))};
+ }
+ function vpTotal(rows){const unique=new Map();for(const row of rows)if(Number.isFinite(row.credits))unique.set(row.period+'|'+row.line,row.credits);return unique.size?[...unique.values()].reduce((s,v)=>s+v,0):null;}
+ function personalHistory(history,id){
+  const years={};let name='';
+  for(const [year,data] of Object.entries(history.years)){
+   const months={};
+   for(const [key,month] of Object.entries(data.months)){
+    const p=month.people.find(p=>p.id===id);if(!p)continue;name=p.name;
+    months[key]={...structuredClone(month),defaultPerson:id,people:[structuredClone(p)],...Object.fromEntries(detailFields.map(f=>[f,structuredClone(month[f].filter(r=>r.owner===id))]))};
+   }
+   if(Object.keys(months).length)years[year]={teamName:data.teamName,months,latest:String(Math.max(...Object.keys(months).map(Number)))};
+  }
+  if(!name)throw Error('Seleciona uma pessoa para exportar.');
+  return {...history,displayName:name,personId:id,years,latestYear:Object.keys(years).sort().at(-1)};
+ }
+ root.CommissionModel={validateImport,reportOptions,buildHistory,annualData,vpTotal,personalHistory};
  if(typeof module!=='undefined')module.exports=root.CommissionModel;
 })(typeof window!=='undefined'?window:globalThis);
