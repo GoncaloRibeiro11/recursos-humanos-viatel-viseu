@@ -1541,8 +1541,9 @@
     <button class="tab" id="tab-dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
     <button class="tab" id="tab-assid" onclick="switchTab('assid')">🗓️ Assiduidade</button>
     <button class="tab" id="tab-ferias" onclick="switchTab('ferias')">🏖️ Férias</button>
-    <button class="tab admin-only" id="tab-fleet" onclick="switchTab('fleet')">Frota</button>
-    <button class="tab" id="tab-oop" onclick="switchTab('oop')">Análise Vendedor</button>
+    <button class="tab admin-only" id="tab-fleet" onclick="switchTab('fleet')">🚗 Frota</button>
+    <button class="tab" id="tab-oop" onclick="switchTab('oop')">📊 Análise Vendedor</button>
+    <a class="tab" href="comissoes.html" style="text-decoration:none">💶 Comissões</a>
   </div>
   <div class="header-actions">
     <span id="syncStatus" class="admin-only" role="status" aria-live="polite" style="font-size:11px;color:var(--text-muted);max-width:150px"></span>
@@ -1725,7 +1726,7 @@
       <div class="form-group"><label>Colaborador</label><input type="text" id="accessPersonName" disabled></div>
       <div class="form-group"><label>Email</label><input type="email" id="accessEmail" name="new-rh-account-email" placeholder="email@exemplo.pt" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
       <div class="form-group"><label>Password provisória</label><input type="password" id="accessPassword" name="new-rh-account-password" placeholder="Mínimo 12 caracteres" minlength="12" autocomplete="new-password" readonly onpointerdown="this.removeAttribute('readonly')" onkeydown="this.removeAttribute('readonly')"></div>
-      <div class="form-group"><label>Permissão</label><select id="accessRole"><option value="gestor">Gestor de equipa</option><option value="admin">Admin</option></select></div>
+      <div class="form-group"><label>Permissão</label><select id="accessRole"><option value="gestor">Gestor de equipa</option><option value="vendedor">Vendedor · comissões pessoais</option><option value="admin">Admin</option></select></div>
       <div class="auth-error" id="accessStatus"></div>
     </div>
     <div class="modal-actions">
@@ -4148,6 +4149,7 @@ async function loadSupabaseSession(){
     return;
   }
   currentProfile = profile;
+  if (profile.role === 'vendedor') { location.replace('comissoes.html'); return; }
   currentUserId = userData.user.id;
   supabaseReady = true;
   await loadFromSupabase();
@@ -5877,7 +5879,7 @@ async function createUserAccess(){
   const status = document.getElementById('accessStatus');
   const email = document.getElementById('accessEmail').value.trim();
   const password = document.getElementById('accessPassword').value;
-  const role = document.getElementById('accessRole').value === 'admin' ? 'admin' : 'gestor';
+  const role = document.getElementById('accessRole').value;
   status.style.color = '#dc2626';
   status.textContent = '';
   if (!email || !password){

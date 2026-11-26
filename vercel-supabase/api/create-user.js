@@ -90,7 +90,10 @@ module.exports = async function handler(req, res) {
     const password = String(body.password || '');
     const personId = String(body.personId || '').trim();
     const displayName = String(body.displayName || '').trim();
-    const role = body.role === 'admin' ? 'admin' : 'gestor';
+    const role = body.role || 'gestor';
+    if (!['admin', 'gestor', 'vendedor'].includes(role)) {
+      return send(res, 400, { error: 'Permissão inválida.' });
+    }
 
     if (!email || !password || !displayName || (role !== 'admin' && !personId)) {
       return send(res, 400, { error: 'Email, password, nome e colaborador sao obrigatorios.' });

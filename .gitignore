@@ -15,6 +15,8 @@ vercel-protegido/node_modules/
 vercel-protegido/.gitignore
 vercel-supabase/.vercel/
 vercel-supabase/node_modules/
+vercel-supabase/.pnpm-store/
+vercel-supabase/pnpm-lock.yaml
 vercel-supabase/.env
 vercel-supabase/.env.*
 vercel-supabase/.gitignore
