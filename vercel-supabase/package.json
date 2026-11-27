@@ -3,7 +3,7 @@
   "scripts": {
     "build": "node scripts/build-photo-background.mjs",
     "prepare:team-history": "node scripts/build-team-history-install.mjs",
-    "test": "node --test scripts/test-rh-sync.mjs scripts/test-rh-movements.mjs scripts/test-rh-team-history.mjs scripts/test-rh-analytics.mjs scripts/test-telegram.mjs scripts/test-fleet.mjs scripts/test-fleet-shares.mjs scripts/test-fleet-photos.mjs scripts/test-oop.mjs scripts/test-commissions.cjs",
+    "test": "node --test scripts/test-rh-sync.mjs scripts/test-rh-movements.mjs scripts/test-rh-team-history.mjs scripts/test-rh-analytics.mjs scripts/test-telegram.mjs scripts/test-fleet.mjs scripts/test-fleet-shares.mjs scripts/test-fleet-photos.mjs scripts/test-oop.mjs scripts/test-commissions.cjs scripts/test-commission-excel.mjs",
     "test:commissions:sql": "node scripts/test-commissions-sql.cjs",
     "test:commissions:browser": "node scripts/test-commissions-browser.cjs",
     "test:fleet:sql": "node scripts/test-fleet-sql.cjs",
@@ -20,7 +20,8 @@
     "image-size": "2.1.0",
     "lucide": "0.468.0",
     "onnxruntime-web": "1.21.0",
-    "pdf-lib": "1.17.1"
+    "pdf-lib": "1.17.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.10",

@@ -1,7 +1,8 @@
 'use strict';
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let client,profile,metadata=[],pending,revision=0,passwordBusy=false,views=[],assetsPromise,loginBusy=false;
+let client,profile,metadata=[],pending,revision=0,passwordBusy=false,views=[],assetsPromise,loginBusy=false,syncUi,importRevision=0,searchTimer,importBusy=false;
 function status(text){$('status').textContent=text;}
+function clearImport(){importRevision++;pending=null;$('importReview').hidden=true;$('importSave').hidden=true;$('mapping').innerHTML='';$('importSummary').innerHTML='';$('importWarning').textContent='';}
 function closePasswordDialog(){
  const dialog=$('passwordDialog');
  if(typeof dialog.close==='function')dialog.close();
@@ -10,8 +11,16 @@ function closePasswordDialog(){
 }
 function clear(){
  revision++;profile=null;metadata=[];pending=null;views=[];passwordBusy=false;
+ clearTimeout(searchTimer);syncUi?.reset();clearImport();$('reportSearch').value='';
  $('passwordOpen').hidden=true;$('logout').hidden=true;closePasswordDialog();
  $('importSave').hidden=true;$('importFile').value='';$('mapping').innerHTML='';$('reportScope').innerHTML='';$('reportFrame').srcdoc='';$('reportFrame').hidden=true;$('app').hidden=true;$('admin').hidden=true;
+}
+function renderViewOptions(preferred){
+ const normalize=v=>String(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(),terms=normalize($('reportSearch').value.trim()).split(/\s+/).filter(Boolean);
+ const filtered=views.filter(v=>terms.every(term=>normalize(v.label).includes(term)));
+ $('reportScope').innerHTML=['team','person'].map(kind=>'<optgroup label="'+(kind==='team'?'Equipas':'Históricos pessoais')+'">'+filtered.filter(v=>v.kind===kind).map(v=>'<option value="'+esc(v.id)+'">'+esc(v.label)+'</option>').join('')+'</optgroup>').join('');
+ $('reportScope').value=(filtered.find(v=>v.id===preferred)||filtered[0])?.id||'';
+ return filtered.length;
 }
 async function checked(query){const result=await query;if(result.error)throw result.error;return result.data;}
 async function allRows(make){const result=[];for(let offset=0;;){const page=await checked(make().range(offset,offset+99));result.push(...page);if(!page.length)return result;offset+=page.length;}}
@@ -44,9 +53,8 @@ async function load(){
  views=CommissionModel.reportOptions(metadata);
  let ownNif=null;
  if(next.person_id){const identity=await allRows(()=>client.from('rh_commission_identities').select('nif,source_name').eq('person_id',next.person_id).order('nif'));if(ticket!==revision)return;ownNif=identity[0]?.nif;}
- $('reportScope').innerHTML=['team','person'].map(kind=>'<optgroup label="'+(kind==='team'?'Equipas':'Históricos pessoais')+'">'+views.filter(v=>v.kind===kind).map(v=>'<option value="'+esc(v.id)+'">'+esc(v.label)+'</option>').join('')+'</optgroup>').join('');
  const preferred=next.role==='vendedor'?'person:'+ownNif:next.role==='gestor'?'team:'+ownNif:previous;
- $('reportScope').value=(views.find(v=>v.id===preferred)||views.find(v=>v.kind==='team')||views[0]).id;
+ renderViewOptions((views.find(v=>v.id===preferred)||views.find(v=>v.kind==='team')||views[0]).id);
  $('app').hidden=false;await showReport();
 }
 $('login').onsubmit=async event=>{
@@ -58,6 +66,7 @@ $('login').onsubmit=async event=>{
 };
 $('logout').onclick=async()=>{await client.auth.signOut();clear();$('login').hidden=false;status('Sessão terminada.');};
 $('reportScope').onchange=()=>showReport().catch(error=>status(error.message));
+$('reportSearch').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{const preferred=$('reportScope').value;if(renderViewOptions(preferred))showReport().catch(error=>status(error.message));else{revision++;$('reportFrame').hidden=true;$('reportFrame').srcdoc='';status('Nenhum relatório encontrado com este nome.');}},200);};
 $('reload').onclick=()=>load().catch(error=>status(error.message));
 $('passwordOpen').onclick=()=>{
  if(!profile)return;
@@ -96,24 +105,48 @@ $('passwordForm').onsubmit=async e=>{
  finally{if(profile===owner){passwordBusy=false;for(const field of $('passwordForm').elements)field.disabled=false;}}
 };
 
-$('importFile').onchange=async()=>{
- if(profile?.role!=='admin')return;const ticket=revision,owner=profile;pending=null;$('importSave').hidden=true;
+async function prepareImport(data){
+ if(profile?.role!=='admin'||importBusy)return;clearImport();const ticket=importRevision,owner=profile;
  try{
-  const file=$('importFile').files[0];if(!file)return;const parsed=CommissionModel.validateImport(JSON.parse(await file.text()));
+  const parsed=CommissionModel.validateImport(data);
   const [people,known]=await Promise.all([allRows(()=>client.from('rh_persons').select('id,name').order('id')),allRows(()=>client.from('rh_commission_identities').select('*').order('nif'))]);
-  if(ticket!==revision||profile!==owner)return;pending=parsed;
+  if(ticket!==importRevision||profile!==owner)return;pending=parsed;
   $('mapping').innerHTML=parsed.identities.map(i=>'<label class="mapping-row"><span>'+esc(i.source_name)+' · '+esc(i.nif)+'</span><select data-nif="'+esc(i.nif)+'"><option value="">Manter acesso existente / não criar novo</option>'+people.map(p=>'<option value="'+esc(p.id)+'" '+(known.some(k=>k.nif===i.nif&&k.person_id===p.id)?'selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></label>').join('');
-  $('importSave').hidden=false;status(parsed.rows.length+' pagamentos · '+new Set(parsed.rows.map(r=>r.period)).size+' meses · '+parsed.identities.length+' pessoas. Rever associações antes de importar.');
+  const old=new Map(metadata.map(r=>[r.period+'|'+r.owner_nif,r])),summary=new Map();
+  for(const row of parsed.rows){const s=summary.get(row.period)||{people:0,total:0,existing:0,previous:0},prior=old.get(row.period+'|'+row.owner_nif);s.people++;s.total+=row.total;if(prior){s.existing++;s.previous+=prior.total;}summary.set(row.period,s);}
+  const money=v=>new Intl.NumberFormat('pt-PT',{style:'currency',currency:'EUR'}).format(v);
+  $('importSummary').innerHTML='<table>'+(parsed.coordinator?'<caption>Coordenação: '+esc(parsed.coordinator)+'</caption>':'')+'<thead><tr><th>Mês</th><th>Pagamentos</th><th>Total anterior dos registos a substituir</th><th>Total a importar</th><th>Já existentes</th></tr></thead><tbody>'+[...summary].sort(([a],[b])=>a.localeCompare(b)).map(([period,s])=>'<tr><td>'+esc(period.slice(0,7))+'</td><td>'+s.people+'</td><td>'+(s.existing?money(s.previous):'—')+'</td><td>'+money(s.total)+'</td><td>'+s.existing+'</td></tr>').join('')+'</tbody></table>';
+  const replacements=[...summary.values()].reduce((s,x)=>s+x.existing,0),differences=parsed.rows.reduce((s,r)=>s+r.payload.checks.length,0);
+  $('importWarning').textContent=(replacements?replacements+' pagamentos existentes serão substituídos apenas após confirmação. ':'')+(differences?differences+' diferenças entre pagamento e detalhe já existem na origem e foram preservadas.':'');
+  $('importReview').hidden=false;$('importSave').hidden=false;status(parsed.rows.length+' pagamentos · '+summary.size+' meses · '+parsed.identities.length+' pessoas. Rever associações antes de importar.');
  }catch(error){if(profile===owner){pending=null;status(error.message);}}
+}
+$('importFile').onchange=async()=>{
+ if(profile?.role!=='admin'||importBusy)return;clearImport();const ticket=importRevision,owner=profile;
+ try{const file=$('importFile').files[0];if(!file)return;if(file.name.toLowerCase()==='manifest.json')throw Error('manifest.json não é um mapa de pagamentos. Para os Excel, usa Sincronizar pagamentos.');const data=JSON.parse(await file.text());if(ticket===importRevision&&profile===owner)await prepareImport(data);}
+ catch(error){if(profile===owner)status(error.message);}
 };
 $('importSave').onclick=async()=>{
- if(!pending||profile?.role!=='admin')return;const snapshot=pending,owner=profile,button=$('importSave');button.disabled=true;
+ if(!pending||profile?.role!=='admin'||importBusy)return;const snapshot=pending,owner=profile,button=$('importSave');button.disabled=true;importBusy=true;
+ const controls=[...document.querySelectorAll('#syncPanel input,#syncPanel button,#syncPanel select'),$('importFile'),$('syncOpen'),$('reload')].map(el=>[el,el.disabled]);for(const [el] of controls)el.disabled=true;
  try{
+  const latest=[];for(const period of new Set(snapshot.rows.map(r=>r.period))){latest.push(...await allRows(()=>client.from('rh_commissions').select('period,owner_nif').eq('period',period).order('owner_nif')));if(profile!==owner)return;}
+  const old=new Set(latest.map(r=>r.period+'|'+r.owner_nif)),replacements=snapshot.rows.filter(r=>old.has(r.period+'|'+r.owner_nif)).length;
+  if(replacements&&!confirm('Esta importação vai substituir '+replacements+' pagamentos com o mesmo mês e NIF. Os restantes registos não serão alterados. Confirmas a substituição?'))return;
   const ids=[...document.querySelectorAll('[data-nif]')].filter(x=>x.value).map(x=>({nif:x.dataset.nif,person_id:x.value,source_name:snapshot.identities.find(i=>i.nif===x.dataset.nif).source_name}));
   if(new Set(ids.map(i=>i.person_id)).size!==ids.length)throw Error('A mesma pessoa RH foi associada a mais de um NIF.');
   if(ids.length)await checked(client.from('rh_commission_identities').upsert(ids));
-  for(let i=0;i<snapshot.rows.length;i+=20){if(profile!==owner)throw Error('Sessão alterada. A importação foi interrompida.');status('A importar pagamentos: '+i+' / '+snapshot.rows.length+'…');await checked(client.from('rh_commissions').upsert(snapshot.rows.slice(i,i+20),{onConflict:'period,owner_nif'}));}
+  for(const period of [...new Set(snapshot.rows.map(r=>r.period))].sort()){
+   if(profile!==owner)throw Error('Sessão alterada. A importação foi interrompida.');
+   status('A guardar o mês '+period.slice(0,7)+'…');
+   await checked(client.from('rh_commissions').upsert(snapshot.rows.filter(r=>r.period===period),{onConflict:'period,owner_nif'}));
+  }
   if(profile!==owner)return;await load();status('Importação concluída.');
- }catch(error){if(profile===owner)status('Importação não concluída: '+error.message+' Pode repetir sem duplicar pagamentos.');}finally{button.disabled=false;}
+ }catch(error){if(profile===owner)status('Importação não concluída: '+error.message+' Pode repetir sem duplicar pagamentos.');}finally{importBusy=false;button.disabled=false;for(const [el,disabled] of controls)el.disabled=disabled;}
 };
+async function commissionAliases(){
+ const rows=await allRows(()=>client.from('rh_commissions').select('period,owner_nif,chief_nif,team:payload->people->0->>team').order('period').order('owner_nif'));
+ return rows.filter(r=>r.owner_nif===r.chief_nif&&typeof r.team==='string');
+}
+syncUi=CommissionSync.mount({getProfile:()=>profile,getMetadata:()=>metadata,getAliases:commissionAliases,onStart:()=>{clearImport();$('importFile').value='';},prepareImport});
 (async()=>{try{const response=await fetch('/api/config',{cache:'no-store'});if(!response.ok)throw Error('Configuração indisponível.');const config=await response.json();client=window.supabase.createClient(config.supabaseUrl,config.supabaseAnonKey);client.auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT'){clear();$('login').hidden=false;}});await load();}catch(error){clear();status('Não foi possível abrir as comissões: '+error.message);}})();

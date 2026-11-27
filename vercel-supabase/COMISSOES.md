@@ -31,7 +31,17 @@ Qualquer conta autenticada pode usar **Alterar password** na página de Comissõ
 
 ## Atualização mensal
 
-Executar o processamento dos mapas na pasta original e voltar a preparar/importar o JSON. Rever novas pessoas e novos chefes antes de associar acessos. A equipa fica registada em cada pagamento mensal; alterações atuais de equipa não reatribuem automaticamente pagamentos antigos.
+Como administrador, usar **Sincronizar pagamentos**, escolher a pasta mensal do OneDrive (ou a pasta principal) e conferir os meses selecionados. O navegador lê os Excel localmente num worker; os ficheiros originais não são modificados nem enviados para um conversor externo. O par de ficheiros deve ter PAGAMENTOS / DETALHES, mês e ano nos nomes.
+
+Os meses posteriores ao último mês importado ficam selecionados. Meses anteriores e existentes ficam desmarcados. Para uma correção, selecionar explicitamente o mês existente; a gravação pede uma segunda confirmação antes de substituir pagamentos com o mesmo mês e NIF. Nunca elimina os pagamentos ausentes do ficheiro nem altera outros meses. Pode repetir uma importação interrompida sem duplicar pagamentos; depois de recarregar a página, deve selecionar esse mês para completar a repetição.
+
+Cada mês é enviado num único `upsert`, em vez de lotes de 20 pessoas, para beneficiar da transação única do PostgREST. Uma importação de vários meses pode concluir alguns e falhar noutro; os meses já concluídos mantêm-se e a repetição é idempotente. O tratamento transacional do pedido segue a [documentação PostgREST](https://docs.postgrest.org/en/v12/references/transactions.html).
+
+A conferência apresenta mês, total, número de pagamentos e substituições. Novos NIF não recebem acesso por semelhança de nomes. As associações existentes mantêm-se; qualquer nova associação exige escolha explícita. A coordenação só é deduzida quando os NIF já conhecidos apontam para uma única coordenação; nos restantes casos é necessário escolhê-la. As comissões de chefias anteriores usam a equipa histórica por NIF, não a equipa atual do vendedor.
+
+O leitor suporta o formato mensal validado nos onze mapas de 2026 e o mesmo formato em anos seguintes. Cabeçalhos diferentes, pares incompletos/duplicados, totais em falta, erros nas células de pagamento e rubricas que não conciliam bloqueiam a gravação. Não recalcula fórmulas: usa os resultados guardados no Excel. Erros nos indicadores de produção permanecem visíveis, VP em falta não se torna zero e não se distribuem comissões de chefia pelo coordenador ou pela gestora. Os formatos antigos de 2025 mantêm a importação de histórico JSON preparada pela rotina existente.
+
+A importação JSON continua disponível para o histórico inicial. `manifest.json` não é um ficheiro de pagamentos e é rejeitado. O botão Atualizar apenas relê o servidor. A sincronização da pasta só ocorre quando o administrador a inicia; não existe acesso permanente ao OneDrive nem monitorização em segundo plano. A pesquisa de relatórios ignora diferenças de acentos e permite localizar nomes completos.
 
 ## Verificação
 
@@ -40,6 +50,12 @@ Executar o processamento dos mapas na pasta original e voltar a preparar/importa
 `node scripts/test-commissions-sql.cjs`
 
 `node scripts/test-commissions-browser.cjs`
+
+`node --test scripts/test-commission-excel.mjs`
+
+Conferência opcional com os originais privados, sem gerar ficheiros nem modificar os mapas:
+
+`node scripts/test-commissions-source.cjs MAPAS_ROOT JSON_VALIDADO [YYYY-MM-01]`
 
 Os testes verificam permissões efetivas no PostgreSQL, mudanças de equipa, bloqueio dos acessos RH para vendedores (incluindo contas associadas a chefes), preservação dos acessos dos gestores, rubricas numéricas, dados de outra pessoa e contagem de créditos VP. O teste de navegador usa contas, pagamentos e passwords fictícios, sem aceder à produção.
 

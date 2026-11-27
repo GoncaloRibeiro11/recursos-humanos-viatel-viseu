@@ -6,6 +6,11 @@ import { runInNewContext } from 'node:vm';
 import { parse } from 'acorn';
 
 const require = createRequire(import.meta.url);
+await build({
+  absWorkingDir:fileURLToPath(new URL('../',import.meta.url)),
+  entryPoints:['src/commission-worker.mjs'],outfile:'public/commission-worker.js',
+  bundle:true,minify:true,format:'iife',platform:'browser',target:['chrome100','safari16']
+});
 
 // ndarray generates typed-array views with Function(). Compile those views at
 // build time so the browser can keep its policy against JavaScript evaluation.

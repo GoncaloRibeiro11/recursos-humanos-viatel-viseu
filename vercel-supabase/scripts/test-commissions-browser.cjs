@@ -2,8 +2,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const createDb=require('./oop-test-db.cjs');
 (async()=>{
- const t=await createDb({installOop:false}),updates=[],writes=[],errors=[],external=[];
- let server,browser;
+ const t=await createDb({installOop:false}),updates=[],writes=[],monthlyWrites=[],errors=[],external=[];
+ let server,browser,allowFixtureImport=false;
  try{
   await t.install('20261124_commissions.sql');await t.install('20261126_commissions_permissions.sql');
   const seller=t.uuid(90),empty=t.uuid(91);await t.query('insert into auth.users(id) values($1),($2)',[seller,empty]);
@@ -40,11 +40,19 @@ const createDb=require('./oop-test-db.cjs');
       await new Promise(resolve=>setTimeout(resolve,200));return res.end(JSON.stringify(q.fail?{error:{message:'Falha temporária de teste.'}}:{data:{user:{id:users[q.user]}}}));
      }
      assert.equal(url.pathname,'/__db');assert.ok(tables[q.table]);
-     if(q.write){writes.push(q.table);return res.end(JSON.stringify({error:{message:'Este teste não permite importar pagamentos.'}}));}
-     const columns=q.columns==='*'?tables[q.table]:q.columns.split(',');for(const col of columns)assert.ok(tables[q.table].includes(col));
+     if(q.write){
+      assert.ok(allowFixtureImport&&q.user==='admin'&&['rh_commissions','rh_commission_identities'].includes(q.table));writes.push(q.table);
+      const columns=tables[q.table],keys=q.table==='rh_commissions'?['period','owner_nif']:['nif'];
+      const values=q.write.flatMap(row=>columns.map(c=>row[c])),sql='insert into '+q.table+'('+columns.join(',')+') values '+q.write.map((_,i)=>'('+columns.map((_,j)=>'$'+(i*columns.length+j+1)).join(',')+')').join(',')+' on conflict('+keys.join(',')+') do update set '+columns.filter(c=>!keys.includes(c)).map(c=>c+'=excluded.'+c).join(',');
+      if(q.table==='rh_commissions'){assert.equal(new Set(q.write.map(r=>r.period)).size,1);monthlyWrites.push(q.write.length);}
+      await t.run(users[q.user],()=>t.db.query(sql,values));
+      return res.end(JSON.stringify({data:[]}));
+     }
+     const expression={"team:payload->people->0->>team":"payload->'people'->0->>'team' as team"};
+     const columns=q.columns==='*'?tables[q.table]:q.columns.split(',');for(const col of columns)assert.ok(tables[q.table].includes(col)||(q.table==='rh_commissions'&&expression[col]));
      const params=[],where=q.eq.map(([key,value])=>{assert.ok(tables[q.table].includes(key));params.push(value);return key+'=$'+params.length;});
      const order=q.order.map(([key,direction])=>{assert.ok(tables[q.table].includes(key));assert.ok(['asc','desc'].includes(direction));return key+' '+direction;});
-     let sql='select '+columns.join(',')+' from '+q.table+(where.length?' where '+where.join(' and '):'')+(order.length?' order by '+order.join(','):'');
+     let sql='select '+columns.map(c=>expression[c]||c).join(',')+' from '+q.table+(where.length?' where '+where.join(' and '):'')+(order.length?' order by '+order.join(','):'');
      if(!q.single){assert.ok(Number.isInteger(q.from)&&Number.isInteger(q.to));sql+=' limit '+(q.to-q.from+1)+' offset '+q.from;}
      const result=await t.run(users[q.user],()=>t.db.query(sql,params));for(const row of result.rows){if(row.period)row.period=(row.period instanceof Date?row.period.toISOString():String(row.period)).slice(0,10);if(row.total!==undefined)row.total=Number(row.total);}return res.end(JSON.stringify({data:q.single?result.rows[0]:result.rows}));
     }
@@ -93,6 +101,20 @@ const createDb=require('./oop-test-db.cjs');
   const invalid={version:1,identities:[{nif:'100000001',source_name:'Comercial teste'},{nif:'100000010',source_name:'Chefe teste'}],rows:[structuredClone(payment)]};invalid.rows[0].payload.people[0].rubrics=[{label:'Sem valor'}];
   await admin.locator('#importFile').setInputFiles({name:'invalid-test.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(invalid))});await admin.getByText('Cada rubrica deve ter um valor numérico válido.',{exact:true}).waitFor();assert.equal(await admin.locator('#importSave').isVisible(),false);assert.deepEqual(writes,[]);
   assert.equal(JSON.stringify(await t.query('select * from rh_commissions')),before);assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
-  console.log(JSON.stringify({historyTemplate:true,yearMonthAndAnnual:true,clientFilters:true,vpDeduplicated:true,csvExport:true,personalInteractiveExport:true,iframeCannotAccessSession:true,passwordOwnAccount:true,shortAndMismatchBlocked:true,retryAndDoubleSubmitSafe:true,passwordFieldsCleared:true,logoutClears:true,availableWithoutPayments:true,malformedImportBlockedBeforeWrite:true,desktopAndMobile:true,paymentsUnchanged:true,externalRequests:external,pageErrors:errors}));
+  await admin.locator('#reportSearch').fill('teste Comerçial');await admin.waitForFunction(()=>document.getElementById('reportScope').options.length===1);await adminReport.locator('#total').filter({hasText:'20,00'}).waitFor();await admin.locator('#reportSearch').fill('');await admin.locator('#reportScope option').filter({hasText:'Equipa Chefe teste'}).waitFor({state:'attached'});
+  const fixture=require('./commission-excel-fixture.cjs'),X=require('xlsx'),folder=path.join(screenshots,'excel-fixture');fs.mkdirSync(folder,{recursive:true});
+  for(const month of ['2026-11-01','2026-12-01']){const f=fixture(month);for(let i=0;i<19;i++){const row=[];Object.assign(row,{4:100000100+i,5:'Comercial novo '+i,6:'Vendedor',7:'Equipa teste',8:'Coord Teste',13:'TAB_VDD',17:40,59:40});X.utils.sheet_add_aoa(f.payBook.Sheets.Pagamento,[row],{origin:{r:10+i,c:0}});}fs.writeFileSync(path.join(folder,f.payName),X.write(f.payBook,{type:'buffer',bookType:'xlsx'}));fs.writeFileSync(path.join(folder,f.detailName),X.write(f.detailBook,{type:'buffer',bookType:'xlsx'}));}
+  await admin.locator('#syncOpen').click();await admin.locator('#syncFolder').setInputFiles(folder);await admin.getByText('1 meses novos encontrados.',{exact:true}).waitFor();
+  assert.equal(await admin.locator('[data-period="2026-11-01"]').isChecked(),false);assert.equal(await admin.locator('[data-period="2026-12-01"]').isChecked(),true);
+  await admin.locator('#syncPrepare').click();await admin.locator('#importReview').waitFor({state:'visible'});assert.match(await admin.locator('#importSummary').innerText(),/2026-12/);assert.deepEqual(writes,[]);
+  for(const width of [1440,390,320]){await admin.setViewportSize({width,height:1000});assert.equal(await admin.locator('body').evaluate(el=>el.scrollWidth<=innerWidth+1),true);await admin.screenshot({path:path.join(screenshots,'sincronizar-'+width+'.png')});}
+  allowFixtureImport=true;await admin.locator('#importSave').click();await admin.getByText('Importação concluída.',{exact:true}).waitFor();await adminReport.locator('#total').filter({hasText:'40,00'}).waitFor();
+  const oldRows=await t.query("select * from rh_commissions where period<'2026-12-01'");assert.equal(JSON.stringify(oldRows),before,'existing payments stay byte-for-byte unchanged');
+  assert.equal((await t.query("select * from rh_commissions where period='2026-12-01'")).length,21);assert.deepEqual(monthlyWrites,[21],'a month is sent in one transaction, not split after twenty people');assert.equal((await t.query('select * from rh_commission_identities')).length,2,'new people are not automatically linked to accounts');
+  await admin.locator('#syncOpen').click();await admin.locator('#syncFolder').setInputFiles(folder);await admin.getByText('0 meses novos encontrados.',{exact:true}).waitFor();await admin.locator('[data-period="2026-12-01"]').check();await admin.locator('#syncPrepare').click();await admin.locator('#importReview').waitFor({state:'visible'});
+  const previousWrites=writes.length,cancelled=admin.waitForEvent('dialog'),cancelClick=admin.locator('#importSave').click();await(await cancelled).dismiss();await cancelClick;await admin.waitForFunction(()=>!document.getElementById('importSave').disabled);assert.equal(writes.length,previousWrites,'replacement can be cancelled');
+  const accepted=admin.waitForEvent('dialog'),acceptClick=admin.locator('#importSave').click();await(await accepted).accept();await acceptClick;await admin.getByText('Importação concluída.',{exact:true}).waitFor();assert.equal((await t.query("select * from rh_commissions where period='2026-12-01'")).length,21,'repeat never duplicates payments');
+  assert.equal(JSON.stringify(await t.query("select * from rh_commissions where period<'2026-12-01'")),before);assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
+  console.log(JSON.stringify({historyTemplate:true,yearMonthAndAnnual:true,clientFilters:true,vpDeduplicated:true,csvExport:true,personalInteractiveExport:true,iframeCannotAccessSession:true,passwordOwnAccount:true,shortAndMismatchBlocked:true,retryAndDoubleSubmitSafe:true,passwordFieldsCleared:true,logoutClears:true,availableWithoutPayments:true,malformedImportBlockedBeforeWrite:true,desktopAndMobile:true,existingPaymentsUnchanged:true,excelFolderImport:true,monthlyAtomicWrite:true,existingMonthsUnselected:true,replacementCanBeCancelled:true,repeatNoDuplicates:true,accentInsensitiveSearch:true,noNewAccessMappings:true,externalRequests:external,pageErrors:errors}));
  }finally{if(browser)await browser.close();if(server)await new Promise(resolve=>server.close(resolve));await t.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

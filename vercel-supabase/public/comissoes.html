@@ -14,10 +14,21 @@
  <p id="status" role="status" aria-live="polite">A carregar…</p>
  <form id="login" hidden><label>Email<input id="email" type="email" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" enterkeyhint="next" required></label><label>Password<input id="password" type="password" autocomplete="current-password" enterkeyhint="go" required></label><button id="loginSubmit" type="submit">Entrar</button></form>
  <section id="admin" class="import-band" hidden>
-  <details><summary>Importar mapas e associar acessos</summary><p>Selecione o ficheiro de importação preparado a partir dos mapas. Confirme a pessoa RH correspondente a cada NIF antes de gravar.</p><input id="importFile" type="file" accept=".json"><div id="mapping"></div><button id="importSave" type="button" hidden>Confirmar associações e importar</button></details>
+  <button id="syncOpen" type="button">Sincronizar pagamentos</button>
+  <section id="syncPanel" hidden aria-labelledby="syncTitle">
+   <div class="sync-heading"><h2 id="syncTitle">Mapas Excel</h2><button id="syncClose" type="button">Fechar</button></div>
+   <input id="syncFolder" type="file" webkitdirectory multiple hidden>
+   <button id="syncChoose" type="button">Escolher pasta</button>
+   <div id="syncPeriods"></div>
+   <label id="syncCoordinatorWrap" hidden>Coordenação<select id="syncCoordinator"></select></label>
+   <p id="syncStatus" role="status" aria-live="polite"></p>
+   <button id="syncPrepare" type="button">Conferir meses selecionados</button>
+  </section>
+  <details><summary>Importar histórico JSON e associar acessos</summary><input id="importFile" type="file" accept=".json"></details>
+  <section id="importReview" hidden aria-labelledby="importTitle"><h2 id="importTitle">Conferir importação</h2><div id="importSummary"></div><p id="importWarning"></p><div id="mapping"></div><button id="importSave" type="button" hidden>Confirmar associações e importar</button></section>
  </section>
  <section id="app" hidden>
-  <div class="report-toolbar"><label>Relatório<select id="reportScope"></select></label><button id="reload" type="button">Atualizar</button></div>
+  <div class="report-toolbar"><label>Pesquisar equipa ou pessoa<input id="reportSearch" type="search" placeholder="Nome…" autocomplete="off"></label><label>Relatório<select id="reportScope"></select></label><button id="reload" type="button">Atualizar</button></div>
   <iframe id="reportFrame" title="Histórico de comissões" sandbox="allow-scripts allow-downloads allow-modals" referrerpolicy="no-referrer" hidden></iframe>
  </section>
 </main>
@@ -35,5 +46,6 @@
  </form>
 </dialog>
 <script src="commission-model.js"></script>
+<script src="commission-sync.js"></script>
 <script src="comissoes.js"></script>
 </html>
