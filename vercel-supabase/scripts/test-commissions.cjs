@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
-const {validateImport,buildHistory,annualData,vpTotal,personalHistory,reportOptions}=require('../public/commission-model.js');
+const {validateImport,buildHistory,annualData,vpTotal,personalHistory,reportOptions,paymentMetrics,aggregatePayments}=require('../public/commission-model.js');
 const row=()=>({period:'2026-11-01',owner_nif:'100000001',chief_nif:null,source_name:'Pessoa <teste>',total:20,payload:{period:'Novembro 2026',people:[{id:'p100000001',total:20,rubrics:[{label:'Comissão',amount:20}]}],records:[],productionVdd:[],productionChe:[],adjustments:[],checks:[]}});
 const data=()=>({version:1,identities:[{nif:'100000001',source_name:'Pessoa'}],rows:[row()]});
 test('public report template contains no embedded payment history or identifiers',()=>{
@@ -20,6 +20,20 @@ test('VP deduplicates original lines and preserves negative, zero and missing cr
  const base={period:'Novembro 2026'};
  assert.equal(vpTotal([{...base,line:1,credits:2},{...base,line:1,credits:2},{...base,line:2,credits:-.5}]),1.5);
  assert.equal(vpTotal([{...base,line:1,credits:0}]),0);assert.equal(vpTotal([{...base,line:1}]),null);
+});
+test('CB and payment withholding are separate and actual source rates are used',()=>{
+ const person={total:0,rubrics:[{label:'Comissões',amount:1000},{label:'Retenção CB (mínimo 10%)',amount:-150},{label:'Retenção Pagam',amount:-850}]},before=JSON.stringify(person);
+ assert.deepEqual(paymentMetrics(person),{afterCB:850,cbRetention:-150,paymentRetention:-850,final:0,beforeCB:1000});assert.equal(JSON.stringify(person),before);
+ const different={total:0,rubrics:[{label:'Comissões e prémios',amount:1000},{label:'Retenção CB',amount:-230},{label:'Retenção de Pagamento',amount:-770}]};assert.equal(paymentMetrics(different).afterCB,770);
+ const release={total:112,rubrics:[{label:'Comissão',amount:100},{label:'Retenção CB',amount:-8},{label:'Retenção Pagam',amount:20}]};assert.equal(paymentMetrics(release).afterCB,92);assert.equal(paymentMetrics(release).beforeCB,100);
+});
+test('annual and team retention indicators reconcile, including negative, zero and missing payments',()=>{
+ const a=row();a.total=0;a.payload.people[0]={id:'p100000001',name:'Escolhida',total:0,rubrics:[{label:'Comissão',amount:1000},{label:'Retenção CB',amount:-150},{label:'Retenção Pagam',amount:-850}]};
+ const b=structuredClone(a);b.period='2026-12-01';b.payload.period='Dezembro 2026';b.total=-50;b.payload.people[0].total=-50;b.payload.people[0].rubrics=[{label:'Acerto',amount:-50}];
+ const h=buildHistory([a,b],{kind:'person',key:a.owner_nif,label:'Escolhida'}),annual=annualData(h.years['2026'],'2026');
+ assert.deepEqual(paymentMetrics(annual.people[0]),{afterCB:800,cbRetention:-150,paymentRetention:-850,final:-50,beforeCB:950});
+ assert.equal(aggregatePayments([a.payload.people[0],b.payload.people[0]]).afterCB,800);assert.equal(paymentMetrics(b.payload.people[0]).afterCB,-50);
+ assert.equal(paymentMetrics({total:0,rubrics:[]}).afterCB,0);assert.equal(paymentMetrics(undefined),null);assert.equal(aggregatePayments([]),null);assert.equal(paymentMetrics({total:NaN,rubrics:[]}),null);assert.equal(paymentMetrics({total:0,rubrics:[{amount:'0'}]}),null);
 });
 test('history follows the monthly chief and annual totals never count production twice',()=>{
  const a=row();a.chief_nif='100000010';a.payload.people[0].name='Comercial';a.payload.people[0].team='Equipa antiga';a.payload.productionVdd=[{owner:'p100000001',metrics:[{label:'Indicador',value:999}]}];

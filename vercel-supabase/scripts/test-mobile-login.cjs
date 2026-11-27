@@ -3,6 +3,7 @@ const {chromium,webkit,devices}=require(process.env.PLAYWRIGHT_MODULE||'playwrig
 const root=path.resolve(__dirname,'../public'),authOrigin='https://mobile-fixture.supabase.co';
 const user={id:'10000000-0000-4000-8000-000000000001',email:'mobile@example.test',aud:'authenticated',role:'authenticated',app_metadata:{provider:'email'},user_metadata:{}};
 const payment={period:'2026-11-01',owner_nif:'100000001',chief_nif:null,source_name:'Mobile test',total:20,payload:{period:'Novembro 2026',people:[{id:'p100000001',name:'Mobile test',role:'Gestor Comercial',team:'Teste',total:20,rubrics:[{label:'Comissao',amount:20}]}],records:[],productionVdd:[],productionChe:[],adjustments:[],checks:[]}};
+const retainedPayment=structuredClone(payment);retainedPayment.total=0;retainedPayment.payload.people[0].total=0;retainedPayment.payload.people[0].rubrics=[{label:'Comissão',amount:1000},{label:'Retenção CB',amount:-150},{label:'Retenção Pagam',amount:-850}];
 const token=()=>Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url')+'.'+Buffer.from(JSON.stringify({sub:user.id,aud:'authenticated',role:'authenticated',exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')+'.dGVzdC1vbmx5';
 (async()=>{
  const sdkResponse=await fetch('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2');assert.ok(sdkResponse.ok);const sdk=await sdkResponse.text();
@@ -20,7 +21,7 @@ const token=()=>Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('b
   for(const [engine,device] of [[chromium,'Pixel 7'],[webkit,'iPhone 13']]){
    const browser=await engine.launch({headless:true,...(engine===chromium?{channel:'chrome'}:{})});
    try{
-    for(const scenario of (process.env.AUTH_SCENARIOS?.split(',')||['commissions','rh-keyboard','vendor-redirect','legacy-dialog','report','bad-login','rh-bad-login'])){
+    for(const scenario of (process.env.AUTH_SCENARIOS?.split(',')||['commissions','rh-keyboard','vendor-redirect','legacy-dialog','report','retention','bad-login','rh-bad-login'])){
      const context=await browser.newContext({...devices[device]}),page=await context.newPage(),errors=[],unexpected=[],requests=[];
      page.on('pageerror',e=>errors.push(e.message));
      if(scenario==='legacy-dialog')await context.addInitScript(()=>{if(window.HTMLDialogElement){HTMLDialogElement.prototype.close=undefined;HTMLDialogElement.prototype.showModal=undefined;}});
@@ -37,7 +38,7 @@ const token=()=>Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('b
        }else if(url.pathname==='/auth/v1/user')data=user;
        else if(url.pathname==='/rest/v1/user_profiles')data={user_id:user.id,role:scenario==='vendor-redirect'?'vendedor':'admin',person_id:null,display_name:'Mobile test'};
        else if(url.pathname.startsWith('/rest/v1/rpc/'))return route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({code:'PGRST202',message:'Not installed in fixture'})});
-       else if(url.pathname==='/rest/v1/rh_commissions'&&scenario==='report')data=Number(url.searchParams.get('offset')||0)>0?[]:[payment];
+       else if(url.pathname==='/rest/v1/rh_commissions'&&['report','retention'].includes(scenario))data=Number(url.searchParams.get('offset')||0)>0?[]:[scenario==='retention'?retainedPayment:payment];
        else if(url.pathname.startsWith('/rest/v1/')&&request.method()==='GET')data=[];
        else throw Error('Unexpected fixture request '+url.pathname);
        return route.fulfill({contentType:'application/json',body:JSON.stringify(data)});
@@ -54,11 +55,12 @@ const token=()=>Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('b
       assert.equal(await page.locator(main?'#authSubmit':'#loginSubmit').isEnabled(),true);
       assert.equal(await page.locator(main?'#authOverlay':'#login').isVisible(),true);
       assert.equal(await page.locator(main?'#rhView':'#app').isVisible(),false);
-     }else if(scenario==='report'){
-      const report=page.frameLocator('#reportFrame');await report.locator('#total').filter({hasText:'20,00'}).waitFor({timeout:6000});
+     }else if(['report','retention'].includes(scenario)){
+      const expected=scenario==='retention'?'850,00':'20,00',report=page.frameLocator('#reportFrame');await report.locator('#total').filter({hasText:expected}).waitFor({timeout:6000});
       assert.equal(await report.locator('body').evaluate(el=>el.scrollWidth<=innerWidth+1),true);
+      if(scenario==='retention'){assert.match(await report.locator('#paymentFinal').innerText(),/0,00/);assert.ok((await report.locator('[data-month="11"] .month-plot i').boundingBox()).height>100);await report.locator('input[value="final"]').check();await report.locator('#chartEmpty').waitFor({state:'visible'});await report.locator('input[value="afterCB"]').check();}
       const output=path.resolve(__dirname,'../../../../recovery/commissions-tests');fs.mkdirSync(output,{recursive:true});await page.screenshot({path:path.join(output,'login-report-'+engine.name()+'.png')});
-      await page.reload();await report.locator('#total').filter({hasText:'20,00'}).waitFor({timeout:6000});
+      await page.reload();await report.locator('#total').filter({hasText:expected}).waitFor({timeout:6000});
      }else if(scenario==='rh-keyboard'){
       await page.waitForFunction(()=>document.body.classList.contains('authenticated'),{},{timeout:6000});
       await page.reload();await page.waitForFunction(()=>document.body.classList.contains('authenticated'),{},{timeout:6000});

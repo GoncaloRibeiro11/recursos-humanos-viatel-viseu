@@ -55,6 +55,22 @@
   return {mode:'team',teamName:year.teamName,period:'Acumulado '+label,partial:false,people:[...people.values()],...Object.fromEntries(detailFields.map(f=>[f,months.flatMap(m=>m[f])]))};
  }
  function vpTotal(rows){const unique=new Map();for(const row of rows)if(Number.isFinite(row.credits))unique.set(row.period+'|'+row.line,row.credits);return unique.size?[...unique.values()].reduce((s,v)=>s+v,0):null;}
+ function paymentMetrics(person){
+  if(!Number.isFinite(person?.total)||!Array.isArray(person.rubrics)||person.rubrics.some(r=>!r||!Number.isFinite(r.amount)))return null;
+  let cbRetention=0,paymentRetention=0;
+  for(const r of person.rubrics){
+   const label=String(r.label??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ');
+   if(/\bretencao (?:de )?cb\b/.test(label))cbRetention+=r.amount;
+   if(/\bretencao (?:de )?pagam(?:ento)?\b/.test(label))paymentRetention+=r.amount;
+  }
+  const afterCB=person.total-paymentRetention;
+  return {afterCB,cbRetention,paymentRetention,final:person.total,beforeCB:afterCB-cbRetention};
+ }
+ function aggregatePayments(people){
+  if(!people.length)return null;
+  const metrics=people.map(paymentMetrics);if(metrics.some(m=>!m))return null;
+  return Object.fromEntries(['afterCB','cbRetention','paymentRetention','final','beforeCB'].map(key=>[key,metrics.reduce((s,m)=>s+m[key],0)]));
+ }
  function personalHistory(history,id){
   const years={};let name='';
   for(const [year,data] of Object.entries(history.years)){
@@ -68,6 +84,6 @@
   if(!name)throw Error('Seleciona uma pessoa para exportar.');
   return {...history,displayName:name,personId:id,years,latestYear:Object.keys(years).sort().at(-1)};
  }
- root.CommissionModel={validateImport,reportOptions,buildHistory,annualData,vpTotal,personalHistory};
+ root.CommissionModel={validateImport,reportOptions,buildHistory,annualData,vpTotal,personalHistory,paymentMetrics,aggregatePayments};
  if(typeof module!=='undefined')module.exports=root.CommissionModel;
 })(typeof window!=='undefined'?window:globalThis);

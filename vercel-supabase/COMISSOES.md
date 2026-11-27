@@ -29,6 +29,14 @@ As contas de vendedor são criadas pelo administrador no modal de acessos do RH.
 
 Qualquer conta autenticada pode usar **Alterar password** na página de Comissões, mesmo quando ainda não tem pagamentos. A alteração aplica-se à própria conta Supabase e exige confirmação e pelo menos 12 caracteres.
 
+## Retenções e evolução
+
+A consulta distingue **comissões e restantes rubricas após CB**, **retenção CB**, **retenção de pagamento** e **pagamento final no mapa**. O valor após CB é o total final menos a rubrica assinada «Retenção Pagam» / «Retenção de Pagamento». O valor antes da CB é esse resultado menos a rubrica assinada «Retenção CB». Os descontos e regularizações mantêm o sinal da origem; não se aplica uma taxa fixa de 10%. O pagamento final nunca é substituído por um montante que esteja retido.
+
+O gráfico e a tabela mensal usam por defeito o montante após CB, antes da retenção de pagamento. É possível alternar para o pagamento final. As barras positivas e negativas ficam de lados diferentes da linha zero; meses sem registo não se tornam zeros. Um ano inteiramente a zero mostra esse estado explicitamente. Os acumulados mantêm a soma das rubricas de cada mês.
+
+O montante após CB inclui as restantes rubricas do mapa (prémios, acertos, descontos ou saldos), não apenas as linhas por cliente. A CB global não é rateada por clientes: o detalhe e o CSV conservam os valores originais antes da CB e ficam identificados como tal. Estas contas são de apresentação e não escrevem alterações na base de dados ou nos Excel; não é necessário repetir a importação.
+
 ## Atualização mensal
 
 Como administrador, usar **Sincronizar pagamentos**, escolher a pasta mensal do OneDrive (ou a pasta principal) e conferir os meses selecionados. O navegador lê os Excel localmente num worker; os ficheiros originais não são modificados nem enviados para um conversor externo. O par de ficheiros deve ter PAGAMENTOS / DETALHES, mês e ano nos nomes.
